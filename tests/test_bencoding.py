@@ -15,6 +15,7 @@ def test_decode():
     }
     assert bencoding.decode(b"d4:spaml1:a1:bee") == {b"spam": [b"a", b"b"]}
 
+
 def test_raw_val():
     assert bencoding.raw_val(b"d3:cow3:moo4:spam4:eggse", b"cow") == b"3:moo"
     assert bencoding.raw_val(b"d3:cow3:moo4:spam4:eggse", b"spam") == b"4:eggs"

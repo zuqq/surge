@@ -1,4 +1,4 @@
-import urllib
+import urllib.parse
 
 import aiohttp
 
@@ -6,21 +6,19 @@ import bencoding
 import metadata
 
 
-TRACKER_PARAMS = [
-    "info_hash",
-    "peer_id",
-    "port",
-    "uploaded",
-    "downloaded",
-    "left",
-    "event",
-    "compact",
-]
-
-
 async def _get_peers_http(metainfo):
+    tracker_params = (
+        "info_hash",
+        "peer_id",
+        "port",
+        "uploaded",
+        "downloaded",
+        "left",
+        "event",
+        "compact",
+    )
     encoded_params = urllib.parse.urlencode(
-        {param: getattr(metainfo, param) for param in TRACKER_PARAMS}
+        {param: getattr(metainfo, param) for param in tracker_params}
     )
     async with aiohttp.ClientSession() as session:
         async with session.get(metainfo.announce + "?" + encoded_params) as resp:
