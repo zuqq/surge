@@ -34,7 +34,7 @@ class Torrent(actor.Actor):
         while True:
             await self._peer_connection_slots.acquire()
             peer = await self._peer_queue.get()
-            await self.add_child(PeerConnection(self, self._metainfo, peer))
+            await self.spawn_child(PeerConnection(self, self._metainfo, peer))
 
     async def wait_done(self):
         await self._done.wait()
@@ -46,7 +46,7 @@ class Torrent(actor.Actor):
         self._piece_queue = PieceQueue(self, self._metainfo)
         self._peer_queue = PeerQueue(self, self._metainfo)
         for c in (self._file_writer, self._piece_queue, self._peer_queue):
-            await self.add_child(c)
+            await self.spawn_child(c)
         await self._spawn_peer_connections()
 
     async def _on_child_crash(self, child):
@@ -83,7 +83,7 @@ class Torrent(actor.Actor):
 
 class FileWriter(actor.Actor):
     def __init__(self, torrent, metainfo):
-        super().__init__(torrent)
+        super().__init__()
 
         self._torrent = torrent
         self._metainfo = metainfo
@@ -122,7 +122,7 @@ class FileWriter(actor.Actor):
 
 class PeerQueue(actor.Actor):
     def __init__(self, torrent, metainfo):
-        super().__init__(torrent)
+        super().__init__()
 
         self._torrent = torrent
         self._metainfo = metainfo
@@ -152,7 +152,7 @@ class PeerQueue(actor.Actor):
 
 class PieceQueue(actor.Actor):
     def __init__(self, torrent, metainfo):
-        super().__init__(torrent)
+        super().__init__()
 
         self._torrent = torrent
 
@@ -207,7 +207,7 @@ async def read_peer_message(reader):
 
 class PeerConnection(actor.Actor):
     def __init__(self, torrent, metainfo, peer, *, max_requests=10):
-        super().__init__(torrent, is_supervisor=True)
+        super().__init__(is_supervisor=True)
 
         self._torrent = torrent
         self._metainfo = metainfo
@@ -274,7 +274,7 @@ class PeerConnection(actor.Actor):
         self._block_receiver = BlockReceiver(self, self._metainfo, self._reader)
         self._block_requester = BlockRequester(self, self._writer)
         for c in (self._block_queue, self._block_receiver, self._block_requester):
-            await self.add_child(c)
+            await self.spawn_child(c)
 
     async def _on_stop(self):
         await self._disconnect()
@@ -334,7 +334,7 @@ class PeerConnection(actor.Actor):
 
 class BlockQueue(actor.Actor):
     def __init__(self, peer_connection):
-        super().__init__(peer_connection)
+        super().__init__()
 
         self._peer_connection = peer_connection
 
@@ -391,7 +391,7 @@ class BlockQueue(actor.Actor):
 
 class BlockReceiver(actor.Actor):
     def __init__(self, peer_connection, metainfo, reader):
-        super().__init__(peer_connection)
+        super().__init__()
 
         self._peer_connection = peer_connection
         self._metainfo = metainfo
@@ -426,7 +426,7 @@ class BlockReceiver(actor.Actor):
 
 class BlockRequester(actor.Actor):
     def __init__(self, peer_connection, writer):
-        super().__init__(peer_connection)
+        super().__init__()
 
         self._peer_connection = peer_connection
         self._writer = writer
