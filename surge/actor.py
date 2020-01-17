@@ -1,14 +1,16 @@
-import abc
 import asyncio
 import logging
 
 
-class Actor(abc.ABC):
-    def __init__(self, parent=None, *, is_supervisor=False):
-        self._parent = parent
+class Actor:
+    def __init__(self, *, is_supervisor=False):
         self._is_supervisor = is_supervisor
+        self._parent = None
+
+        self._running = False
         self._crashed = False
         self._children = set()
+
         self._crashed_children = asyncio.Queue()
         self._main_task = None
         self._monitor_task = None
@@ -19,23 +21,21 @@ class Actor(abc.ABC):
         except Exception as e:
             self._crash(e)
 
-    async def start(self):
-        """Start the actor and then all of its children.
+    async def start(self, parent=None):
+        """Start the actor.
 
-        This method is async because asyncio.create_task needs
-        a running event loop.
+        Children are started by add_child.
         """
+        if self._running:
+            return
+        self._running = True
+        self._parent = parent
         logging.debug("Starting %r.", self)
         self._main_task = asyncio.create_task(self._run_on_start())
         self._monitor_task = asyncio.create_task(self._monitor_children())
 
-        for child in list(self._children):
-            await child.start()
-
-    async def add_child(self, child):
-        if child in self._children:
-            return
-        await child.start()
+    async def spawn_child(self, child):
+        await child.start(self)
         self._children.add(child)
 
     async def _monitor_children(self):
@@ -67,6 +67,9 @@ class Actor(abc.ABC):
 
     async def stop(self):
         """Stop all of the actor's children and then itself."""
+        if not self._running:
+            return
+        self._running = False
         self._crashed = True  # In case the crash happened in a different branch.
 
         for child in list(self._children):
@@ -99,16 +102,27 @@ class Actor(abc.ABC):
         
         Example:
 
-            class WorkerClass:
+            class Worker(actor.Actor):
+                def __init__(self, supervisor: Supervisor):
+                    super().__init__(parent=supervisor)
+
                 ...
 
-            async def _start_workers(self):
-                await acquire_worker_slot()
-                self.add_child(WorkerClass(...))
 
-            def _on_child_crash(self, child):
-                if isinstance(child, WorkerClass):
-                    release_worker_slot()
+            class Supervisor(actor.Actor):
+                def __init__(self, max_workers=5):
+                    super().__init__(is_supervisor=True)
+                    self._worker_slots = asyncio.Semaphore(max_workers)
+
+                ...
+
+                async def _spawn_workers(self):
+                    await self._worker_slots.acquire()
+                    self.spawn_child(Worker(self))
+
+                def _on_child_crash(self, child):
+                    if isinstance(child, Worker):
+                        self._worker_slots.release()
         """
         pass
 
