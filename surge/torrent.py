@@ -7,10 +7,10 @@ import secrets
 
 import aiofiles
 
-import actor
-import metadata
-import peer_protocol
-import tracker_protocol
+from . import actor
+from . import metadata
+from . import peer_protocol
+from . import tracker_protocol
 
 
 class Torrent(actor.Actor):

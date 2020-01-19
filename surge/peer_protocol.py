@@ -1,7 +1,7 @@
 import enum
 import struct
 
-import metadata
+from . import metadata
 
 
 class PeerMessage(enum.Enum):
