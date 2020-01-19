@@ -1,47 +1,20 @@
 import argparse
-import asyncio
 import logging
 import os
 
-import metadata
-import torrent
+from . import metadata
+from . import runners
+from . import torrent
 
 
-def download_torrent(metainfo):
-    # Adapted from aiohttp.
-    loop = asyncio.get_event_loop()
-    # Note that the instantiation already creates an event loop. If this is
-    # not desired, simply move instantiations of asyncio.Queue() etc. into
-    # the start() method.
-    t = torrent.Torrent(metainfo)
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(t.start())
-        loop.run_until_complete(t.wait_done())
-    except KeyboardInterrupt:
-        pass
-    finally:
-        loop.run_until_complete(t.stop())
-        tasks = [task for task in asyncio.all_tasks(loop) if not task.done()]
-        for task in tasks:
-            task.cancel()
-        loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
-        loop.run_until_complete(loop.shutdown_asyncgens())
-    loop.close()
-
-
-def parse_args():
+def main():
     parser = argparse.ArgumentParser(
         description="Download files from the BitTorrent network."
     )
     parser.add_argument("file", help="path to the torrent file")
     parser.add_argument("--debug", help="enable logging", action="store_true")
     parser.add_argument("--resume", help="resume download", action="store_true")
-    return parser.parse_args()
-
-
-def main():
-    args = parse_args()
+    args = parser.parse_args()
 
     if args.debug:
         logging.basicConfig(
@@ -64,7 +37,7 @@ def main():
         )
         print(f"Missing {len(metainfo.missing_pieces)}/{len(metainfo.pieces)} pieces.")
 
-    download_torrent(metainfo)
+    runners.run(torrent.Torrent(metainfo))
 
     print("Exiting.")
 

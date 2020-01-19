@@ -4,7 +4,7 @@ import dataclasses
 import hashlib
 import os
 
-import bencoding
+from . import bencoding
 
 
 @dataclasses.dataclass(eq=True, frozen=True)
@@ -97,7 +97,7 @@ def _parse_file_list(file_list):
     files = []
     for index, file_dict in enumerate(file_list):
         length = file_dict[b"length"]
-        path_parts = [part.decode("utf-8") for part in file[b"path"]]
+        path_parts = [part.decode("utf-8") for part in file_dict[b"path"]]
         path = os.path.join(*path_parts)
         files.append(File(index, length, path))
     return files

@@ -2,8 +2,8 @@ import urllib.parse
 
 import aiohttp
 
-import bencoding
-import metadata
+from . import bencoding
+from . import metadata
 
 
 async def _get_peers_http(metainfo):
