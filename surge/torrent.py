@@ -13,9 +13,9 @@ from . import peer_protocol
 from . import tracker_protocol
 
 
-class Torrent(actor.Actor):
+class Torrent(actor.Supervisor):
     def __init__(self, metainfo, *, max_peers=50):
-        super().__init__(is_supervisor=True)
+        super().__init__()
 
         self._metainfo = metainfo
         if self._metainfo.peer_id is None:
@@ -41,7 +41,7 @@ class Torrent(actor.Actor):
 
     ### Actor implementation
 
-    async def _on_start(self):
+    async def _main_coro(self):
         self._file_writer = FileWriter(self, self._metainfo)
         self._piece_queue = PieceQueue(self, self._metainfo)
         self._peer_queue = PeerQueue(self, self._metainfo)
@@ -61,7 +61,7 @@ class Torrent(actor.Actor):
     ### Messages from PieceQueue
 
     def cancel_piece(self, peers, piece):
-        for child in self._children:
+        for child in self.children:
             if isinstance(child, PeerConnection) and child.peer in peers:
                 child.cancel_piece(piece)
 
@@ -90,10 +90,7 @@ class FileWriter(actor.Actor):
 
         self._piece_data = asyncio.Queue()
 
-    async def _on_start(self):
-        await self._write_pieces()
-
-    async def _write_pieces(self):
+    async def _main_coro(self):
         piece_to_chunks = metadata.piece_to_chunks(
             self._metainfo.pieces, self._metainfo.files
         )
@@ -129,7 +126,9 @@ class PeerQueue(actor.Actor):
 
         self._peers = asyncio.Queue()
 
-    async def _request_peers(self):
+    ### Actor implementation
+
+    async def _main_coro(self):
         seen_peers = set()
         while True:
             peers, interval = await tracker_protocol.request_peers(self._metainfo)
@@ -138,11 +137,6 @@ class PeerQueue(actor.Actor):
                 self._peers.put_nowait(peer)
                 seen_peers.add(peer)
             await asyncio.sleep(interval)
-
-    ### Actor implementation
-
-    async def _on_start(self):
-        await self._request_peers()
 
     ### Queue interface
 
@@ -207,7 +201,7 @@ async def read_peer_message(reader):
 
 class PeerConnection(actor.Actor):
     def __init__(self, torrent, metainfo, peer, *, max_requests=10):
-        super().__init__(is_supervisor=True)
+        super().__init__()
 
         self._torrent = torrent
         self._metainfo = metainfo
@@ -264,12 +258,8 @@ class PeerConnection(actor.Actor):
 
     ### Actor implementation
 
-    async def _on_start(self):
-        try:
-            await self._connect()
-        except Exception as e:
-            self._crash(e)
-            return
+    async def _main_coro(self):
+        await self._connect()
         self._block_queue = BlockQueue(self)
         self._block_receiver = BlockReceiver(self, self._metainfo, self._reader)
         self._block_requester = BlockRequester(self, self._writer)
@@ -417,7 +407,7 @@ class BlockReceiver(actor.Actor):
 
     ### Actor implementation
 
-    async def _on_start(self):
+    async def _main_coro(self):
         try:
             await self._listen_to_peer()
         except Exception as e:
@@ -431,7 +421,9 @@ class BlockRequester(actor.Actor):
         self._peer_connection = peer_connection
         self._writer = writer
 
-    async def _request_blocks(self):
+    ### Actor implementation
+
+    async def _main_coro(self):
         while True:
             block = await self._peer_connection.get_block()
             if block is None:
@@ -440,14 +432,6 @@ class BlockRequester(actor.Actor):
             self._writer.write(peer_protocol.request(block))
             await self._writer.drain()
             self._peer_connection.requested_block(block)
-
-    ### Actor implementation
-
-    async def _on_start(self):
-        try:
-            await self._request_blocks()
-        except Exception as e:
-            self._crash(e)
 
     ### Messages from PeerConnection
 
