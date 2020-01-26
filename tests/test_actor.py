@@ -12,7 +12,7 @@ async def test_start():
 
     await a.start()
 
-    assert a._running
+    assert a.running
 
 
 @pytest.mark.asyncio
@@ -22,12 +22,24 @@ async def test_start_stop():
     await a.start()
     await a.stop()
 
-    assert not a._running
-    assert a._crashed
+    assert not a.running
+    assert a.crashed
 
 
 @pytest.mark.asyncio
-async def test_stop_children():
+async def test_spawn_child():
+    parent = actor.Actor()
+    child = unittest.mock.Mock(spec_set=actor.Actor)
+
+    await parent.start()
+    await parent.spawn_child(child)
+
+    assert child in parent.children
+    child.start.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_stop_propagates():
     parent = actor.Actor()
     child = unittest.mock.Mock(spec_set=actor.Actor)
 
@@ -39,73 +51,31 @@ async def test_stop_children():
 
 
 @pytest.mark.asyncio
-async def test_crash_unsupervised():
-    # TODO
-    pass
-
-
-@pytest.mark.asyncio
-async def test_crash_reporting():
+async def test_crash_is_reported():
     parent = unittest.mock.Mock(spec_set=actor.Actor)
     child = actor.Actor()
-    child._on_start = unittest.mock.AsyncMock(side_effect=RuntimeError)
-    child._monitor_children = unittest.mock.AsyncMock()
+    child._main_coro = unittest.mock.AsyncMock(side_effect=RuntimeError)
 
     await child.start(parent)
     # Finish all scheduled tasks.
     tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
     await asyncio.gather(*tasks, return_exceptions=True)
 
-    assert child._crashed
+    assert child.crashed
     parent.report_crash.assert_called_with(child)
 
 
 @pytest.mark.asyncio
-async def test_spawn_child():
-    parent = actor.Actor()
-    child = unittest.mock.Mock(spec_set=actor.Actor)
-    type(child)._parent = unittest.mock.PropertyMock()
+async def test_crash_propagates():
+    parent = unittest.mock.Mock(spec_set=actor.Actor)
+    child = actor.Actor()
+    grandchild = actor.Actor()
+    grandchild._main_coro = unittest.mock.AsyncMock(side_effect=RuntimeError)
 
-    await parent.spawn_child(child)
+    await child.start(parent)
+    await child.spawn_child(grandchild)
+    # Finish all scheduled tasks.
+    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    await asyncio.gather(*tasks, return_exceptions=True)
 
-    assert child in parent._children
-    child.start.assert_awaited()
-    child._parent._assert_called_once_with(parent)
-
-
-@pytest.mark.asyncio
-async def test_crashed_children_put():
-    parent = actor.Actor()
-    parent._monitor_children = unittest.mock.AsyncMock()
-    child = unittest.mock.Mock(spec_set=actor.Actor)
-
-    await parent.start()
-    await parent.spawn_child(child)
-    with unittest.mock.patch.object(parent._crashed_children, "put_nowait") as mock_put:
-        parent.report_crash(child)
-
-    mock_put.assert_called_once_with(child)
-
-
-@pytest.mark.asyncio
-async def test_crashed_children_get():
-    parent = actor.Actor(is_supervisor=True)
-    parent._on_child_crash = unittest.mock.AsyncMock()
-    child = unittest.mock.Mock(spec_set=actor.Actor)
-
-    await parent.start()
-    await parent.spawn_child(child)
-    with unittest.mock.patch.object(parent._crashed_children, "get") as mock_get:
-        mock_get.side_effect = (child,)
-        # Finish all scheduled tasks.
-        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-    child.stop.assert_awaited()
-    parent._on_child_crash.assert_awaited()
-
-
-@pytest.mark.asyncio
-async def test_crash_is_not_supervisor():
-    # TODO
-    pass
+    parent.report_crash.assert_called_with(child)
