@@ -132,7 +132,7 @@ class PeerQueue(actor.Actor):
     async def _request_peers(self):
         seen_peers = set()
         while True:
-            peers, interval = await tracker_protocol.get_peers(self._metainfo)
+            peers, interval = await tracker_protocol.request_peers(self._metainfo)
             print(f"Got {len(peers)} peers from {self._metainfo.announce}.")
             for peer in set(peers) - seen_peers:
                 self._peers.put_nowait(peer)

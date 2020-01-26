@@ -6,7 +6,9 @@ from . import bencoding
 from . import metadata
 
 
-async def _get_peers_http(metainfo):
+async def request_peers(metainfo):
+    if not metainfo.announce.startswith("http"):
+        raise ValueError("Non-HTTP announce.")
     tracker_params = (
         "info_hash",
         "peer_id",
@@ -33,10 +35,3 @@ async def _get_peers_http(metainfo):
         for i in range(0, len(raw_peers), 6):
             peers.append(metadata.Peer.from_bytes(raw_peers[i : i + 6]))
     return peers, decoded_resp[b"interval"]
-
-
-async def get_peers(metainfo):
-    if metainfo.announce.startswith("http"):
-        return await _get_peers_http(metainfo)
-    else:
-        raise ValueError("Non-HTTP announce.")
