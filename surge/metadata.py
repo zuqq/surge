@@ -15,6 +15,7 @@ class File:
 
 
 def ensure_files_exist(folder, files):
+    """Create any files that do not exist and truncate the ones that already exist."""
     for file in files:
         full_path = os.path.join(folder, file.path)
         tail, _ = os.path.split(full_path)
@@ -43,6 +44,7 @@ class FileChunk:
 
 
 def piece_to_chunks(pieces, files):
+    """Return a dictionary mapping a piece to its chunks."""
     result = {piece: [] for piece in pieces}
     file_index = 0
     file = files[file_index]
@@ -64,6 +66,7 @@ def piece_to_chunks(pieces, files):
 
 
 def missing_pieces(pieces, files, folder):
+    """Return a list of those pieces that are not present in the download folder."""
     result = set(pieces)
     piece_to_chunks_ = piece_to_chunks(pieces, files)
     for piece in pieces:
@@ -86,6 +89,7 @@ class Block:
 
 
 def blocks(piece, block_length=2 ** 14):
+    """Return a list of the blocks of the given piece."""
     result = []
     for piece_offset in range(0, piece.length, block_length):
         length = min(block_length, piece.length - piece_offset)
