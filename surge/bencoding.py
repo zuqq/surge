@@ -44,11 +44,15 @@ def _parse(input, pos):
 
 
 def decode(input):
-    _, rval = _parse(input, 0)
-    return rval
+    """Get the Python object corresponding to the bencoded object input."""
+    pos, rval = _parse(input, 0)
+    if pos == len(input):
+        return rval
+    raise ValueError
 
 
 def raw_val(input, key):
+    """Get the bencoded value corresponding to key in the bencoded dictionary input."""
     pos = 1
     while pos < len(input) and input[pos] != ord("e"):
         pos, curr_key = _str(input, pos)

@@ -1,3 +1,4 @@
+from typing import List, Tuple
 import urllib.parse
 
 import aiohttp
@@ -6,7 +7,8 @@ from . import bencoding
 from . import metadata
 
 
-async def request_peers(metainfo):
+async def request_peers(metainfo: metadata.Metainfo) -> Tuple[List[metadata.Peer], int]:
+    """Request peers from the given tracker and return the pair (peers, interval)."""
     if not metainfo.announce.startswith("http"):
         raise ValueError("Non-HTTP announce.")
     tracker_params = (
