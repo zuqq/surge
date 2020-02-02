@@ -1,3 +1,6 @@
+from __future__ import annotations
+from typing import Awaitable, Optional, Set
+
 import asyncio
 import logging
 
@@ -15,16 +18,17 @@ class Actor:
     one of its children crashes itself; instances of the subclass Supervisor can
     handle crash reports gracefully instead of crashing themselves.
     """
+
     def __init__(self):
-        self.parent = None
+        self.parent: Optional[Actor] = None
 
         self.running = False
         self.crashed = False
 
-        self.children = set()
+        self.children: Set[Actor] = set()
 
-        self._coros = {self._run_main_coro()}
-        self._tasks = set()
+        self._coros: Set[Awaitable] = {self._run_main_coro()}
+        self._tasks: Set[asyncio.Task] = set()
 
     async def _run_main_coro(self):
         try:
@@ -32,7 +36,7 @@ class Actor:
         except Exception as e:
             self._crash(e)
 
-    async def start(self, parent=None):
+    async def start(self, parent: Optional[Actor] = None):
         """Start the actor."""
         if self.running:
             return
@@ -42,12 +46,12 @@ class Actor:
         for coro in self._coros:
             self._tasks.add(asyncio.create_task(coro))
 
-    async def spawn_child(self, child):
+    async def spawn_child(self, child: Actor):
         """Start the given actor and add it as a child."""
         await child.start(self)
         self.children.add(child)
 
-    def _crash(self, reason=None):
+    def _crash(self, reason: Optional[Exception] = None):
         if self.crashed:
             return
         self.crashed = True
@@ -57,7 +61,7 @@ class Actor:
             raise SystemExit(f"Unsupervised actor {self} crashed.")
         self.parent.report_crash(self)
 
-    def report_crash(self, reporter):
+    def report_crash(self, reporter: Actor):
         """Report that a child crashed, which crashes the actor itself."""
         if reporter in self.children:
             self._crash()
@@ -94,6 +98,7 @@ class Supervisor(Actor):
     amounts to shutting down any crashed children and discarding them; more
     complex behavior needs to be implemented by the user.
     """
+
     def __init__(self):
         super().__init__()
 
@@ -107,12 +112,12 @@ class Supervisor(Actor):
             self.children.remove(child)
             await self._on_child_crash(child)
 
-    def report_crash(self, reporter):
+    def report_crash(self, reporter: Actor):
         """Report that a child crashed."""
         if reporter in self.children:
             self._crashed_children.put_nowait(reporter)
 
     ### User logic
 
-    async def _on_child_crash(self, child):
+    async def _on_child_crash(self, child: Actor):
         pass

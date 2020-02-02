@@ -17,13 +17,15 @@ def main():
     args = parser.parse_args()
 
     if args.debug:
+        logfile = "debug.log"
         logging.basicConfig(
             level=logging.DEBUG,
-            filename="debug.log",
+            filename=logfile,
             filemode="w",
             format="%(asctime)s,%(msecs)03d %(levelname)s: %(message)s",
             datefmt="%H:%M:%S",
         )
+        print(f"Logging to {logfile}.")
 
     with open(args.file, "rb") as f:
         metainfo = metadata.Metainfo.from_bytes(f.read())

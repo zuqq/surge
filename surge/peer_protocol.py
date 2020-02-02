@@ -1,6 +1,5 @@
 import enum
 import struct
-from typing import List, Tuple
 
 from . import metadata
 
@@ -21,26 +20,26 @@ class PeerMessage(enum.Enum):
     EXTENSION_PROTOCOL = 20
 
 
-def message_type(message: bytes) -> str:
+def message_type(message):
     """Return a lowercase representation of the message's type."""
     if not message:
         return "keepalive"
     return PeerMessage(message[0]).name.lower()
 
 
-def handshake(info_hash: bytes, peer_id: bytes) -> bytes:
+def handshake(info_hash, peer_id):
     """Return the length-prefixed "handshake" message built from the input."""
     return struct.pack(
         ">B19s8s20s20s", 19, b"BitTorrent protocol", bytes(8), info_hash, peer_id
     )
 
 
-def interested() -> bytes:
+def interested():
     """Return the length-prefixed "interested" message."""
     return struct.pack(">LB", 1, PeerMessage.INTERESTED.value)
 
 
-def request(block: metadata.Block) -> bytes:
+def request(block):
     """Return the length-prefixed "request" message for the given block."""
     return struct.pack(
         ">LBLLL",
@@ -52,7 +51,7 @@ def request(block: metadata.Block) -> bytes:
     )
 
 
-def cancel(block: metadata.Block) -> bytes:
+def cancel(block):
     """Return the length-prefixed "cancel" message for the given block."""
     return struct.pack(
         ">LBLLL",
@@ -64,20 +63,18 @@ def cancel(block: metadata.Block) -> bytes:
     )
 
 
-def valid_handshake(message: bytes, info_hash: bytes, *, extension_protocol=False):
+def valid_handshake(message, info_hash, *, extension_protocol=False):
     # TODO
     return True
 
 
-def parse_have(payload: bytes, pieces: List[metadata.Piece]) -> metadata.Piece:
+def parse_have(payload, pieces):
     """Return the piece that the given "have" message is about."""
     (piece_index,) = struct.unpack(">L", payload)
     return pieces[piece_index]
 
 
-def parse_bitfield(
-    payload: bytes, pieces: List[metadata.Piece]
-) -> List[metadata.Piece]:
+def parse_bitfield(payload, pieces):
     """Return a list of the pieces whose bits are set in the given bitfield."""
     available_pieces = []
     i = 0
@@ -91,9 +88,7 @@ def parse_bitfield(
     return available_pieces
 
 
-def parse_block(
-    payload: bytes, pieces: List[metadata.Piece]
-) -> Tuple[metadata.Block, bytes]:
+def parse_block(payload, pieces):
     """Return the pair (block, block_data) for the given "block" message."""
     piece_index, piece_offset = struct.unpack(">LL", payload[:8])
     block_data = payload[8:]
