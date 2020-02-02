@@ -34,7 +34,7 @@ class Piece:
 
 @dataclasses.dataclass(eq=True, frozen=True)
 class FileChunk:
-    """The part of a piece that belongs to a single file."""
+    """A part of a piece belongin to a single file."""
 
     file: File
     piece: Piece
@@ -44,7 +44,7 @@ class FileChunk:
 
 
 def piece_to_chunks(pieces, files):
-    """Return a dictionary mapping a piece to its chunks."""
+    """Return a dictionary mapping a piece to a list of its chunks."""
     result = {piece: [] for piece in pieces}
     file_index = 0
     file = files[file_index]
@@ -68,10 +68,10 @@ def piece_to_chunks(pieces, files):
 def missing_pieces(pieces, files, folder):
     """Return a list of those pieces that are not present in the download folder."""
     result = set(pieces)
-    piece_to_chunks_ = piece_to_chunks(pieces, files)
+    chunks = piece_to_chunks(pieces, files)
     for piece in pieces:
         chunk_data = []
-        for chunk in piece_to_chunks_[piece]:
+        for chunk in chunks[piece]:
             file_path = os.path.join(folder, chunk.file.path)
             with open(file_path, "rb") as f:
                 f.seek(chunk.file_offset)
@@ -83,6 +83,7 @@ def missing_pieces(pieces, files, folder):
 
 @dataclasses.dataclass(eq=True, frozen=True, order=True)
 class Block:
+    """A part of a piece."""
     piece: Piece
     piece_offset: int
     length: int

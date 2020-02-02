@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 
 def run(torrent):
@@ -9,7 +10,7 @@ def run(torrent):
         loop.run_until_complete(torrent.start())
         loop.run_until_complete(torrent.wait_done())
     except KeyboardInterrupt:
-        pass
+        logging.debug("Received KeyboardInterrupt.")
     finally:
         loop.run_until_complete(torrent.stop())
         tasks = [task for task in asyncio.all_tasks(loop) if not task.done()]
