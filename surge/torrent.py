@@ -29,12 +29,15 @@ class Torrent(actor.Supervisor):
 
         self._done = asyncio.Event()
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
+        self._peer_to_connection = {}
 
     async def _spawn_peer_connections(self):
         while True:
             await self._peer_connection_slots.acquire()
             peer = await self._peer_queue.get()
-            await self.spawn_child(PeerConnection(self, self._metainfo, peer))
+            connection = PeerConnection(self, self._metainfo, peer)
+            await self.spawn_child(connection)
+            self._peer_to_connection[peer] = connection
 
     async def wait_done(self):
         await self._done.wait()
@@ -51,6 +54,7 @@ class Torrent(actor.Supervisor):
 
     async def _on_child_crash(self, child):
         if isinstance(child, PeerConnection):
+            self._peer_to_connection.pop(peer)
             self._peer_connection_slots.release()
 
     ### Messages from FileWriter
@@ -61,9 +65,8 @@ class Torrent(actor.Supervisor):
     ### Messages from PieceQueue
 
     def cancel_piece(self, peers, piece):
-        for child in self.children:
-            if isinstance(child, PeerConnection) and child.peer in peers:
-                child.cancel_piece(piece)
+        for peer in peers:
+            self._peer_to_connection[peer].cancel_piece(piece)
 
     ### Messages from PeerConnection
 
@@ -206,7 +209,7 @@ class PeerConnection(actor.Actor):
         self._torrent = torrent
         self._metainfo = metainfo
 
-        self.peer = peer
+        self._peer = peer
 
         self._reader = None
         self._writer = None
@@ -221,7 +224,7 @@ class PeerConnection(actor.Actor):
 
     async def _connect(self):
         self._reader, self._writer = await asyncio.open_connection(
-            self.peer.address, self.peer.port
+            self._peer.address, self._peer.port
         )
 
         self._writer.write(
@@ -240,7 +243,7 @@ class PeerConnection(actor.Actor):
             self._crash(ConnectionError("Peer didn't send a bitfield."))
             return
         self._torrent.set_have(
-            self.peer, peer_protocol.parse_bitfield(payload, self._metainfo.pieces),
+            self._peer, peer_protocol.parse_bitfield(payload, self._metainfo.pieces),
         )
 
     async def _disconnect(self):
@@ -254,7 +257,7 @@ class PeerConnection(actor.Actor):
 
     async def _request_timer(self, block, *, timeout=10):
         await asyncio.sleep(timeout)
-        self._crash(TimeoutError(f"Request for {block} from {self.peer} timed out."))
+        self._crash(TimeoutError(f"Request for {block} from {self._peer} timed out."))
 
     ### Actor implementation
 
@@ -282,10 +285,10 @@ class PeerConnection(actor.Actor):
     ### Messages from BlockQueue
 
     def get_piece(self):
-        return self._torrent.get_piece(self.peer)
+        return self._torrent.get_piece(self._peer)
 
     def piece_done(self, piece, data):
-        self._torrent.piece_done(self.peer, piece, data)
+        self._torrent.piece_done(self._peer, piece, data)
 
     ### Messages from BlockReceiver
 
@@ -303,7 +306,7 @@ class PeerConnection(actor.Actor):
         self._block_queue.task_done(block, data)
 
     def add_to_have(self, piece):
-        self._torrent.add_to_have(self.peer, piece)
+        self._torrent.add_to_have(self._peer, piece)
 
     ### Messages from BlockRequester
 
@@ -329,8 +332,8 @@ class BlockQueue(actor.Actor):
         self._peer_connection = peer_connection
 
         self._stack = []
-        self._outstanding = {}  # Piece -> Set[Block]
-        self._data = {}  # Piece -> (Block -> bytes)
+        self._outstanding = {}
+        self._data = {}
 
     def _on_piece_received(self, piece):
         self._outstanding.pop(piece)

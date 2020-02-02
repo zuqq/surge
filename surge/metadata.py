@@ -84,6 +84,7 @@ def missing_pieces(pieces, files, folder):
 @dataclasses.dataclass(eq=True, frozen=True, order=True)
 class Block:
     """A part of a piece."""
+
     piece: Piece
     piece_offset: int
     length: int
