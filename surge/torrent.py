@@ -14,6 +14,15 @@ from . import tracker_protocol
 
 
 class Torrent(actor.Supervisor):
+    """Coordinates the download.
+
+    Parent: None
+    Children:
+        - an instance of `FileWriter`;
+        - an instance of `PieceQueue`;
+        - an instance of `PeerQueue`;
+        - up to `max_peer` instances of `PeerConnection`.
+    """
     def __init__(self, metainfo, *, max_peers=50):
         super().__init__()
 
@@ -77,7 +86,7 @@ class Torrent(actor.Supervisor):
         return self._piece_queue.get_nowait(peer)
 
     def piece_done(self, peer, piece, data):
-        self._file_writer.piece_data(piece, data)
+        self._file_writer.put_nowait(piece, data)
         self._piece_queue.task_done(peer, piece)
 
     def add_to_have(self, peer, piece):
@@ -85,6 +94,13 @@ class Torrent(actor.Supervisor):
 
 
 class FileWriter(actor.Actor):
+    """Keeps track of received pieces and writes them to the filesystem.
+
+    Parent: An instance of `Torrent`
+    Children: None
+
+    Piece data is received via the method `put_nowait`
+    """
     def __init__(self, torrent, metainfo):
         super().__init__()
 
@@ -116,11 +132,20 @@ class FileWriter(actor.Actor):
             print(f"Progress: {n - len(outstanding_pieces)}/{n} pieces.")
         self._torrent.done()
 
-    def piece_data(self, piece, data):
+    ### Queue interface
+
+    def put_nowait(self, piece, data):
         self._piece_data.put_nowait((piece, data))
 
 
 class PeerQueue(actor.Actor):
+    """Requests peers from the tracker and distributes them.
+
+    Parent: An instance of Torrent
+    Children: None
+
+    Peer distribution is passive, via the async method `get`.
+    """
     def __init__(self, torrent, metainfo):
         super().__init__()
 
@@ -148,6 +173,18 @@ class PeerQueue(actor.Actor):
 
 
 class PieceQueue(actor.Actor):
+    """Keeps track of which pieces the peers have and distributes them.
+
+    Parent: An instance of `Torrent`
+    Children: None
+
+    Instances of `PeerConnection` call `get_piece` to get pieces to work on, and
+    signal completion of a piece by calling `task_done`.
+
+    Additionally, they use the methods `set_have` and `add_to_have` to inform
+    the `PieceQueue` instance of which pieces their peers have. If a peer is
+    dropped, `drop_peer` needs to be called.
+    """
     def __init__(self, torrent, metainfo):
         super().__init__()
 
@@ -196,6 +233,7 @@ class PieceQueue(actor.Actor):
         self._torrent.cancel_piece(borrowers - {peer}, piece)
 
 
+# Used by PeerConnection and BlockReceiver.
 async def read_peer_message(reader):
     len_prefix = int.from_bytes(await reader.readexactly(4), "big")
     message = await reader.readexactly(len_prefix)
@@ -203,6 +241,14 @@ async def read_peer_message(reader):
 
 
 class PeerConnection(actor.Actor):
+    """Encapsulates the connection with a peer.
+
+    Parent: A `Torrent` instance
+    Children:
+        - an instance of `BlockQueue`
+        - an instance of `BlockRequester`
+        - an instance of `BlockReceiver`
+    """
     def __init__(self, torrent, metainfo, peer, *, max_requests=10):
         super().__init__()
 
@@ -326,6 +372,11 @@ class PeerConnection(actor.Actor):
 
 
 class BlockQueue(actor.Actor):
+    """Keeps track of received blocks and distributes them.
+
+    Parent: An instance of `PeerConnection`
+    Children: None
+    """
     def __init__(self, peer_connection):
         super().__init__()
 
@@ -383,6 +434,11 @@ class BlockQueue(actor.Actor):
 
 
 class BlockReceiver(actor.Actor):
+    """Receives messages from the peer and relays them to its parent.
+
+    Parent: An instance of `PeerConnection`
+    Children: None
+    """
     def __init__(self, peer_connection, metainfo, reader):
         super().__init__()
 
@@ -418,6 +474,11 @@ class BlockReceiver(actor.Actor):
 
 
 class BlockRequester(actor.Actor):
+    """Sends block requests to the peer.
+
+    Parent: An instance of `PeerConnection`
+    Children: None
+    """
     def __init__(self, peer_connection, writer):
         super().__init__()
 
