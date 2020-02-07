@@ -8,7 +8,7 @@ from . import metadata
 
 
 async def request_peers(metainfo: metadata.Metainfo) -> Tuple[List[metadata.Peer], int]:
-    """Request peers from the given tracker and return the pair (peers, interval)."""
+    """Request peers from the tracker and return (peers, interval)."""
     if not metainfo.announce.startswith("http"):
         raise ValueError("Non-HTTP announce.")
     tracker_params = (

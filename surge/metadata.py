@@ -15,7 +15,6 @@ class File:
 
 
 def ensure_files_exist(folder, files):
-    """Create any files that do not exist and truncate the ones that already exist."""
     for file in files:
         full_path = os.path.join(folder, file.path)
         tail, _ = os.path.split(full_path)
@@ -33,8 +32,8 @@ class Piece:
 
 
 @dataclasses.dataclass(eq=True, frozen=True)
-class FileChunk:
-    """A part of a piece belongin to a single file."""
+class Chunk:
+    """The part of `piece` belonging to `file`."""
 
     file: File
     piece: Piece
@@ -44,7 +43,7 @@ class FileChunk:
 
 
 def piece_to_chunks(pieces, files):
-    """Return a dictionary mapping a piece to a list of its chunks."""
+    """Return a dictionary mapping each piece to a list of its chunks."""
     result = {piece: [] for piece in pieces}
     file_index = 0
     file = files[file_index]
@@ -53,9 +52,7 @@ def piece_to_chunks(pieces, files):
         piece_offset = 0
         while piece_offset < piece.length:
             length = min(piece.length - piece_offset, file.length - file_offset)
-            result[piece].append(
-                FileChunk(file, piece, file_offset, piece_offset, length)
-            )
+            result[piece].append(Chunk(file, piece, file_offset, piece_offset, length))
             piece_offset += length
             file_offset += length
             if file_offset == file.length and file_index < len(files) - 1:
@@ -66,7 +63,7 @@ def piece_to_chunks(pieces, files):
 
 
 def missing_pieces(pieces, files, folder):
-    """Return a list of those pieces that are not present in the download folder."""
+    """Return a list of those pieces that are not present in `folder`."""
     result = set(pieces)
     chunks = piece_to_chunks(pieces, files)
     for piece in pieces:
@@ -83,15 +80,13 @@ def missing_pieces(pieces, files, folder):
 
 @dataclasses.dataclass(eq=True, frozen=True, order=True)
 class Block:
-    """A part of a piece."""
-
     piece: Piece
     piece_offset: int
     length: int
 
 
 def blocks(piece, block_length=2 ** 14):
-    """Return a list of the blocks of the given piece."""
+    """Return a list of `piece`'s blocks."""
     result = []
     for piece_offset in range(0, piece.length, block_length):
         length = min(block_length, piece.length - piece_offset)
@@ -161,8 +156,7 @@ class Metainfo:
     event: str = "started"
     compact: int = 1  # See BEP 23.
 
-    # For resuming the download.
-    missing_pieces: Optional[List[Piece]] = None
+    missing_pieces: Optional[List[Piece]] = None  # For resuming the download.
 
     @classmethod
     def from_bytes(cls, metainfo_file):

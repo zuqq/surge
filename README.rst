@@ -12,7 +12,8 @@ recommended way of installing these dependencies is to use `poetry`_. Run
     poetry install --no-dev
 
 in the root folder, which automatically gathers the dependencies from the
-provided ``pyproject.toml``.
+provided ``pyproject.toml``. The flag ``--no-dev`` instructs poetry not to
+install the additional packages that are required to run the tests.
 
 .. _aiofiles: https://pypi.org/project/aiofiles/
 .. _aiohttp: https://pypi.org/project/aiohttp/
@@ -55,3 +56,61 @@ appropriate environment it can be run as ``python -m surge``.
     -h, --help  show this help message and exit
     --debug     enable logging
     --resume    resume download
+
+
+Architecture
+------------
+
+Features
+~~~~~~~~~~~
+
+**Concurrency**:
+    surge is designed to connect to many peers at the same time.
+
+**Availability tracking**:
+    surge keeps track of which pieces the peers have, enabling it to make
+    successful requests.
+
+**Robustness**:
+    surge drops peers that ignore its request or respond with invalid data.
+
+**Endgame mode**:
+    surge requests the last few pieces from every available peer, so that
+    a handful of slow peers cannot stall the download.
+
+**Incremental writes**:
+    surge writes pieces to the filesystem immediately after downloading and
+    verifing them.
+
+Actor model
+~~~~~~~~~~~
+
+The different components of the program are modeled as actors. For details about
+the actor implementation, see the documentation of the ``actor`` module.
+
+What follows is a brief description of the actors defined in the ``torrent`` module.
+
+The global state is held by ``Torrent`` and the following of its children:
+
+.. code-block::
+
+    Torrent
+    |
+    ├─ FileWriter
+    |
+    ├─ PeerQueue
+    │
+    ├─ PieceQueue
+
+``Torrent`` spawns a ``PeerConnection`` for every active peer, which governs the
+local state:
+
+.. code-block::
+
+    └─ PeerConnection
+       |
+       ├─ BlockReceiver
+       |
+       ├─ BlockRequester
+       │
+       └─ BlockQueue

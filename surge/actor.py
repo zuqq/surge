@@ -6,17 +6,22 @@ import logging
 
 
 class Actor:
-    """Base class for all actors.
+    """Actor base class.
 
-    Actors are controlled from the outside via the methods start() and stop().
-    They can have children, which are automatically stopped when their parent
-    is stopped.
+    `Actor`s form a directed graph whose structure is stored in the attributes
+    `parent` and `children`; acyclicity of this graph is not enforced.
 
-    The principal purpose of an actor is to run its main coroutine. Exceptions
-    that occur in this coroutine cause the actor to crash; if it has a parent,
-    the crash is reported. An ordinary actor that receives a crash report from
-    one of its children crashes itself; instances of the subclass Supervisor can
-    handle crash reports gracefully instead of crashing themselves.
+    The principal purpose of an `Actor` is to run the coroutine `_main_coro`.
+    In doing so, it may spawn children and pass messages to its parent and
+    children. Messages are to be implemented as methods on the receiving class.
+
+    Exceptions in `_main_coro` cause the `Actor` to crash; if it has a parent,
+    the crash bubbles up. An ordinary actor that receives a crash report from
+    one of its children crashes itself. Instances of the subclass `Supervisor`
+    can handle crash reports gracefully instead.
+
+    `Actor`s are controlled via the methods `start` and `stop`; stopping an
+    actor also stops all of its children.
     """
 
     def __init__(self):
@@ -37,7 +42,7 @@ class Actor:
             self._crash(e)
 
     async def start(self, parent: Optional[Actor] = None):
-        """Start the actor."""
+        """Start `self` and set its parent to `parent`."""
         if self.running:
             return
         self.running = True
@@ -47,7 +52,7 @@ class Actor:
             self._tasks.add(asyncio.create_task(coro))
 
     async def spawn_child(self, child: Actor):
-        """Start the given actor and add it as a child."""
+        """Start `child` and add it to `self`'s children."""
         await child.start(self)
         self.children.add(child)
 
@@ -62,24 +67,26 @@ class Actor:
         self.parent.report_crash(self)
 
     def report_crash(self, reporter: Actor):
-        """Report that a child crashed, which crashes the actor itself."""
+        """Signal that `reporter` crashed, which crashes `self`."""
         if reporter in self.children:
             self._crash()
 
     async def stop(self):
-        """Stop all of the actor's children and then the actor itself."""
+        """First stop `self`, then all of its children."""
         if not self.running:
             return
         self.running = False
         self.crashed = True  # In case the crash happened in a different branch.
 
-        for child in list(self.children):
-            await child.stop()
-
         logging.debug("Stopping %r.", self)
+
         for task in self._tasks:
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
+
+        for child in self.children:
+            await child.stop()
+
         await self._on_stop()
 
     ### User logic
@@ -92,9 +99,9 @@ class Actor:
 
 
 class Supervisor(Actor):
-    """Base class for all supervisors.
+    """Supervisor base class.
 
-    Supervisors are actors that supervise their children. By default this
+    `Supervisor`s are `Actor`s that supervise their children. By default this
     amounts to shutting down any crashed children and discarding them; more
     complex behavior needs to be implemented by the user.
     """
@@ -113,7 +120,7 @@ class Supervisor(Actor):
             await self._on_child_crash(child)
 
     def report_crash(self, reporter: Actor):
-        """Report that a child crashed."""
+        """Signal that `reporter` crashed."""
         if reporter in self.children:
             self._crashed_children.put_nowait(reporter)
 

@@ -19,10 +19,11 @@ class Torrent(actor.Supervisor):
     Parent: None
     Children:
         - an instance of `FileWriter`;
-        - an instance of `PieceQueue`;
         - an instance of `PeerQueue`;
+        - an instance of `PieceQueue`;
         - up to `max_peer` instances of `PeerConnection`.
     """
+
     def __init__(self, metainfo, *, max_peers=50):
         super().__init__()
 
@@ -33,8 +34,8 @@ class Torrent(actor.Supervisor):
         metadata.ensure_files_exist(self._metainfo.folder, self._metainfo.files)
 
         self._file_writer = None
-        self._piece_queue = None
         self._peer_queue = None
+        self._piece_queue = None
 
         self._done = asyncio.Event()
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
@@ -49,15 +50,16 @@ class Torrent(actor.Supervisor):
             self._peer_to_connection[peer] = connection
 
     async def wait_done(self):
+        """Wait until all pieces have been received and saved."""
         await self._done.wait()
 
     ### Actor implementation
 
     async def _main_coro(self):
         self._file_writer = FileWriter(self, self._metainfo)
-        self._piece_queue = PieceQueue(self, self._metainfo)
         self._peer_queue = PeerQueue(self, self._metainfo)
-        for c in (self._file_writer, self._piece_queue, self._peer_queue):
+        self._piece_queue = PieceQueue(self, self._metainfo)
+        for c in (self._file_writer, self._peer_queue, self._piece_queue):
             await self.spawn_child(c)
         await self._spawn_peer_connections()
 
@@ -69,38 +71,44 @@ class Torrent(actor.Supervisor):
     ### Messages from FileWriter
 
     def done(self):
+        """Signal that every piece has been downloaded."""
         self._done.set()
 
     ### Messages from PieceQueue
 
     def cancel_piece(self, peers, piece):
+        """Signal that piece does not need to be downloaded anymore; peers is a
+        list of the peers that we are currently downloading piece from."""
         for peer in peers:
             self._peer_to_connection[peer].cancel_piece(piece)
 
     ### Messages from PeerConnection
 
     def set_have(self, peer, pieces):
+        """Signal that the elements of pieces are available from peer."""
         self._piece_queue.set_have(peer, pieces)
 
+    def add_to_have(self, peer, piece):
+        """Signal that piece is available from peer."""
+        self._piece_queue.add_to_have(peer, piece)
+
     def get_piece(self, peer):
+        """Return a piece to download from peer."""
         return self._piece_queue.get_nowait(peer)
 
     def piece_done(self, peer, piece, data):
+        """Signal that data was received (and verified) for piece."""
         self._file_writer.put_nowait(piece, data)
         self._piece_queue.task_done(peer, piece)
 
-    def add_to_have(self, peer, piece):
-        self._piece_queue.add_to_have(peer, piece)
-
 
 class FileWriter(actor.Actor):
-    """Keeps track of received pieces and writes them to the filesystem.
+    """Keeps track of received pieces and saves them to the filesystem.
 
     Parent: An instance of `Torrent`
     Children: None
-
-    Piece data is received via the method `put_nowait`
     """
+
     def __init__(self, torrent, metainfo):
         super().__init__()
 
@@ -135,17 +143,17 @@ class FileWriter(actor.Actor):
     ### Queue interface
 
     def put_nowait(self, piece, data):
+        """Signal that data was received (and verified) for piece."""
         self._piece_data.put_nowait((piece, data))
 
 
 class PeerQueue(actor.Actor):
-    """Requests peers from the tracker and distributes them.
+    """Requests peers from the tracker.
 
-    Parent: An instance of Torrent
+    Parent: An instance of `Torrent`
     Children: None
-
-    Peer distribution is passive, via the async method `get`.
     """
+
     def __init__(self, torrent, metainfo):
         super().__init__()
 
@@ -166,25 +174,21 @@ class PeerQueue(actor.Actor):
                 seen_peers.add(peer)
             await asyncio.sleep(interval)
 
-    ### Queue interface
+    ### Messages from Torrent
 
     async def get(self):
+        """Return a peer that we have not yet connected to."""
         return await self._peers.get()
 
 
 class PieceQueue(actor.Actor):
-    """Keeps track of which pieces the peers have and distributes them.
+    """Holds the pieces that still need to be downloaded and their availability;
+    exposes a queue interface for those pieces.
 
     Parent: An instance of `Torrent`
     Children: None
-
-    Instances of `PeerConnection` call `get_piece` to get pieces to work on, and
-    signal completion of a piece by calling `task_done`.
-
-    Additionally, they use the methods `set_have` and `add_to_have` to inform
-    the `PieceQueue` instance of which pieces their peers have. If a peer is
-    dropped, `drop_peer` needs to be called.
     """
+
     def __init__(self, torrent, metainfo):
         super().__init__()
 
@@ -198,12 +202,15 @@ class PieceQueue(actor.Actor):
             self._outstanding = set(metainfo.pieces)
 
     def set_have(self, peer, pieces):
+        """Signal that elements of pieces are available from peer."""
         self._available[peer] = set(pieces)
 
     def add_to_have(self, peer, piece):
+        """Signal that piece is available from peer."""
         self._available[peer].add(piece)
 
     def drop_peer(self, peer):
+        """Signal that peer was dropped."""
         self._available.pop(peer)
         for piece, borrowers in list(self._borrowers.items()):
             borrowers.discard(piece)
@@ -214,6 +221,7 @@ class PieceQueue(actor.Actor):
     ### Queue interface
 
     def get_nowait(self, peer):
+        """Return a piece to download from peer."""
         pool = self._outstanding or set(self._borrowers)
         if not pool:
             return None
@@ -227,14 +235,15 @@ class PieceQueue(actor.Actor):
         return piece
 
     def task_done(self, peer, piece):
+        """Signal that piece was downloaded from peer."""
         if piece not in self._borrowers:
             return
         borrowers = self._borrowers.pop(piece)
         self._torrent.cancel_piece(borrowers - {peer}, piece)
 
 
-# Used by PeerConnection and BlockReceiver.
 async def read_peer_message(reader):
+    # Used by PeerConnection and BlockReceiver.
     len_prefix = int.from_bytes(await reader.readexactly(4), "big")
     message = await reader.readexactly(len_prefix)
     return peer_protocol.message_type(message), message[1:]
@@ -243,12 +252,13 @@ async def read_peer_message(reader):
 class PeerConnection(actor.Actor):
     """Encapsulates the connection with a peer.
 
-    Parent: A `Torrent` instance
+    Parent: An instance of `Torrent`
     Children:
         - an instance of `BlockQueue`
         - an instance of `BlockRequester`
         - an instance of `BlockReceiver`
     """
+
     def __init__(self, torrent, metainfo, peer, *, max_requests=10):
         super().__init__()
 
@@ -321,6 +331,7 @@ class PeerConnection(actor.Actor):
     ### Messages from Torrent
 
     def cancel_piece(self, piece):
+        """Signal that piece does not need to be downloaded anymore."""
         for block in list(self._block_to_timer):
             if block.piece == piece:
                 self._block_to_timer.pop(block).cancel()
@@ -331,20 +342,25 @@ class PeerConnection(actor.Actor):
     ### Messages from BlockQueue
 
     def get_piece(self):
+        """Return a piece to download."""
         return self._torrent.get_piece(self._peer)
 
     def piece_done(self, piece, data):
+        """Signal that data was received (and verified) for piece."""
         self._torrent.piece_done(self._peer, piece, data)
 
     ### Messages from BlockReceiver
 
     def received_choke(self):
+        """Signal that the peer started choking us."""
         self._unchoked.clear()
 
     def received_unchoke(self):
+        """Signal that the peer stopped choking us."""
         self._unchoked.set()
 
     def received_block(self, block, data):
+        """Signal that data was received for block."""
         if block not in self._block_to_timer:
             return
         self._block_to_timer.pop(block).cancel()
@@ -352,15 +368,20 @@ class PeerConnection(actor.Actor):
         self._block_queue.task_done(block, data)
 
     def add_to_have(self, piece):
+        """Signal that piece is available from the peer."""
         self._torrent.add_to_have(self._peer, piece)
 
     ### Messages from BlockRequester
 
     async def get_block(self):
+        """Wait until a block request slot opens up and then return a block that
+        is to be requested from the peer."""
         await self._block_request_slots.acquire()
         return self._block_queue.get_nowait()
 
     async def unchoke(self):
+        """If the peer is choking us, send an unchoke request and wait for the
+        peer to stop doing so."""
         if self._unchoked.is_set():
             return
         self._writer.write(peer_protocol.interested())
@@ -368,15 +389,17 @@ class PeerConnection(actor.Actor):
         await self._unchoked.wait()
 
     def requested_block(self, block):
+        """Signal that block was requested from the peer."""
         self._block_to_timer[block] = asyncio.create_task(self._request_timer(block))
 
 
 class BlockQueue(actor.Actor):
-    """Keeps track of received blocks and distributes them.
+    """Keeps track of blocks.
 
     Parent: An instance of `PeerConnection`
     Children: None
     """
+
     def __init__(self, peer_connection):
         super().__init__()
 
@@ -404,6 +427,7 @@ class BlockQueue(actor.Actor):
     ### Queue interface
 
     def get_nowait(self):
+        """Return a block that has not been downloaded yet."""
         if not self._stack:
             piece = self._peer_connection.get_piece()
             if piece is None:
@@ -411,11 +435,8 @@ class BlockQueue(actor.Actor):
             self._restock(piece)
         return self._stack.pop()
 
-    def cancel_task(self, block):
-        if block.piece in self._outstanding:
-            self._stack.append(block)
-
     def task_done(self, block, data):
+        """Signal that data was received for block."""
         piece = block.piece
         if piece in self._outstanding:
             self._data[piece][block] = data
@@ -427,6 +448,7 @@ class BlockQueue(actor.Actor):
     ### Messages from PeerConnection
 
     def cancel_piece(self, piece):
+        """Signal that piece does not need to be downloaded anymore."""
         if piece in self._outstanding:
             self._stack = [block for block in self._stack if block.piece != piece]
             self._outstanding.pop(piece)
@@ -439,6 +461,7 @@ class BlockReceiver(actor.Actor):
     Parent: An instance of `PeerConnection`
     Children: None
     """
+
     def __init__(self, peer_connection, metainfo, reader):
         super().__init__()
 
@@ -446,7 +469,9 @@ class BlockReceiver(actor.Actor):
         self._metainfo = metainfo
         self._reader = reader
 
-    async def _listen_to_peer(self):
+    ### Actor implementation
+
+    async def _main_coro(self):
         while True:
             message_type, payload = await read_peer_message(self._reader)
             if message_type == "choke":
@@ -464,14 +489,6 @@ class BlockReceiver(actor.Actor):
                     *peer_protocol.parse_block(payload, self._metainfo.pieces)
                 )
 
-    ### Actor implementation
-
-    async def _main_coro(self):
-        try:
-            await self._listen_to_peer()
-        except Exception as e:
-            self._crash(e)
-
 
 class BlockRequester(actor.Actor):
     """Sends block requests to the peer.
@@ -479,6 +496,7 @@ class BlockRequester(actor.Actor):
     Parent: An instance of `PeerConnection`
     Children: None
     """
+
     def __init__(self, peer_connection, writer):
         super().__init__()
 
