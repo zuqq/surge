@@ -300,14 +300,12 @@ class PeerConnection(actor.Actor):
 
         response = await self._reader.readexactly(68)
         if not peer_protocol.valid_handshake(response, self._metainfo.info_hash):
-            self._crash(ConnectionError("Peer sent invalid handshake."))
-            return
+            raise ConnectionError("Peer sent invalid handshake.")
 
         # TODO: Accept peers that don't send a bitfield.
         message_type, payload = await read_peer_message(self._reader)
         if message_type != "bitfield":
-            self._crash(ConnectionError("Peer didn't send a bitfield."))
-            return
+            raise ConnectionError("Peer didn't send a bitfield.")
         self._torrent.set_have(
             self._peer, peer_protocol.parse_bitfield(payload, self._metainfo.pieces),
         )
@@ -323,6 +321,8 @@ class PeerConnection(actor.Actor):
 
     async def _request_timer(self, block, *, timeout=10):
         await asyncio.sleep(timeout)
+        # Need to call `self._crash` here because this coroutine runs in a task
+        # that is never awaited.
         self._crash(TimeoutError(f"Request for {block} from {self._peer} timed out."))
 
     ### Actor implementation
@@ -431,7 +431,7 @@ class BlockQueue(actor.Actor):
         if len(data) == piece.length and hashlib.sha1(data).digest() == piece.hash:
             self._peer_connection.piece_done(piece, data)
         else:
-            self._crash(ValueError(f"Peer sent invalid data."))
+            raise ValueError(f"Peer sent invalid data.")
 
     def _restock(self, piece):
         blocks = metadata.blocks(piece)
@@ -495,7 +495,7 @@ class BlockReceiver(actor.Actor):
             if message_type == "choke":
                 self._peer_connection.received_choke()
                 # TODO: Don't drop the peer if it chokes us.
-                self._crash(ConnectionError(f"Peer sent choke."))
+                raise ConnectionError(f"Peer sent choke.")
             elif message_type == "unchoke":
                 self._peer_connection.received_unchoke()
             elif message_type == "have":
