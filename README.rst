@@ -2,7 +2,7 @@ Surge
 =====
 
 Surge is a client for the BitTorrent network, built on top of Python's
-couroutine-based concurrency model and the asyncio event loop. Please note that
+coroutine-based concurrency model and the asyncio event loop. Please note that
 Surge is download-only for now.
 
 Installation
@@ -91,7 +91,7 @@ Actor model
 ~~~~~~~~~~~
 
 Peers are modeled as actors that exchange messages with a central mediator. The
-strong encapsulation provided by this actor model makes it easy to deal with
+strong encapsulation provided by this model makes it easy to deal with
 unresponsive or malicious peers.
 
 For details about the implementation of the actor model, see the documentation
