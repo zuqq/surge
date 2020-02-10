@@ -168,12 +168,14 @@ class PeerQueue(actor.Actor):
     async def _main_coro(self):
         seen_peers = set()
         while True:
-            peers, interval = await tracker_protocol.request_peers(self._metainfo)
-            print(f"Got {len(peers)} peer(s) from {self._metainfo.announce}.")
-            for peer in set(peers) - seen_peers:
+            resp = await tracker_protocol.request_peers(self._metainfo)
+            if resp.error is not None:
+                raise RuntimeError("Tracker responded with error {resp.error}.")
+            print(f"Got {len(resp.peers)} peer(s) from {self._metainfo.announce}.")
+            for peer in set(resp.peers) - seen_peers:
                 self._peers.put_nowait(peer)
                 seen_peers.add(peer)
-            await asyncio.sleep(interval)
+            await asyncio.sleep(resp.interval)
 
     ### Messages from Torrent
 
