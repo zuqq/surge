@@ -50,7 +50,7 @@ class Torrent(actor.Supervisor):
             self._peer_to_connection[peer] = connection
 
     async def wait_done(self):
-        """Wait until all pieces have been received and saved."""
+        """Wait until all pieces have been received."""
         await self._done.wait()
 
     ### Actor implementation
@@ -77,19 +77,20 @@ class Torrent(actor.Supervisor):
     ### Messages from PieceQueue
 
     def cancel_piece(self, peers, piece):
-        """Signal that piece does not need to be downloaded anymore; peers is a
-        list of the peers that we are currently downloading piece from."""
+        """Signal that `piece` does not need to be downloaded anymore;
+        `peers` is a list of the peers that we are currently downloading
+        `piece` from."""
         for peer in peers:
             self._peer_to_connection[peer].cancel_piece(piece)
 
     ### Messages from PeerConnection
 
     def set_have(self, peer, pieces):
-        """Signal that the elements of pieces are available from peer."""
+        """Signal that the elements of `pieces` are available from `peer`."""
         self._piece_queue.set_have(peer, pieces)
 
     def add_to_have(self, peer, piece):
-        """Signal that piece is available from peer."""
+        """Signal that `piece` is available from `peer`."""
         self._piece_queue.add_to_have(peer, piece)
 
     def get_piece(self, peer):
@@ -97,13 +98,13 @@ class Torrent(actor.Supervisor):
         return self._piece_queue.get_nowait(peer)
 
     def piece_done(self, peer, piece, data):
-        """Signal that data was received (and verified) for piece."""
+        """Signal that `data` was received and verified for `piece`."""
         self._file_writer.put_nowait(piece, data)
         self._piece_queue.task_done(peer, piece)
 
 
 class FileWriter(actor.Actor):
-    """Keeps track of received pieces and saves them to the filesystem.
+    """Keeps track of received pieces and writes them to the file system.
 
     Parent: An instance of `Torrent`
     Children: None
@@ -143,7 +144,7 @@ class FileWriter(actor.Actor):
     ### Queue interface
 
     def put_nowait(self, piece, data):
-        """Signal that data was received (and verified) for piece."""
+        """Signal that `data` was received and verified for `piece`."""
         self._piece_data.put_nowait((piece, data))
 
 
@@ -168,7 +169,7 @@ class PeerQueue(actor.Actor):
         seen_peers = set()
         while True:
             peers, interval = await tracker_protocol.request_peers(self._metainfo)
-            print(f"Got {len(peers)} peers from {self._metainfo.announce}.")
+            print(f"Got {len(peers)} peer(s) from {self._metainfo.announce}.")
             for peer in set(peers) - seen_peers:
                 self._peers.put_nowait(peer)
                 seen_peers.add(peer)
@@ -194,23 +195,27 @@ class PieceQueue(actor.Actor):
 
         self._torrent = torrent
 
+        # `self._available[peer]` is the set of pieces that `peer` has.
         self._available = collections.defaultdict(set)
+        # `self._borrowers[piece]` is the set of peers that `piece` is being
+        # downloaded from.
         self._borrowers = collections.defaultdict(set)
+        # TODO: Change the metainfo class so that this branch is not needed.
         if metainfo.missing_pieces is not None:
             self._outstanding = set(metainfo.missing_pieces)
         else:
             self._outstanding = set(metainfo.pieces)
 
     def set_have(self, peer, pieces):
-        """Signal that elements of pieces are available from peer."""
+        """Signal that elements of `pieces` are available from `peer`."""
         self._available[peer] = set(pieces)
 
     def add_to_have(self, peer, piece):
-        """Signal that piece is available from peer."""
+        """Signal that `piece` is available from `peer`."""
         self._available[peer].add(piece)
 
     def drop_peer(self, peer):
-        """Signal that peer was dropped."""
+        """Signal that `peer` was dropped."""
         self._available.pop(peer)
         for piece, borrowers in list(self._borrowers.items()):
             borrowers.discard(piece)
@@ -221,7 +226,10 @@ class PieceQueue(actor.Actor):
     ### Queue interface
 
     def get_nowait(self, peer):
-        """Return a piece to download from peer."""
+        """Return a piece to download from `peer`.
+
+        Returning `None` signals that the download is complete.
+        """
         pool = self._outstanding or set(self._borrowers)
         if not pool:
             return None
@@ -235,7 +243,7 @@ class PieceQueue(actor.Actor):
         return piece
 
     def task_done(self, peer, piece):
-        """Signal that piece was downloaded from peer."""
+        """Signal that `piece` was downloaded from `peer`."""
         if piece not in self._borrowers:
             return
         borrowers = self._borrowers.pop(piece)
@@ -331,7 +339,7 @@ class PeerConnection(actor.Actor):
     ### Messages from Torrent
 
     def cancel_piece(self, piece):
-        """Signal that piece does not need to be downloaded anymore."""
+        """Signal that `piece` does not need to be downloaded anymore."""
         for block in list(self._block_to_timer):
             if block.piece == piece:
                 self._block_to_timer.pop(block).cancel()
@@ -360,7 +368,7 @@ class PeerConnection(actor.Actor):
         self._unchoked.set()
 
     def received_block(self, block, data):
-        """Signal that data was received for block."""
+        """Signal that `data` was received for `block`."""
         if block not in self._block_to_timer:
             return
         self._block_to_timer.pop(block).cancel()
@@ -368,7 +376,7 @@ class PeerConnection(actor.Actor):
         self._block_queue.task_done(block, data)
 
     def add_to_have(self, piece):
-        """Signal that piece is available from the peer."""
+        """Signal that `piece` is available from the peer."""
         self._torrent.add_to_have(self._peer, piece)
 
     ### Messages from BlockRequester
@@ -405,14 +413,19 @@ class BlockQueue(actor.Actor):
 
         self._peer_connection = peer_connection
 
+        # Blocks that are to be downloaded.
         self._stack = []
+        # `self._outstanding[piece]` is the set of blocks that are being
+        # requested from the peer.
         self._outstanding = {}
+        # `self._data[piece][block]` is the data that was received for `block`.
         self._data = {}
 
     def _on_piece_received(self, piece):
         self._outstanding.pop(piece)
         block_to_data = self._data.pop(piece)
         data = b"".join(block_to_data[block] for block in sorted(block_to_data))
+        # Check that the data for `piece` is what it should be.
         if len(data) == piece.length and hashlib.sha1(data).digest() == piece.hash:
             self._peer_connection.piece_done(piece, data)
         else:
@@ -427,7 +440,10 @@ class BlockQueue(actor.Actor):
     ### Queue interface
 
     def get_nowait(self):
-        """Return a block that has not been downloaded yet."""
+        """Return a block that has not been downloaded yet.
+
+        Returning `None` signals that the download is complete.
+        """
         if not self._stack:
             piece = self._peer_connection.get_piece()
             if piece is None:
@@ -436,7 +452,7 @@ class BlockQueue(actor.Actor):
         return self._stack.pop()
 
     def task_done(self, block, data):
-        """Signal that data was received for block."""
+        """Signal that `data` was received for `block`."""
         piece = block.piece
         if piece in self._outstanding:
             self._data[piece][block] = data
@@ -448,7 +464,7 @@ class BlockQueue(actor.Actor):
     ### Messages from PeerConnection
 
     def cancel_piece(self, piece):
-        """Signal that piece does not need to be downloaded anymore."""
+        """Signal that `piece` does not need to be downloaded anymore."""
         if piece in self._outstanding:
             self._stack = [block for block in self._stack if block.piece != piece]
             self._outstanding.pop(piece)

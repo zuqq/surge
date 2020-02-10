@@ -1,11 +1,15 @@
-surge: an asyncio BitTorrent client
-===================================
+Surge
+=====
+
+Surge is a client for the BitTorrent network, built on top of Python's
+couroutine-based concurrency model and the asyncio event loop. Please note that
+Surge is download-only for now.
 
 Installation
 ------------
 
-To run surge you need Python 3.8 with `aiofiles`_ and `aiohttp`_. The
-recommended way of installing these dependencies is to use `poetry`_. Run
+Surge needs Python 3.8 with `aiofiles`_ and `aiohttp`_. The recommended way of
+installing these dependencies is to use `poetry`_. Run
 
 .. code-block::
 
@@ -22,8 +26,8 @@ install the additional packages that are required to run the tests.
 Usage
 -----
 
-There is a minimal command-line interface for downloading a single torrent,
-located in ``surge/__main__.py``. Inside of a ``poetry shell`` or another
+Surge has a minimal command-line interface for downloading a single torrent,
+located in the ``__main__`` module. Inside of a ``poetry shell`` or another
 appropriate environment it can be run as ``python -m surge``.
 
 **Example:**
@@ -40,7 +44,7 @@ appropriate environment it can be run as ``python -m surge``.
     Progress: 1340/1340 pieces.
     Exiting.
 
-**Complete usage:**
+**Help page:**
 
 .. code-block::
 
@@ -62,55 +66,33 @@ Architecture
 ------------
 
 Features
-~~~~~~~~~~~
+~~~~~~~~
 
-**Concurrency**:
-    surge is designed to connect to many peers at the same time.
+Concurrency:
+    Surge is designed to connect to many peers at the same time.
 
-**Availability tracking**:
-    surge keeps track of which pieces the peers have, enabling it to make
+Availability tracking:
+    Surge keeps track of which pieces its peers have, enabling it to make
     successful requests.
 
-**Robustness**:
-    surge drops peers that ignore its request or respond with invalid data.
-
-**Endgame mode**:
-    surge requests the last few pieces from every available peer, so that
+Endgame mode:
+    Surge requests the last few pieces from every available peer, so that
     a handful of slow peers cannot stall the download.
 
-**Incremental writes**:
-    surge writes pieces to the filesystem immediately after downloading and
-    verifing them.
+Incremental writes:
+    Surge writes pieces to the file system immediately after downloading and
+    verifing them, keeping its memory usage low.
+
+Request queuing:
+    Surge keeps open multiple requests from each peer, improving network
+    performance.
 
 Actor model
 ~~~~~~~~~~~
 
-The different components of the program are modeled as actors. For details about
-the actor implementation, see the documentation of the ``actor`` module.
+Peers are modeled as actors that exchange messages with a central mediator. The
+strong encapsulation provided by this actor model makes it easy to deal with
+unresponsive or malicious peers.
 
-What follows is a brief description of the actors defined in the ``torrent`` module.
-
-The global state is held by ``Torrent`` and the following of its children:
-
-.. code-block::
-
-    Torrent
-    |
-    ├─ FileWriter
-    |
-    ├─ PeerQueue
-    │
-    ├─ PieceQueue
-
-``Torrent`` spawns a ``PeerConnection`` for every active peer, which governs the
-local state:
-
-.. code-block::
-
-    └─ PeerConnection
-       |
-       ├─ BlockReceiver
-       |
-       ├─ BlockRequester
-       │
-       └─ BlockQueue
+For details about the implementation of the actor model, see the documentation
+of the ``actor`` module.
