@@ -94,7 +94,7 @@ class Torrent(actor.Supervisor):
         self._piece_queue.add_to_have(peer, piece)
 
     def get_piece(self, peer):
-        """Return a piece to download from peer."""
+        """Return a piece to download from `peer`."""
         return self._piece_queue.get_nowait(peer)
 
     def piece_done(self, peer, piece, data):
@@ -253,7 +253,7 @@ class PieceQueue(actor.Actor):
 
 
 async def read_peer_message(reader):
-    # Used by PeerConnection and BlockReceiver.
+    # Used by `PeerConnection` and `BlockReceiver`.
     len_prefix = int.from_bytes(await reader.readexactly(4), "big")
     message = await reader.readexactly(len_prefix)
     return peer_protocol.message_type(message), message[1:]
@@ -316,7 +316,7 @@ class PeerConnection(actor.Actor):
             try:
                 await self._writer.wait_closed()
             # https://bugs.python.org/issue38856
-            except ConnectionResetError:
+            except (BrokenPipeError, ConnectionResetError):
                 pass
 
     async def _request_timer(self, block, *, timeout=10):
@@ -399,7 +399,7 @@ class PeerConnection(actor.Actor):
         await self._unchoked.wait()
 
     def requested_block(self, block):
-        """Signal that block was requested from the peer."""
+        """Signal that `block` was requested from the peer."""
         self._block_to_timer[block] = asyncio.create_task(self._request_timer(block))
 
 
