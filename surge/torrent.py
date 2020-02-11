@@ -39,6 +39,7 @@ class Torrent(actor.Supervisor):
 
         self._done = asyncio.Event()
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
+
         self._peer_to_connection = {}
 
     async def _spawn_peer_connections(self):
@@ -65,6 +66,9 @@ class Torrent(actor.Supervisor):
 
     async def _on_child_crash(self, child):
         if isinstance(child, PeerConnection):
+            for peer, connection in self._peer_to_connection.items():
+                if connection is child:
+                    break
             self._peer_to_connection.pop(peer)
             self._peer_connection_slots.release()
 
@@ -220,7 +224,7 @@ class PieceQueue(actor.Actor):
         """Signal that `peer` was dropped."""
         self._available.pop(peer)
         for piece, borrowers in list(self._borrowers.items()):
-            borrowers.discard(piece)
+            borrowers.discard(peer)
             if not borrowers:
                 self._borrowers.pop(piece)
                 self._outstanding.add(piece)
