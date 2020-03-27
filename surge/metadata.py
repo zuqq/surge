@@ -99,7 +99,7 @@ def _parse_file_list(file_list):
     files = []
     for index, file_dict in enumerate(file_list):
         length = file_dict[b"length"]
-        path_parts = [part.decode("utf-8") for part in file_dict[b"path"]]
+        path_parts = [part.decode() for part in file_dict[b"path"]]
         path = os.path.join(*path_parts)
         files.append(File(index, length, path))
     return files
@@ -133,20 +133,20 @@ class Metainfo:
         decoded = bencoding.decode(raw_metainfo)
         announce_list = []
         if b"announce" in decoded:
-            announce_list.append(decoded[b"announce"].decode("utf-8"))
+            announce_list.append(decoded[b"announce"].decode())
         if b"announce-list" in decoded:
             for tier in decoded[b"announce-list"]:
                 for raw_tracker in tier:
-                    announce_list.append(raw_tracker.decode("utf-8"))
+                    announce_list.append(raw_tracker.decode())
         info = decoded[b"info"]
         if b"length" in info:
             # Single file mode.
-            files = [File(0, info[b"length"], info[b"name"].decode("utf-8"))]
+            files = [File(0, info[b"length"], info[b"name"].decode())]
             folder = ""
         else:
             # Multiple file mode.
             files = _parse_file_list(info[b"files"])
-            folder = info[b"name"].decode("utf-8")
+            folder = info[b"name"].decode()
         length = sum(file.length for file in files)
         piece_length = info[b"piece length"]
         pieces = _parse_hashes(info[b"pieces"], length, piece_length)
@@ -183,4 +183,4 @@ class Peer:
 
     @classmethod
     def from_dict(cls, d):
-        return cls(d[b"ip"].decode("utf-8"), d[b"port"], d[b"peer id"])
+        return cls(d[b"ip"].decode(), d[b"port"], d[b"peer id"])
