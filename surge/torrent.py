@@ -21,7 +21,7 @@ class Torrent(actor.Supervisor):
         - an instance of `FileWriter`;
         - an instance of `PeerQueue`;
         - an instance of `PieceQueue`;
-        - up to `max_peer` instances of `PeerConnection`.
+        - up to `max_peers` instances of `PeerConnection`.
     """
 
     def __init__(self, metainfo, *, max_peers=50):
@@ -174,7 +174,7 @@ class PeerQueue(actor.Actor):
         while True:
             resp = await tracker_protocol.request_peers(self._metainfo)
             if resp.error is not None:
-                raise RuntimeError("Tracker responded with error {resp.error}.")
+                raise ConnectionError("Tracker response: {resp.error}")
             print(f"Got {len(resp.peers)} peer(s) from {self._metainfo.announce}.")
             for peer in set(resp.peers) - seen_peers:
                 self._peers.put_nowait(peer)

@@ -15,7 +15,7 @@ class Actor:
     In doing so, it may spawn children and pass messages to its parent and
     children. Messages are to be implemented as methods of the receiving class.
 
-    Exceptions in `_main_coro` cause the `Actor` to crash; if it has a parent,
+    `Exception`s in `_main_coro` cause the `Actor` to crash; if it has a parent,
     the crash bubbles up. An ordinary `Actor` that receives a crash report from
     one of its children crashes itself. Instances of the subclass `Supervisor`
     can handle crash reports gracefully instead.
