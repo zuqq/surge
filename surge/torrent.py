@@ -173,9 +173,7 @@ class PeerQueue(actor.Actor):
         seen_peers = set()
         while True:
             resp = await tracker_protocol.request_peers(self._metainfo)
-            if resp.error is not None:
-                raise ConnectionError("Tracker response: {resp.error}")
-            print(f"Got {len(resp.peers)} peer(s) from {self._metainfo.announce}.")
+            print(f"Got {len(resp.peers)} peer(s) from {resp.announce}.")
             for peer in set(resp.peers) - seen_peers:
                 self._peers.put_nowait(peer)
                 seen_peers.add(peer)
