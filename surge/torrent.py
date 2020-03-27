@@ -24,12 +24,11 @@ class Torrent(actor.Supervisor):
         - up to `max_peers` instances of `PeerConnection`.
     """
 
-    def __init__(self, metainfo, *, max_peers=50):
+    def __init__(self, raw_metainfo, *, max_peers=50):
         super().__init__()
 
-        self._metainfo = metainfo
-        if self._metainfo.peer_id is None:
-            self._metainfo.peer_id = secrets.token_bytes(20)
+        self._metainfo = metadata.Metainfo.from_bytes(raw_metainfo)
+        self._torrent_state = metadata.TorrentState.from_bytes(raw_metainfo)
 
         metadata.ensure_files_exist(self._metainfo.folder, self._metainfo.files)
 
@@ -46,7 +45,7 @@ class Torrent(actor.Supervisor):
         while True:
             await self._peer_connection_slots.acquire()
             peer = await self._peer_queue.get()
-            connection = PeerConnection(self, self._metainfo, peer)
+            connection = PeerConnection(self, self._metainfo, self._torrent_state, peer)
             await self.spawn_child(connection)
             self._peer_to_connection[peer] = connection
 
@@ -58,7 +57,7 @@ class Torrent(actor.Supervisor):
 
     async def _main_coro(self):
         self._file_writer = FileWriter(self, self._metainfo)
-        self._peer_queue = PeerQueue(self, self._metainfo)
+        self._peer_queue = PeerQueue(self, self._metainfo, self._torrent_state)
         self._piece_queue = PieceQueue(self, self._metainfo)
         for c in (self._file_writer, self._peer_queue, self._piece_queue):
             await self.spawn_child(c)
@@ -126,10 +125,7 @@ class FileWriter(actor.Actor):
         piece_to_chunks = metadata.piece_to_chunks(
             self._metainfo.pieces, self._metainfo.files
         )
-        if self._metainfo.missing_pieces is not None:
-            outstanding_pieces = set(self._metainfo.missing_pieces)
-        else:
-            outstanding_pieces = set(self._metainfo.pieces)
+        outstanding_pieces = set(self._metainfo.pieces)
         while outstanding_pieces:
             piece, data = await self._piece_data.get()
             if piece not in outstanding_pieces:
@@ -140,7 +136,6 @@ class FileWriter(actor.Actor):
                     await f.seek(c.file_offset)
                     await f.write(data[c.piece_offset : c.piece_offset + c.length])
             outstanding_pieces.remove(piece)
-            self._metainfo.downloaded += piece.length
             n = len(self._metainfo.pieces)
             print(f"Progress: {n - len(outstanding_pieces)}/{n} pieces.")
         self._torrent.done()
@@ -159,11 +154,12 @@ class PeerQueue(actor.Actor):
     Children: None
     """
 
-    def __init__(self, torrent, metainfo):
+    def __init__(self, torrent, metainfo, torrent_state):
         super().__init__()
 
         self._torrent = torrent
         self._metainfo = metainfo
+        self._torrent_state = torrent_state
 
         self._peers = asyncio.Queue()
 
@@ -172,7 +168,9 @@ class PeerQueue(actor.Actor):
     async def _main_coro(self):
         seen_peers = set()
         while True:
-            resp = await tracker_protocol.request_peers(self._metainfo)
+            resp = await tracker_protocol.request_peers(
+                self._metainfo, self._torrent_state
+            )
             print(f"Got {len(resp.peers)} peer(s) from {resp.announce}.")
             for peer in set(resp.peers) - seen_peers:
                 self._peers.put_nowait(peer)
@@ -204,11 +202,7 @@ class PieceQueue(actor.Actor):
         # `self._borrowers[piece]` is the set of peers that `piece` is being
         # downloaded from.
         self._borrowers = collections.defaultdict(set)
-        # TODO: Change the metainfo class so that this branch is not needed.
-        if metainfo.missing_pieces is not None:
-            self._outstanding = set(metainfo.missing_pieces)
-        else:
-            self._outstanding = set(metainfo.pieces)
+        self._outstanding = set(metainfo.pieces)
 
     def set_have(self, peer, pieces):
         """Signal that elements of `pieces` are available from `peer`."""
@@ -271,11 +265,12 @@ class PeerConnection(actor.Actor):
         - an instance of `BlockReceiver`
     """
 
-    def __init__(self, torrent, metainfo, peer, *, max_requests=10):
+    def __init__(self, torrent, metainfo, torrent_state, peer, *, max_requests=10):
         super().__init__()
 
         self._torrent = torrent
         self._metainfo = metainfo
+        self._torrent_state = torrent_state
 
         self._peer = peer
 
@@ -296,12 +291,14 @@ class PeerConnection(actor.Actor):
         )
 
         self._writer.write(
-            peer_protocol.handshake(self._metainfo.info_hash, self._metainfo.peer_id)
+            peer_protocol.handshake(
+                self._torrent_state.info_hash, self._torrent_state.peer_id
+            )
         )
         await self._writer.drain()
 
         response = await self._reader.readexactly(68)
-        if not peer_protocol.valid_handshake(response, self._metainfo.info_hash):
+        if not peer_protocol.valid_handshake(response, self._torrent_state.info_hash):
             raise ConnectionError("Peer sent invalid handshake.")
 
         # TODO: Accept peers that don't send a bitfield.

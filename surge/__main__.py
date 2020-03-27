@@ -28,18 +28,13 @@ def main():
         print(f"Logging to {logfile}.")
 
     with open(args.file, "rb") as f:
-        metainfo = metadata.Metainfo.from_bytes(f.read())
-    metainfo.folder = os.path.join("download", metainfo.folder)
-    print(f"Downloading {args.file} to {metainfo.folder}.")
+        raw_metainfo = f.read()
+    print(f"Downloading {args.file}.")
 
     if args.resume:
-        print(f"Checking for existing pieces.")
-        metainfo.missing_pieces = metadata.missing_pieces(
-            metainfo.pieces, metainfo.files, metainfo.folder
-        )
-        print(f"Missing {len(metainfo.missing_pieces)}/{len(metainfo.pieces)} pieces.")
+        raise NotImplementedError("Resuming is not supported.")
 
-    runners.run(torrent.Torrent(metainfo))
+    runners.run(torrent.Torrent(raw_metainfo))
 
     print("Exiting.")
 
