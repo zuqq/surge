@@ -139,7 +139,8 @@ def _parse_info(info):
 
 @dataclasses.dataclass
 class Metainfo:
-    announce: str  # TODO: This should be a list.
+    # See BEP 12.
+    announce_list: List[str]
     length: int
     piece_length: int
     pieces: List[Piece]
@@ -162,7 +163,14 @@ class Metainfo:
     def from_bytes(cls, metainfo_file):
         decoded = bencoding.decode(metainfo_file)
         params = {}
-        params["announce"] = decoded[b"announce"].decode("utf-8")
+        trackers = []
+        if b"announce" in decoded:
+            trackers.append(decoded[b"announce"].decode("utf-8"))
+        if b"announce-list" in decoded:
+            for tier in decoded[b"announce-list"]:
+                for raw_tracker in tier:
+                    trackers.append(raw_tracker.decode("utf-8"))
+        params["announce_list"] = trackers
         raw_info = bencoding.raw_val(metainfo_file, b"info")
         params["info_hash"] = hashlib.sha1(raw_info).digest()
         params.update(_parse_info(decoded[b"info"]))
@@ -173,14 +181,13 @@ class Metainfo:
 class Peer:
     address: str
     port: int
-    id: Optional[bytes]
+    id: Optional[bytes] = None
 
     @classmethod
     def from_bytes(cls, raw_peer):
         return cls(
             ".".join(str(b) for b in raw_peer[:4]),
             int.from_bytes(raw_peer[4:], "big"),
-            None,
         )
 
     @classmethod
