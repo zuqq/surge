@@ -29,21 +29,10 @@ class TrackerResponse:
         return cls(announce, resp[b"interval"], peers)
 
 
-async def request_peers(metainfo):
-    """Request peers from `metainfo.announce` and return a `TrackerResponse`."""
-    tracker_params = (
-        "info_hash",
-        "peer_id",
-        "port",
-        "uploaded",
-        "downloaded",
-        "left",
-        "event",
-        "compact",
-    )
-    encoded_params = urllib.parse.urlencode(
-        {param: getattr(metainfo, param) for param in tracker_params}
-    )
+async def request_peers(metainfo, torrent_state):
+    """Request peers from the URLs in `metainfo.announce`, returning an
+    instance of `TrackerResponse`."""
+    encoded_params = urllib.parse.urlencode(dataclasses.asdict(torrent_state))
 
     async with aiohttp.ClientSession() as session:
         for announce in metainfo.announce_list:

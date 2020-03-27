@@ -3,6 +3,7 @@ from typing import List, Optional
 import dataclasses
 import hashlib
 import os
+import secrets
 
 from . import bencoding
 
@@ -118,38 +119,44 @@ def _parse_hashes(hashes, length, piece_length):
     return pieces
 
 
-def _parse_info(info):
-    result = {}
-    name = info[b"name"].decode("utf-8")
-    if b"length" in info:
-        # Single file mode.
-        result["files"] = [File(0, info[b"length"], name)]
-        result["folder"] = ""
-    else:
-        # Multiple file mode.
-        result["files"] = _parse_file_list(info[b"files"])
-        result["folder"] = name
-    result["length"] = sum(file.length for file in result["files"])
-    result["piece_length"] = info[b"piece length"]
-    result["pieces"] = _parse_hashes(
-        info[b"pieces"], result["length"], result["piece_length"]
-    )
-    return result
-
-
 @dataclasses.dataclass
 class Metainfo:
-    # See BEP 12.
-    announce_list: List[str]
+    announce_list: List[str]  # See BEP 12.
     length: int
     piece_length: int
     pieces: List[Piece]
     folder: str
     files: List[File]
 
-    # Tracker parameters. The first two are also needed for peer messaging.
+    @classmethod
+    def from_bytes(cls, raw_metainfo):
+        decoded = bencoding.decode(raw_metainfo)
+        announce_list = []
+        if b"announce" in decoded:
+            announce_list.append(decoded[b"announce"].decode("utf-8"))
+        if b"announce-list" in decoded:
+            for tier in decoded[b"announce-list"]:
+                for raw_tracker in tier:
+                    announce_list.append(raw_tracker.decode("utf-8"))
+        info = decoded[b"info"]
+        if b"length" in info:
+            # Single file mode.
+            files = [File(0, info[b"length"], info[b"name"].decode("utf-8"))]
+            folder = ""
+        else:
+            # Multiple file mode.
+            files = _parse_file_list(info[b"files"])
+            folder = info[b"name"].decode("utf-8")
+        length = sum(file.length for file in files)
+        piece_length = info[b"piece length"]
+        pieces = _parse_hashes(info[b"pieces"], length, piece_length)
+        return cls(announce_list, length, piece_length, pieces, folder, files)
+
+
+@dataclasses.dataclass
+class TorrentState:
     info_hash: bytes
-    peer_id: Optional[bytes] = None
+    peer_id: bytes = secrets.token_bytes(20)
     port: int = 6881
     uploaded: int = 0
     downloaded: int = 0
@@ -157,24 +164,11 @@ class Metainfo:
     event: str = "started"
     compact: int = 1  # See BEP 23.
 
-    missing_pieces: Optional[List[Piece]] = None  # For resuming the download.
-
     @classmethod
-    def from_bytes(cls, metainfo_file):
-        decoded = bencoding.decode(metainfo_file)
-        params = {}
-        trackers = []
-        if b"announce" in decoded:
-            trackers.append(decoded[b"announce"].decode("utf-8"))
-        if b"announce-list" in decoded:
-            for tier in decoded[b"announce-list"]:
-                for raw_tracker in tier:
-                    trackers.append(raw_tracker.decode("utf-8"))
-        params["announce_list"] = trackers
-        raw_info = bencoding.raw_val(metainfo_file, b"info")
-        params["info_hash"] = hashlib.sha1(raw_info).digest()
-        params.update(_parse_info(decoded[b"info"]))
-        return cls(**params)
+    def from_bytes(cls, raw_metainfo):
+        raw_info = bencoding.raw_val(raw_metainfo, b"info")
+        info_hash = hashlib.sha1(raw_info).digest()
+        return cls(info_hash)
 
 
 @dataclasses.dataclass(eq=True, frozen=True)
@@ -184,14 +178,9 @@ class Peer:
     id: Optional[bytes] = None
 
     @classmethod
-    def from_bytes(cls, raw_peer):
-        return cls(
-            ".".join(str(b) for b in raw_peer[:4]),
-            int.from_bytes(raw_peer[4:], "big"),
-        )
+    def from_bytes(cls, bs):
+        return cls(".".join(str(b) for b in bs[:4]), int.from_bytes(bs[4:], "big"))
 
     @classmethod
-    def from_dict(cls, peer_dict):
-        return cls(
-            peer_dict[b"ip"].decode("utf-8"), peer_dict[b"port"], peer_dict[b"peer id"],
-        )
+    def from_dict(cls, d):
+        return cls(d[b"ip"].decode("utf-8"), d[b"port"], d[b"peer id"])
