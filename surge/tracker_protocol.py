@@ -39,5 +39,5 @@ async def request_peers(metainfo, torrent_state):
             async with session.get(announce + "?" + encoded_params) as resp:
                 resp = bencoding.decode(await resp.read())
             if b"failure reason" in resp:
-                raise ConnectionError(resp[b"failure reason"].decode("utf-8"))
+                raise ConnectionError(resp[b"failure reason"].decode())
             return TrackerResponse.from_dict(announce, resp)
