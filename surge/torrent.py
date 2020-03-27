@@ -3,7 +3,6 @@ import collections
 import hashlib
 import os
 import random
-import secrets
 
 import aiofiles
 
