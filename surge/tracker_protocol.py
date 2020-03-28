@@ -74,9 +74,11 @@ async def request_peers(metainfo, torrent_state):
         url = urllib.parse.urlparse(announce)
 
         if url.scheme in ("http", "https"):
-            encoded_params = urllib.parse.urlencode(dataclasses.asdict(torrent_state))
+            params = urllib.parse.parse_qs(url.query)
+            params.update(dataclasses.asdict(torrent_state))
+            request_url = url._replace(query=urllib.parse.urlencode(params))
             async with aiohttp.ClientSession() as session:
-                async with session.get(announce + "?" + encoded_params) as resp:
+                async with session.get(request_url.geturl()) as resp:
                     resp = bencoding.decode(await resp.read())
             if b"failure reason" in resp:
                 raise ConnectionError(resp[b"failure reason"].decode())
@@ -102,11 +104,10 @@ async def request_peers(metainfo, torrent_state):
 
             data = await asyncio.wait_for(protocol.read(), timeout=1)
             _, _, interval, _, _ = struct.unpack(">l4slll", data[:20])
-            raw_peers = data[20:]
 
             transport.close()
 
-            return TrackerResponse(announce, interval, parse_peers(raw_peers))
+            return TrackerResponse(announce, interval, parse_peers(data[20:]))
 
         else:
             raise ValueError(f"Announce {announce} is not supported")
