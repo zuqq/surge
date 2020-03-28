@@ -7,6 +7,8 @@ class DatagramStream(asyncio.DatagramProtocol):
         self._drained = asyncio.Event()
         self._transport = None
 
+    ### Protocol
+
     def connection_made(self, transport):
         self._drained.set()
         self._transport = transport
@@ -21,6 +23,8 @@ class DatagramStream(asyncio.DatagramProtocol):
     def resume_writing(self):
         self._drained.set()
         super().resume_writing()
+
+    ### Stream interface
 
     def write(self, message):
         self._transport.sendto(message)
