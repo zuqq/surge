@@ -63,20 +63,23 @@ def piece_to_chunks(pieces, files):
     return result
 
 
-def missing_pieces(pieces, files, folder):
-    """Return a list of those pieces that are not present in `folder`."""
-    result = set(pieces)
+def available_pieces(pieces, files, folder):
+    """Return a list of all pieces that are present in `folder`."""
+    result = set()
     chunks = piece_to_chunks(pieces, files)
     for piece in pieces:
         chunk_data = []
         for chunk in chunks[piece]:
             file_path = os.path.join(folder, chunk.file.path)
-            with open(file_path, "rb") as f:
-                f.seek(chunk.file_offset)
-                chunk_data.append(f.read(chunk.length))
+            try:
+                with open(file_path, "rb") as f:
+                    f.seek(chunk.file_offset)
+                    chunk_data.append(f.read(chunk.length))
+            except FileNotFoundError:
+                continue
         if hashlib.sha1(b"".join(chunk_data)).digest() == piece.hash:
-            result.remove(piece)
-    return list(result)
+            result.add(piece)
+    return result
 
 
 @dataclasses.dataclass(eq=True, frozen=True, order=True)

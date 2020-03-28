@@ -27,14 +27,23 @@ def main():
         )
         print(f"Logging to {logfile}.")
 
-    with open(args.file, "rb") as f:
-        raw_metainfo = f.read()
     print(f"Downloading {args.file}.")
 
-    if args.resume:
-        raise NotImplementedError("Resuming is not supported.")
+    with open(args.file, "rb") as f:
+        raw_metainfo = f.read()
+    metainfo = metadata.Metainfo.from_bytes(raw_metainfo)
+    torrent_state = metadata.TorrentState.from_bytes(raw_metainfo)
 
-    runners.run(torrent.Torrent(raw_metainfo))
+    if args.resume:
+        print("Checking for available pieces.")
+        available_pieces = metadata.available_pieces(
+            metainfo.pieces, metainfo.files, metainfo.folder
+        )
+        print(f"Found {len(available_pieces)} valid pieces.")
+    else:
+        available_pieces = set()
+
+    runners.run(torrent.Torrent(metainfo, torrent_state, available_pieces))
 
     print("Exiting.")
 
