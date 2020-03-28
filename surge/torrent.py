@@ -23,11 +23,12 @@ class Torrent(actor.Supervisor):
         - up to `max_peers` instances of `PeerConnection`.
     """
 
-    def __init__(self, raw_metainfo, *, max_peers=50):
+    def __init__(self, metainfo, torrent_state, available_pieces, *, max_peers=50):
         super().__init__()
 
-        self._metainfo = metadata.Metainfo.from_bytes(raw_metainfo)
-        self._torrent_state = metadata.TorrentState.from_bytes(raw_metainfo)
+        self._metainfo = metainfo
+        self._torrent_state = torrent_state
+        self._available_pieces = available_pieces
 
         metadata.ensure_files_exist(self._metainfo.folder, self._metainfo.files)
 
@@ -55,9 +56,9 @@ class Torrent(actor.Supervisor):
     ### Actor implementation
 
     async def _main_coro(self):
-        self._file_writer = FileWriter(self, self._metainfo)
+        self._file_writer = FileWriter(self, self._metainfo, self._available_pieces)
         self._peer_queue = PeerQueue(self, self._metainfo, self._torrent_state)
-        self._piece_queue = PieceQueue(self, self._metainfo)
+        self._piece_queue = PieceQueue(self, self._metainfo, self._available_pieces)
         for c in (self._file_writer, self._peer_queue, self._piece_queue):
             await self.spawn_child(c)
         await self._spawn_peer_connections()
@@ -112,31 +113,31 @@ class FileWriter(actor.Actor):
     Children: None
     """
 
-    def __init__(self, torrent, metainfo):
+    def __init__(self, torrent, metainfo, available_pieces):
         super().__init__()
 
         self._torrent = torrent
         self._metainfo = metainfo
 
+        self._outstanding = set(metainfo.pieces) - available_pieces
         self._piece_data = asyncio.Queue()
 
     async def _main_coro(self):
         piece_to_chunks = metadata.piece_to_chunks(
             self._metainfo.pieces, self._metainfo.files
         )
-        outstanding_pieces = set(self._metainfo.pieces)
-        while outstanding_pieces:
+        while self._outstanding:
             piece, data = await self._piece_data.get()
-            if piece not in outstanding_pieces:
+            if piece not in self._outstanding:
                 continue
             for c in piece_to_chunks[piece]:
                 file_path = os.path.join(self._metainfo.folder, c.file.path)
                 async with aiofiles.open(file_path, "rb+") as f:
                     await f.seek(c.file_offset)
                     await f.write(data[c.piece_offset : c.piece_offset + c.length])
-            outstanding_pieces.remove(piece)
+            self._outstanding.remove(piece)
             n = len(self._metainfo.pieces)
-            print(f"Progress: {n - len(outstanding_pieces)}/{n} pieces.")
+            print(f"Progress: {n - len(self._outstanding)}/{n} pieces.")
         self._torrent.done()
 
     ### Queue interface
@@ -191,7 +192,7 @@ class PieceQueue(actor.Actor):
     Children: None
     """
 
-    def __init__(self, torrent, metainfo):
+    def __init__(self, torrent, metainfo, available_pieces):
         super().__init__()
 
         self._torrent = torrent
@@ -201,7 +202,7 @@ class PieceQueue(actor.Actor):
         # `self._borrowers[piece]` is the set of peers that `piece` is being
         # downloaded from.
         self._borrowers = collections.defaultdict(set)
-        self._outstanding = set(metainfo.pieces)
+        self._outstanding = set(metainfo.pieces) - available_pieces
 
     def set_have(self, peer, pieces):
         """Signal that elements of `pieces` are available from `peer`."""
