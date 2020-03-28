@@ -63,7 +63,7 @@ class Actor:
         if reason is not None:
             logging.debug("%r crashed with %r.", self, reason)
         if self.parent is None:
-            raise SystemExit(f"Unsupervised actor {self} crashed.")
+            raise SystemExit(f"Unsupervised actor {repr(self)} crashed.")
         self.parent.report_crash(self)
 
     def report_crash(self, reporter: Actor):

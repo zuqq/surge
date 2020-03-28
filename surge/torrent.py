@@ -70,6 +70,8 @@ class Torrent(actor.Supervisor):
                     break
             self._peer_to_connection.pop(peer)
             self._peer_connection_slots.release()
+        else:
+            self._crash(RuntimeError(f"Irreplaceable actor {repr(child)} crashed."))
 
     ### Messages from FileWriter
 
