@@ -3,7 +3,6 @@ from typing import List
 import asyncio
 import dataclasses
 import enum
-import functools
 import secrets
 import struct
 import urllib.parse
@@ -44,18 +43,16 @@ class TrackerMessage(enum.Enum):
     ANNOUNCE = 1
 
 
-def connect_request(transaction_id):
-    return struct.pack(
-        ">ql4s", 0x41727101980, TrackerMessage.CONNECT.value, transaction_id,
-    )
+def connect_request(trans_id):
+    return struct.pack(">ql4s", 0x41727101980, TrackerMessage.CONNECT.value, trans_id)
 
 
-def announce_request(transaction_id, connection_id, torrent_state):
+def announce_request(trans_id, conn_id, torrent_state):
     return struct.pack(
         ">8sl4s20s20sqqqlL4slH",
-        connection_id,
+        conn_id,
         TrackerMessage.ANNOUNCE.value,
-        transaction_id,
+        trans_id,
         torrent_state.info_hash,
         torrent_state.peer_id,
         torrent_state.downloaded,
@@ -69,7 +66,7 @@ def announce_request(transaction_id, connection_id, torrent_state):
     )
 
 
-async def request_peers(metainfo, torrent_state, *, max_tries=5):
+async def request_peers(metainfo, torrent_state):
     """Request peers from the URLs in `metainfo.announce_list`, returning an
     instance of `TrackerResponse`."""
 
@@ -78,13 +75,12 @@ async def request_peers(metainfo, torrent_state, *, max_tries=5):
 
         if url.scheme in ("http", "https"):
             encoded_params = urllib.parse.urlencode(dataclasses.asdict(torrent_state))
-
             async with aiohttp.ClientSession() as session:
                 async with session.get(announce + "?" + encoded_params) as resp:
                     resp = bencoding.decode(await resp.read())
-                if b"failure reason" in resp:
-                    raise ConnectionError(resp[b"failure reason"].decode())
-                return TrackerResponse.from_dict(announce, resp)
+            if b"failure reason" in resp:
+                raise ConnectionError(resp[b"failure reason"].decode())
+            return TrackerResponse.from_dict(announce, resp)
 
         elif url.scheme == "udp":
             loop = asyncio.get_running_loop()
