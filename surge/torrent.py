@@ -250,21 +250,12 @@ class PieceQueue(actor.Actor):
         self._torrent.cancel_piece(borrowers - {peer}, piece)
 
 
-async def read_peer_message(reader):
-    # Used by `PeerConnection` and `BlockReceiver`.
-    len_prefix = int.from_bytes(await reader.readexactly(4), "big")
-    message = await reader.readexactly(len_prefix)
-    return peer_protocol.message_type(message), message[1:]
-
-
 class PeerConnection(actor.Actor):
     """Encapsulates the connection with a peer.
 
     Parent: An instance of `Torrent`
     Children:
         - an instance of `BlockQueue`
-        - an instance of `BlockRequester`
-        - an instance of `BlockReceiver`
     """
 
     def __init__(self, torrent, metainfo, torrent_state, peer, *, max_requests=10):
@@ -281,11 +272,14 @@ class PeerConnection(actor.Actor):
         self._unchoked = asyncio.Event()
 
         self._block_queue = None
-        self._block_receiver = None
-        self._block_requester = None
 
         self._block_to_timer = {}
         self._block_request_slots = asyncio.Semaphore(max_requests)
+
+    async def _read_peer_message(self):
+        len_prefix = int.from_bytes(await self._reader.readexactly(4), "big")
+        message = await self._reader.readexactly(len_prefix)
+        return peer_protocol.message_type(message), message[1:]
 
     async def _connect(self):
         self._reader, self._writer = await asyncio.open_connection(
@@ -304,7 +298,7 @@ class PeerConnection(actor.Actor):
             raise ConnectionError("Peer sent invalid handshake.")
 
         # TODO: Accept peers that don't send a bitfield.
-        message_type, payload = await read_peer_message(self._reader)
+        message_type, payload = await self._read_peer_message()
         if message_type != "bitfield":
             raise ConnectionError("Peer didn't send a bitfield.")
         self._torrent.set_have(
@@ -312,13 +306,21 @@ class PeerConnection(actor.Actor):
         )
 
     async def _disconnect(self):
-        if self._writer is not None:
-            self._writer.close()
-            try:
-                await self._writer.wait_closed()
-            # https://bugs.python.org/issue38856
-            except (BrokenPipeError, ConnectionResetError):
-                pass
+        if self._writer is None:
+            return
+        self._writer.close()
+        try:
+            await self._writer.wait_closed()
+        # https://bugs.python.org/issue38856
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    async def _unchoke(self):
+        if self._unchoked.is_set():
+            return
+        self._writer.write(peer_protocol.interested())
+        await self._writer.drain()
+        await self._unchoked.wait()
 
     async def _request_timer(self, block, *, timeout=10):
         await asyncio.sleep(timeout)
@@ -326,15 +328,50 @@ class PeerConnection(actor.Actor):
         # that is never awaited.
         self._crash(TimeoutError(f"Request for {block} from {self._peer} timed out."))
 
+    async def _receive_blocks(self):
+        while True:
+            message_type, payload = await self._read_peer_message()
+            if message_type == "choke":
+                self._unchoked.clear()
+                # TODO: Don't drop the peer if it chokes us.
+                raise ConnectionError(f"Peer sent choke.")
+            elif message_type == "unchoke":
+                self._unchoked.set()
+            elif message_type == "have":
+                piece = peer_protocol.parse_have(payload, self._metainfo.pieces),
+                self._torrent.add_to_have(self._peer, piece)
+            elif message_type == "block":
+                block, data = peer_protocol.parse_block(payload, self._metainfo.pieces)
+                if block not in self._block_to_timer:
+                    return
+                self._block_to_timer.pop(block).cancel()
+                self._block_request_slots.release()
+                self._block_queue.task_done(block, data)
+
+    async def _request_blocks(self):
+        while True:
+            await self._block_request_slots.acquire()
+            block = self._block_queue.get_nowait()
+            if block is None:
+                break
+            await self._unchoke()
+            self._writer.write(peer_protocol.request(block))
+            await self._writer.drain()
+            self._block_to_timer[block] = asyncio.create_task(
+                self._request_timer(block)
+            )
+
+    async def cancel_block(self, block):
+        self._writer.write(peer_protocol.cancel(block))
+        await self._writer.drain()
+
     ### Actor implementation
 
     async def _main_coro(self):
         await self._connect()
         self._block_queue = BlockQueue(self)
-        self._block_receiver = BlockReceiver(self, self._metainfo, self._reader)
-        self._block_requester = BlockRequester(self, self._writer)
-        for c in (self._block_queue, self._block_receiver, self._block_requester):
-            await self.spawn_child(c)
+        await self.spawn_child(self._block_queue)
+        await asyncio.gather(self._receive_blocks(), self._request_blocks())
 
     async def _on_stop(self):
         await self._disconnect()
@@ -359,49 +396,6 @@ class PeerConnection(actor.Actor):
     def piece_done(self, piece, data):
         """Signal that data was received (and verified) for piece."""
         self._torrent.piece_done(self._peer, piece, data)
-
-    ### Messages from BlockReceiver
-
-    def received_choke(self):
-        """Signal that the peer started choking us."""
-        self._unchoked.clear()
-
-    def received_unchoke(self):
-        """Signal that the peer stopped choking us."""
-        self._unchoked.set()
-
-    def received_block(self, block, data):
-        """Signal that `data` was received for `block`."""
-        if block not in self._block_to_timer:
-            return
-        self._block_to_timer.pop(block).cancel()
-        self._block_request_slots.release()
-        self._block_queue.task_done(block, data)
-
-    def add_to_have(self, piece):
-        """Signal that `piece` is available from the peer."""
-        self._torrent.add_to_have(self._peer, piece)
-
-    ### Messages from BlockRequester
-
-    async def get_block(self):
-        """Wait until a block request slot opens up and then return a block that
-        is to be requested from the peer."""
-        await self._block_request_slots.acquire()
-        return self._block_queue.get_nowait()
-
-    async def unchoke(self):
-        """If the peer is choking us, send an unchoke request and wait for the
-        peer to stop doing so."""
-        if self._unchoked.is_set():
-            return
-        self._writer.write(peer_protocol.interested())
-        await self._writer.drain()
-        await self._unchoked.wait()
-
-    def requested_block(self, block):
-        """Signal that `block` was requested from the peer."""
-        self._block_to_timer[block] = asyncio.create_task(self._request_timer(block))
 
 
 class BlockQueue(actor.Actor):
@@ -472,70 +466,3 @@ class BlockQueue(actor.Actor):
             self._stack = [block for block in self._stack if block.piece != piece]
             self._outstanding.pop(piece)
             self._data.pop(piece)
-
-
-class BlockReceiver(actor.Actor):
-    """Receives messages from the peer and relays them to its parent.
-
-    Parent: An instance of `PeerConnection`
-    Children: None
-    """
-
-    def __init__(self, peer_connection, metainfo, reader):
-        super().__init__()
-
-        self._peer_connection = peer_connection
-        self._metainfo = metainfo
-        self._reader = reader
-
-    ### Actor implementation
-
-    async def _main_coro(self):
-        while True:
-            message_type, payload = await read_peer_message(self._reader)
-            if message_type == "choke":
-                self._peer_connection.received_choke()
-                # TODO: Don't drop the peer if it chokes us.
-                raise ConnectionError(f"Peer sent choke.")
-            elif message_type == "unchoke":
-                self._peer_connection.received_unchoke()
-            elif message_type == "have":
-                self._peer_connection.add_to_have(
-                    peer_protocol.parse_have(payload, self._metainfo.pieces),
-                )
-            elif message_type == "block":
-                self._peer_connection.received_block(
-                    *peer_protocol.parse_block(payload, self._metainfo.pieces)
-                )
-
-
-class BlockRequester(actor.Actor):
-    """Sends block requests to the peer.
-
-    Parent: An instance of `PeerConnection`
-    Children: None
-    """
-
-    def __init__(self, peer_connection, writer):
-        super().__init__()
-
-        self._peer_connection = peer_connection
-        self._writer = writer
-
-    ### Actor implementation
-
-    async def _main_coro(self):
-        while True:
-            block = await self._peer_connection.get_block()
-            if block is None:
-                break
-            await self._peer_connection.unchoke()
-            self._writer.write(peer_protocol.request(block))
-            await self._writer.drain()
-            self._peer_connection.requested_block(block)
-
-    ### Messages from PeerConnection
-
-    async def cancel_block(self, block):
-        self._writer.write(peer_protocol.cancel(block))
-        await self._writer.drain()
