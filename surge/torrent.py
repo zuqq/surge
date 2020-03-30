@@ -338,7 +338,7 @@ class PeerConnection(actor.Actor):
             elif message_type == "unchoke":
                 self._unchoked.set()
             elif message_type == "have":
-                piece = peer_protocol.parse_have(payload, self._metainfo.pieces),
+                piece = peer_protocol.parse_have(payload, self._metainfo.pieces)
                 self._torrent.add_to_have(self._peer, piece)
             elif message_type == "block":
                 block, data = peer_protocol.parse_block(payload, self._metainfo.pieces)
