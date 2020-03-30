@@ -9,6 +9,7 @@ import aiofiles
 from . import actor
 from . import metadata
 from . import peer_protocol
+from . import peer_queue
 from . import tracker_protocol
 
 
@@ -57,7 +58,7 @@ class Torrent(actor.Supervisor):
 
     async def _main_coro(self):
         self._file_writer = FileWriter(self, self._metainfo, self._available_pieces)
-        self._peer_queue = PeerQueue(self, self._metainfo, self._torrent_state)
+        self._peer_queue = peer_queue.PeerQueue(self._metainfo, self._torrent_state)
         self._piece_queue = PieceQueue(self, self._metainfo, self._available_pieces)
         for c in (self._file_writer, self._peer_queue, self._piece_queue):
             await self.spawn_child(c)
@@ -147,43 +148,6 @@ class FileWriter(actor.Actor):
     def put_nowait(self, piece, data):
         """Signal that `data` was received and verified for `piece`."""
         self._piece_data.put_nowait((piece, data))
-
-
-class PeerQueue(actor.Actor):
-    """Requests peers from the tracker.
-
-    Parent: An instance of `Torrent`
-    Children: None
-    """
-
-    def __init__(self, torrent, metainfo, torrent_state):
-        super().__init__()
-
-        self._torrent = torrent
-        self._metainfo = metainfo
-        self._torrent_state = torrent_state
-
-        self._peers = asyncio.Queue()
-
-    ### Actor implementation
-
-    async def _main_coro(self):
-        seen_peers = set()
-        while True:
-            resp = await tracker_protocol.request_peers(
-                self._metainfo, self._torrent_state
-            )
-            print(f"Got {len(resp.peers)} peer(s) from {resp.announce}.")
-            for peer in set(resp.peers) - seen_peers:
-                self._peers.put_nowait(peer)
-                seen_peers.add(peer)
-            await asyncio.sleep(resp.interval)
-
-    ### Messages from Torrent
-
-    async def get(self):
-        """Return a peer that we have not yet connected to."""
-        return await self._peers.get()
 
 
 class PieceQueue(actor.Actor):
