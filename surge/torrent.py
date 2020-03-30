@@ -343,7 +343,7 @@ class PeerConnection(actor.Actor):
             elif message_type == "block":
                 block, data = peer_protocol.parse_block(payload, self._metainfo.pieces)
                 if block not in self._block_to_timer:
-                    return
+                    continue
                 self._block_to_timer.pop(block).cancel()
                 self._block_request_slots.release()
                 self._block_queue.task_done(block, data)
