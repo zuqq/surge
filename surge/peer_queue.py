@@ -5,10 +5,10 @@ from . import tracker_protocol
 
 
 class PeerQueue(actor.Actor):
-    def __init__(self, metainfo, torrent_state):
+    def __init__(self, announce_list, torrent_state):
         super().__init__()
 
-        self._metainfo = metainfo
+        self._announce_list = announce_list
         self._torrent_state = torrent_state
 
         self._peers = asyncio.Queue()
@@ -19,7 +19,7 @@ class PeerQueue(actor.Actor):
         seen_peers = set()
         while True:
             resp = await tracker_protocol.request_peers(
-                self._metainfo, self._torrent_state
+                self._announce_list, self._torrent_state
             )
             print(f"Got {len(resp.peers)} peer(s) from {resp.announce}.")
             for peer in set(resp.peers) - seen_peers:
@@ -32,4 +32,3 @@ class PeerQueue(actor.Actor):
     async def get(self):
         """Return a peer that we have not yet connected to."""
         return await self._peers.get()
-

@@ -66,11 +66,11 @@ def announce_request(trans_id, conn_id, torrent_state):
     )
 
 
-async def request_peers(metainfo, torrent_state):
+async def request_peers(announce_list, torrent_state):
     """Request peers from the URLs in `metainfo.announce_list`, returning an
     instance of `TrackerResponse`."""
 
-    for announce in metainfo.announce_list:
+    for announce in announce_list:
         url = urllib.parse.urlparse(announce)
 
         if url.scheme in ("http", "https"):
