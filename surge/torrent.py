@@ -58,7 +58,9 @@ class Torrent(actor.Supervisor):
 
     async def _main_coro(self):
         self._file_writer = FileWriter(self, self._metainfo, self._available_pieces)
-        self._peer_queue = peer_queue.PeerQueue(self._metainfo, self._torrent_state)
+        self._peer_queue = peer_queue.PeerQueue(
+            self._metainfo.announce_list, self._torrent_state
+        )
         self._piece_queue = PieceQueue(self, self._metainfo, self._available_pieces)
         for c in (self._file_writer, self._peer_queue, self._piece_queue):
             await self.spawn_child(c)
