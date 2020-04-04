@@ -263,7 +263,7 @@ class PeerConnection(actor.Actor):
 
         # TODO: Accept peers that don't send a bitfield.
         message_type, payload = await self._read_peer_message()
-        if message_type != "bitfield":
+        if message_type != peer_protocol.PeerMessage.BITFIELD:
             raise ConnectionError("Peer didn't send a bitfield.")
         self._torrent.set_have(
             self._peer, peer_protocol.parse_bitfield(payload, self._metainfo.pieces),
@@ -289,14 +289,14 @@ class PeerConnection(actor.Actor):
     async def _receive_blocks(self):
         while True:
             message_type, payload = await self._read_peer_message()
-            if message_type == "choke":
+            if message_type == peer_protocol.PeerMessage.CHOKE:
                 self._unchoked.clear()
-            elif message_type == "unchoke":
+            elif message_type == peer_protocol.PeerMessage.UNCHOKE:
                 self._unchoked.set()
-            elif message_type == "have":
+            elif message_type == peer_protocol.PeerMessage.HAVE:
                 piece = peer_protocol.parse_have(payload, self._metainfo.pieces)
                 self._torrent.add_to_have(self._peer, piece)
-            elif message_type == "block":
+            elif message_type == peer_protocol.PeerMessage.BLOCK:
                 block, data = peer_protocol.parse_block(payload, self._metainfo.pieces)
                 self._block_queue.task_done(block, data)
 

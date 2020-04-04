@@ -7,6 +7,7 @@ from . import metadata
 class PeerMessage(enum.Enum):
     """Map peer message types to their identifiers."""
 
+    KEEPALIVE = None
     CHOKE = 0
     UNCHOKE = 1
     INTERESTED = 2
@@ -23,8 +24,8 @@ class PeerMessage(enum.Enum):
 def message_type(message):
     """Return a lowercase representation of the message's type."""
     if not message:
-        return "keepalive"
-    return PeerMessage(message[0]).name.lower()
+        return PeerMessage.KEEPALIVE
+    return PeerMessage(message[0])
 
 
 def handshake(info_hash, peer_id):
