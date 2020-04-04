@@ -225,7 +225,7 @@ class PeerConnection(actor.Actor):
         - an instance of `BlockQueue`
     """
 
-    def __init__(self, torrent, metainfo, torrent_state, peer, *, max_requests=10):
+    def __init__(self, torrent, metainfo, torrent_state, peer):
         super().__init__()
 
         self._torrent = torrent
@@ -239,9 +239,6 @@ class PeerConnection(actor.Actor):
         self._unchoked = asyncio.Event()
 
         self._block_queue = None
-
-        self._block_to_timer = {}
-        self._block_request_slots = asyncio.Semaphore(max_requests)
 
     async def _read_peer_message(self):
         len_prefix = int.from_bytes(await self._reader.readexactly(4), "big")
@@ -289,19 +286,11 @@ class PeerConnection(actor.Actor):
         await self._writer.drain()
         await self._unchoked.wait()
 
-    async def _request_timer(self, block, *, timeout=10):
-        await asyncio.sleep(timeout)
-        # Need to call `self._crash` here because this coroutine runs in a task
-        # that is never awaited.
-        self._crash(TimeoutError(f"Request for {block} from {self._peer} timed out."))
-
     async def _receive_blocks(self):
         while True:
             message_type, payload = await self._read_peer_message()
             if message_type == "choke":
                 self._unchoked.clear()
-                # TODO: Don't drop the peer if it chokes us.
-                raise ConnectionError(f"Peer sent choke.")
             elif message_type == "unchoke":
                 self._unchoked.set()
             elif message_type == "have":
@@ -309,28 +298,16 @@ class PeerConnection(actor.Actor):
                 self._torrent.add_to_have(self._peer, piece)
             elif message_type == "block":
                 block, data = peer_protocol.parse_block(payload, self._metainfo.pieces)
-                if block not in self._block_to_timer:
-                    continue
-                self._block_to_timer.pop(block).cancel()
-                self._block_request_slots.release()
                 self._block_queue.task_done(block, data)
 
     async def _request_blocks(self):
         while True:
-            await self._block_request_slots.acquire()
-            block = self._block_queue.get_nowait()
+            await self._unchoke()
+            block = await self._block_queue.get()
             if block is None:
                 break
-            await self._unchoke()
             self._writer.write(peer_protocol.request(block))
             await self._writer.drain()
-            self._block_to_timer[block] = asyncio.create_task(
-                self._request_timer(block)
-            )
-
-    async def cancel_block(self, block):
-        self._writer.write(peer_protocol.cancel(block))
-        await self._writer.drain()
 
     ### Actor implementation
 
@@ -347,14 +324,13 @@ class PeerConnection(actor.Actor):
 
     def cancel_piece(self, piece):
         """Signal that `piece` does not need to be downloaded anymore."""
-        for block in list(self._block_to_timer):
-            if block.piece == piece:
-                self._block_to_timer.pop(block).cancel()
-                # TODO: Send cancel message to the peer.
-                self._block_request_slots.release()
         self._block_queue.cancel_piece(piece)
 
     ### Messages from BlockQueue
+
+    async def cancel_block(self, block):
+        self._writer.write(peer_protocol.cancel(block))
+        await self._writer.drain()
 
     def get_piece(self):
         """Return a piece to download."""
@@ -372,24 +348,28 @@ class BlockQueue(actor.Actor):
     Children: None
     """
 
-    def __init__(self, peer_connection):
+    def __init__(self, peer_connection, *, max_requests=10):
         super().__init__()
 
         self._peer_connection = peer_connection
 
-        # Blocks that are to be downloaded.
         self._stack = []
-        # `self._outstanding[piece]` is the set of blocks that are being
-        # requested from the peer.
         self._outstanding = {}
-        # `self._data[piece][block]` is the data that was received for `block`.
         self._data = {}
+
+        self._slots = asyncio.Semaphore(max_requests)
+        self._timer = {}
+
+    async def _request_timer(self, block, *, timeout=10):
+        await asyncio.sleep(timeout)
+        self._crash(TimeoutError(f"Request from {self._peer} timed out."))
+
+    ### Queue interface
 
     def _on_piece_received(self, piece):
         self._outstanding.pop(piece)
         block_to_data = self._data.pop(piece)
         data = b"".join(block_to_data[block] for block in sorted(block_to_data))
-        # Check that the data for `piece` is what it should be.
         if len(data) == piece.length and hashlib.sha1(data).digest() == piece.hash:
             self._peer_connection.piece_done(piece, data)
         else:
@@ -398,37 +378,41 @@ class BlockQueue(actor.Actor):
     def _restock(self, piece):
         blocks = metadata.blocks(piece)
         self._stack = blocks[::-1]
-        self._outstanding[piece] = set(blocks)
+        self._outstanding[piece] = len(blocks)
         self._data[piece] = {}
 
-    ### Queue interface
-
-    def get_nowait(self):
-        """Return a block that has not been downloaded yet.
+    async def get(self):
+        """Return a block that has not been downloaded yet and start a timer
+        for that block.
 
         Returning `None` signals that the download is complete.
         """
+        await self._slots.acquire()
         if not self._stack:
             piece = self._peer_connection.get_piece()
             if piece is None:
                 return None
             self._restock(piece)
-        return self._stack.pop()
+        block = self._stack.pop()
+        self._timer[block] = asyncio.create_task(self._request_timer(block))
+        return block
 
     def task_done(self, block, data):
         """Signal that `data` was received for `block`."""
-        piece = block.piece
-        if piece in self._outstanding:
-            self._data[piece][block] = data
-            # Use discard, in case we get the same block multiple times.
-            self._outstanding[piece].discard(block)
-            if not self._outstanding[piece]:
-                self._on_piece_received(piece)
+        if block not in self._timer:
+            return
+        self._timer.pop(block).cancel()
+        self._data[block.piece][block] = data
+        self._outstanding[block.piece] -= 1
+        self._slots.release()
+        if not self._outstanding[block.piece]:
+            self._on_piece_received(block.piece)
 
     ### Messages from PeerConnection
 
     def cancel_piece(self, piece):
         """Signal that `piece` does not need to be downloaded anymore."""
+        # TODO: Send cancel messages to the peer.
         if piece in self._outstanding:
             self._stack = [block for block in self._stack if block.piece != piece]
             self._outstanding.pop(piece)
