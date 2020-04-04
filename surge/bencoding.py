@@ -62,3 +62,40 @@ def raw_val(bs, key):
             return bs[offset:next_offset]
         offset = next_offset
     raise KeyError
+
+
+def _encode_int(n):
+    return ("i" + str(n) + "e").encode("ascii")
+
+
+def _encode_list(l):
+    result = [b"l"]
+    for obj in l:
+        result.append(encode(obj))
+    result.append(b"e")
+    return b"".join(result)
+
+
+def _encode_dict(d):
+    result = [b"d"]
+    for key, value in d.items():
+        result.append(_encode_str(key))
+        result.append(encode(value))
+    result.append(b"e")
+    return b"".join(result)
+
+
+def _encode_str(bs):
+    return str(len(bs)).encode("ascii") + b":" + bs
+
+
+def encode(obj):
+    if isinstance(obj, int):
+        return _encode_int(obj)
+    elif isinstance(obj, list):
+        return _encode_list(obj)
+    elif isinstance(obj, dict):
+        return _encode_dict(obj)
+    elif isinstance(obj, bytes):
+        return _encode_str(obj)
+    raise ValueError

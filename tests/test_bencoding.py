@@ -22,3 +22,16 @@ def test_raw_val():
     assert bencoding.raw_val(b"d4:spaml1:a1:bee", b"spam") == b"l1:a1:be"
     with pytest.raises(KeyError):
         bencoding.raw_val(b"d4:spaml1:a1:bee", b"eggs")
+
+
+def test_encode():
+    """Compare with the examples from BEP 3."""
+    assert bencoding.encode(3) == b"i3e"
+    assert bencoding.encode(-3) == b"i-3e"
+    assert bencoding.encode(0) == b"i0e"
+    assert bencoding.encode([b"spam", b"eggs"]) == b"l4:spam4:eggse"
+    assert (
+        bencoding.encode({b"cow": b"moo", b"spam": b"eggs"})
+        == b"d3:cow3:moo4:spam4:eggse"
+    )
+    assert bencoding.encode({b"spam": [b"a", b"b"]}) == b"d4:spaml1:a1:bee"
