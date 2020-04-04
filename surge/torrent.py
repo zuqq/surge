@@ -71,6 +71,7 @@ class Torrent(actor.Supervisor):
             for peer, connection in self._peer_to_connection.items():
                 if connection is child:
                     break
+            self._piece_queue.drop_peer(peer)
             self._peer_to_connection.pop(peer)
             self._peer_connection_slots.release()
         else:
