@@ -157,7 +157,7 @@ class Metainfo:
 
 
 @dataclasses.dataclass
-class TorrentState:
+class TrackerParameters:
     info_hash: bytes
     peer_id: bytes = secrets.token_bytes(20)
     port: int = 6881

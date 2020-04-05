@@ -13,7 +13,7 @@ from . import peer_queue
 from . import tracker_protocol
 
 
-class Torrent(actor.Supervisor):
+class Download(actor.Supervisor):
     """Coordinates the download.
 
     Parent: None
@@ -24,11 +24,11 @@ class Torrent(actor.Supervisor):
         - up to `max_peers` instances of `PeerConnection`.
     """
 
-    def __init__(self, metainfo, torrent_state, available_pieces, *, max_peers=50):
+    def __init__(self, metainfo, tracker_params, available_pieces, *, max_peers=50):
         super().__init__()
 
         self._metainfo = metainfo
-        self._torrent_state = torrent_state
+        self._tracker_params = tracker_params
         self._available_pieces = available_pieces
 
         metadata.ensure_files_exist(self._metainfo.folder, self._metainfo.files)
@@ -46,7 +46,9 @@ class Torrent(actor.Supervisor):
         while True:
             await self._peer_connection_slots.acquire()
             peer = await self._peer_queue.get()
-            connection = PeerConnection(self, self._metainfo, self._torrent_state, peer)
+            connection = PeerConnection(
+                self, self._metainfo, self._tracker_params, peer
+            )
             await self.spawn_child(connection)
             self._peer_to_connection[peer] = connection
 
@@ -59,7 +61,7 @@ class Torrent(actor.Supervisor):
     async def _main_coro(self):
         self._file_writer = FileWriter(self, self._metainfo, self._available_pieces)
         self._peer_queue = peer_queue.PeerQueue(
-            self._metainfo.announce_list, self._torrent_state
+            self._metainfo.announce_list, self._tracker_params
         )
         self._piece_queue = PieceQueue(self, self._metainfo, self._available_pieces)
         for c in (self._file_writer, self._peer_queue, self._piece_queue):
@@ -115,14 +117,14 @@ class Torrent(actor.Supervisor):
 class FileWriter(actor.Actor):
     """Keeps track of received pieces and writes them to the file system.
 
-    Parent: An instance of `Torrent`
+    Parent: An instance of `Download`
     Children: None
     """
 
-    def __init__(self, torrent, metainfo, available_pieces):
+    def __init__(self, download, metainfo, available_pieces):
         super().__init__()
 
-        self._torrent = torrent
+        self._download = download
         self._metainfo = metainfo
 
         self._outstanding = set(metainfo.pieces) - available_pieces
@@ -144,7 +146,7 @@ class FileWriter(actor.Actor):
             self._outstanding.remove(piece)
             n = len(self._metainfo.pieces)
             print(f"Progress: {n - len(self._outstanding)}/{n} pieces.")
-        self._torrent.done()
+        self._download.done()
 
     ### Queue interface
 
@@ -157,14 +159,14 @@ class PieceQueue(actor.Actor):
     """Holds the pieces that still need to be downloaded and their availability;
     exposes a queue interface for those pieces.
 
-    Parent: An instance of `Torrent`
+    Parent: An instance of `Download`
     Children: None
     """
 
-    def __init__(self, torrent, metainfo, available_pieces):
+    def __init__(self, download, metainfo, available_pieces):
         super().__init__()
 
-        self._torrent = torrent
+        self._download = download
 
         # `self._available[peer]` is the set of pieces that `peer` has.
         self._available = collections.defaultdict(set)
@@ -214,23 +216,23 @@ class PieceQueue(actor.Actor):
         if piece not in self._borrowers:
             return
         borrowers = self._borrowers.pop(piece)
-        self._torrent.cancel_piece(borrowers - {peer}, piece)
+        self._download.cancel_piece(borrowers - {peer}, piece)
 
 
 class PeerConnection(actor.Actor):
     """Encapsulates the connection with a peer.
 
-    Parent: An instance of `Torrent`
+    Parent: An instance of `Download`
     Children:
         - an instance of `BlockQueue`
     """
 
-    def __init__(self, torrent, metainfo, torrent_state, peer):
+    def __init__(self, download, metainfo, tracker_params, peer):
         super().__init__()
 
-        self._torrent = torrent
+        self._download = download
         self._metainfo = metainfo
-        self._torrent_state = torrent_state
+        self._tracker_params = tracker_params
 
         self._peer = peer
 
@@ -252,20 +254,26 @@ class PeerConnection(actor.Actor):
 
         self._writer.write(
             peer_protocol.handshake(
-                self._torrent_state.info_hash, self._torrent_state.peer_id
+                self._tracker_params.info_hash, self._tracker_params.peer_id
             )
         )
         await self._writer.drain()
 
         response = await self._reader.readexactly(68)
-        if not peer_protocol.valid_handshake(response, self._torrent_state.info_hash):
+        if not peer_protocol.valid_handshake(response, self._tracker_params.info_hash):
             raise ConnectionError("Peer sent invalid handshake.")
 
         # TODO: Accept peers that don't send a bitfield.
-        message_type, payload = await self._read_peer_message()
-        if message_type != peer_protocol.PeerMessage.BITFIELD:
-            raise ConnectionError("Peer didn't send a bitfield.")
-        self._torrent.set_have(
+        while True:
+            message_type, payload = await self._read_peer_message()
+            if message_type == peer_protocol.PeerMessage.BITFIELD:
+                break
+            elif message_type == peer_protocol.PeerMessage.EXTENSION_PROTOCOL:
+                continue
+            else:
+                raise ConnectionError("Peer didn't send a bitfield.")
+
+        self._download.set_have(
             self._peer, peer_protocol.parse_bitfield(payload, self._metainfo.pieces),
         )
 
@@ -295,7 +303,7 @@ class PeerConnection(actor.Actor):
                 self._unchoked.set()
             elif message_type == peer_protocol.PeerMessage.HAVE:
                 piece = peer_protocol.parse_have(payload, self._metainfo.pieces)
-                self._torrent.add_to_have(self._peer, piece)
+                self._download.add_to_have(self._peer, piece)
             elif message_type == peer_protocol.PeerMessage.BLOCK:
                 block, data = peer_protocol.parse_block(payload, self._metainfo.pieces)
                 self._block_queue.task_done(block, data)
@@ -320,7 +328,7 @@ class PeerConnection(actor.Actor):
     async def _on_stop(self):
         await self._disconnect()
 
-    ### Messages from Torrent
+    ### Messages from Download
 
     def cancel_piece(self, piece):
         """Signal that `piece` does not need to be downloaded anymore."""
@@ -334,11 +342,11 @@ class PeerConnection(actor.Actor):
 
     def get_piece(self):
         """Return a piece to download."""
-        return self._torrent.get_piece(self._peer)
+        return self._download.get_piece(self._peer)
 
     def piece_done(self, piece, data):
         """Signal that data was received (and verified) for piece."""
-        self._torrent.piece_done(self._peer, piece, data)
+        self._download.piece_done(self._peer, piece, data)
 
 
 class BlockQueue(actor.Actor):
@@ -362,7 +370,7 @@ class BlockQueue(actor.Actor):
 
     async def _request_timer(self, block, *, timeout=10):
         await asyncio.sleep(timeout)
-        self._crash(TimeoutError(f"Request from {self._peer} timed out."))
+        self._crash(TimeoutError(f"Request timed out."))
 
     ### Queue interface
 

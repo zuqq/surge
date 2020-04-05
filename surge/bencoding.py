@@ -12,7 +12,7 @@ def _list(bs, offset):
     result = []
     offset += 1
     while bs[offset] != ord("e"):
-        offset, rval = _parse(bs, offset)
+        offset, rval = decode_from(bs, offset)
         result.append(rval)
     return offset + 1, result
 
@@ -22,7 +22,7 @@ def _dict(bs, offset):
     offset += 1
     while bs[offset] != ord("e"):
         offset, key = _str(bs, offset)
-        offset, result[key] = _parse(bs, offset)
+        offset, result[key] = decode_from(bs, offset)
     return offset + 1, result
 
 
@@ -32,7 +32,7 @@ def _str(bs, offset):
     return end, bs[sep_index + 1 : end]
 
 
-def _parse(bs, offset):
+def decode_from(bs, offset):
     if bs[offset] == ord("i"):
         return _int(bs, offset)
     if bs[offset] == ord("l"):
@@ -45,10 +45,9 @@ def _parse(bs, offset):
 
 def decode(bs):
     """Return the Python object corresponding to the bencoded object `bs`."""
-    offset, rval = _parse(bs, 0)
+    offset, rval = decode_from(bs, 0)
     if offset == len(bs):
         return rval
-    raise ValueError
 
 
 def raw_val(bs, key):
@@ -57,7 +56,7 @@ def raw_val(bs, key):
     offset = 1
     while offset < len(bs) and bs[offset] != ord("e"):
         offset, curr_key = _str(bs, offset)
-        next_offset, _ = _parse(bs, offset)
+        next_offset, _ = decode_from(bs, offset)
         if curr_key == key:
             return bs[offset:next_offset]
         offset = next_offset
@@ -98,4 +97,4 @@ def encode(obj):
         return _encode_dict(obj)
     elif isinstance(obj, bytes):
         return _encode_str(obj)
-    raise ValueError
+    raise ValueError(repr(obj))

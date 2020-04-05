@@ -2,7 +2,10 @@ import argparse
 import logging
 import os
 
+from . import bencoding
+from . import magnet
 from . import metadata
+from . import mex
 from . import runners
 from . import torrent
 
@@ -11,7 +14,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="Download files from the BitTorrent network."
     )
-    parser.add_argument("file", help="path to the torrent file")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--file", help="torrent file")
+    group.add_argument("--magnet", help="magnet link")
     parser.add_argument("--debug", help="enable logging", action="store_true")
     parser.add_argument("--resume", help="resume download", action="store_true")
     args = parser.parse_args()
@@ -27,12 +32,31 @@ def main():
         )
         print(f"Logging to {logfile}.")
 
-    print(f"Downloading {args.file}.")
+    if args.file:
+        print(f"Downloading {args.file}.")
 
-    with open(args.file, "rb") as f:
-        raw_metainfo = f.read()
+        with open(args.file, "rb") as f:
+            raw_metainfo = f.read()
+        tracker_params = metadata.TrackerParameters.from_bytes(raw_metainfo)
+
+    if args.magnet:
+        info_hash, announce_list = magnet.parse(args.magnet)
+        tracker_params = metadata.TrackerParameters(info_hash)
+        info = runners.run(mex.Download(announce_list, tracker_params))
+        # Peers only send us the raw value associated with the `b"info"` key,
+        # so we still need to build the metainfo dictionary.
+        raw_metainfo = b"".join(
+            [
+                b"d13:announce-list",
+                bencoding.encode([[url.encode() for url in announce_list]]),
+                b"4:info",
+                info,
+                b"e",
+            ]
+        )
+        print("Downloaded metadata from peers.")
+
     metainfo = metadata.Metainfo.from_bytes(raw_metainfo)
-    torrent_state = metadata.TorrentState.from_bytes(raw_metainfo)
 
     if args.resume:
         print("Checking for available pieces.")
@@ -43,7 +67,7 @@ def main():
     else:
         available_pieces = set()
 
-    runners.run(torrent.Torrent(metainfo, torrent_state, available_pieces))
+    runners.run(torrent.Download(metainfo, tracker_params, available_pieces))
 
     print("Exiting.")
 

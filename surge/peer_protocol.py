@@ -31,7 +31,7 @@ def message_type(message):
 def handshake(info_hash, peer_id):
     """Return the length-prefixed "handshake" message built from the input."""
     return struct.pack(
-        ">B19s8s20s20s", 19, b"BitTorrent protocol", bytes(8), info_hash, peer_id
+        ">B19sQ20s20s", 19, b"BitTorrent protocol", 1 << 20, info_hash, peer_id
     )
 
 
