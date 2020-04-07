@@ -1,14 +1,20 @@
+from typing import List
+
 import asyncio
+import logging
 
 from . import actor
+from . import metadata
 from . import tracker_protocol
 
 
 class PeerQueue(actor.Actor):
-    def __init__(self, announce_list, tracker_params):
+    def __init__(self,
+                 announce_list: List[str],
+                 tracker_params: metadata.TrackerParameters):
         super().__init__()
 
-        self._announce_list = announce_list
+        self._stack = announce_list[::-1]
         self._tracker_params = tracker_params
 
         self._peers = asyncio.Queue()
@@ -18,17 +24,24 @@ class PeerQueue(actor.Actor):
     async def _main_coro(self):
         seen_peers = set()
         while True:
-            resp = await tracker_protocol.request_peers(
-                self._announce_list, self._tracker_params
-            )
-            print(f"Got {len(resp.peers)} peer(s) from {resp.announce}.")
-            for peer in set(resp.peers) - seen_peers:
-                self._peers.put_nowait(peer)
-                seen_peers.add(peer)
-            await asyncio.sleep(resp.interval)
+            if not self._stack:
+                raise RuntimeError("No trackers available.")
+            announce = self._stack[-1]
+            try:
+                resp = await tracker_protocol.request_peers(announce,
+                                                            self._tracker_params)
+            except ConnectionError as e:
+                logging.debug("Couldn't connect to %r: %r", announce, e)
+                self._stack.pop()
+            else:
+                print(f"Got {len(resp.peers)} peer(s) from {resp.announce}.")
+                for peer in set(resp.peers) - seen_peers:
+                    self._peers.put_nowait(peer)
+                    seen_peers.add(peer)
+                await asyncio.sleep(resp.interval)
 
     ### Queue interface
 
-    async def get(self):
+    async def get(self) -> metadata.Peer:
         """Return a peer that we have not yet connected to."""
         return await self._peers.get()

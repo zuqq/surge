@@ -14,7 +14,7 @@ from . import metadata
 from . import udp
 
 
-def parse_peers(raw_peers):
+def _parse_peers(raw_peers):
     peers = []
     for i in range(0, len(raw_peers), 6):
         peers.append(metadata.Peer.from_bytes(raw_peers[i : i + 6]))
@@ -28,14 +28,30 @@ class TrackerResponse:
     peers: List[metadata.Peer]
 
     @classmethod
+    def from_bytes(cls, announce, interval, raw_peers):
+        return cls(announce, interval, _parse_peers(raw_peers))
+
+    @classmethod
     def from_dict(cls, announce, resp):
         if isinstance(resp[b"peers"], list):
             # Dictionary model, as defined in BEP 3.
             peers = [metadata.Peer.from_dict(d) for d in resp[b"peers"]]
         else:
             # Binary model ("compact format") from BEP 23.
-            peers = parse_peers(resp[b"peers"])
+            peers = _parse_peers(resp[b"peers"])
         return cls(announce, resp[b"interval"], peers)
+
+
+async def _request_peers_http(url, tracker_params):
+    params = urllib.parse.parse_qs(url.query)
+    params.update(dataclasses.asdict(tracker_params))
+    request_url = url._replace(query=urllib.parse.urlencode(params))
+    async with aiohttp.ClientSession() as session:
+        async with session.get(request_url.geturl()) as resp:
+            resp = bencoding.decode(await resp.read())
+    if b"failure reason" in resp:
+        raise ConnectionError(resp[b"failure reason"].decode())
+    return resp
 
 
 class TrackerMessage(enum.Enum):
@@ -43,21 +59,21 @@ class TrackerMessage(enum.Enum):
     ANNOUNCE = 1
 
 
-def connect_request(trans_id):
+def _connect_request(trans_id):
     return struct.pack(">ql4s", 0x41727101980, TrackerMessage.CONNECT.value, trans_id)
 
 
-def announce_request(trans_id, conn_id, torrent_state):
+def _announce_request(trans_id, conn_id, tracker_params):
     return struct.pack(
         ">8sl4s20s20sqqqlL4slH",
         conn_id,
         TrackerMessage.ANNOUNCE.value,
         trans_id,
-        torrent_state.info_hash,
-        torrent_state.peer_id,
-        torrent_state.downloaded,
-        torrent_state.left,
-        torrent_state.uploaded,
+        tracker_params.info_hash,
+        tracker_params.peer_id,
+        tracker_params.downloaded,
+        tracker_params.left,
+        tracker_params.uploaded,
         0,
         0,
         secrets.token_bytes(4),
@@ -66,48 +82,39 @@ def announce_request(trans_id, conn_id, torrent_state):
     )
 
 
-async def request_peers(announce_list, torrent_state):
-    """Request peers from the URLs in `metainfo.announce_list`, returning an
-    instance of `TrackerResponse`."""
+async def _request_peers_udp(url, tracker_params):
+    loop = asyncio.get_running_loop()
+    transport, protocol = await loop.create_datagram_endpoint(
+        udp.DatagramStream,
+        remote_addr=(url._replace(netloc=url.hostname).geturl()[6:], url.port),
+    )
+    trans_id = secrets.token_bytes(4)
 
-    for announce in announce_list:
-        url = urllib.parse.urlparse(announce)
+    protocol.write(_connect_request(trans_id))
+    await protocol.drain()
 
-        if url.scheme in ("http", "https"):
-            params = urllib.parse.parse_qs(url.query)
-            params.update(dataclasses.asdict(torrent_state))
-            request_url = url._replace(query=urllib.parse.urlencode(params))
-            async with aiohttp.ClientSession() as session:
-                async with session.get(request_url.geturl()) as resp:
-                    resp = bencoding.decode(await resp.read())
-            if b"failure reason" in resp:
-                raise ConnectionError(resp[b"failure reason"].decode())
-            return TrackerResponse.from_dict(announce, resp)
+    data = await asyncio.wait_for(protocol.read(), timeout=1)
+    _, _, conn_id = struct.unpack(">l4s8s", data)
 
-        elif url.scheme == "udp":
-            loop = asyncio.get_running_loop()
-            transport, protocol = await loop.create_datagram_endpoint(
-                udp.DatagramStream,
-                remote_addr=(url._replace(netloc=url.hostname).geturl()[6:], url.port),
-            )
+    protocol.write(_announce_request(trans_id, conn_id, tracker_params))
+    await protocol.drain()
 
-            trans_id = secrets.token_bytes(4)
+    data = await asyncio.wait_for(protocol.read(), timeout=1)
+    _, _, interval, _, _ = struct.unpack(">l4slll", data[:20])
 
-            protocol.write(connect_request(trans_id))
-            await protocol.drain()
+    transport.close()
+    return (interval, data[20:])
 
-            data = await asyncio.wait_for(protocol.read(), timeout=1)
-            _, _, conn_id = struct.unpack(">l4s8s", data)
 
-            protocol.write(announce_request(trans_id, conn_id, torrent_state))
-            await protocol.drain()
-
-            data = await asyncio.wait_for(protocol.read(), timeout=1)
-            _, _, interval, _, _ = struct.unpack(">l4slll", data[:20])
-
-            transport.close()
-
-            return TrackerResponse(announce, interval, parse_peers(data[20:]))
-
-        else:
-            raise ValueError(f"Announce {announce} is not supported")
+async def request_peers(announce: str,
+                        tracker_params: metadata.TrackerParameters) -> TrackerResponse:
+    """Request peers from the URL `announce`."""
+    url = urllib.parse.urlparse(announce)
+    if url.scheme in ("http", "https"):
+        resp = await _request_peers_http(url, tracker_params)
+        return TrackerResponse.from_dict(announce, resp)
+    elif url.scheme == "udp":
+        interval, raw_peers = await _request_peers_udp(url, tracker_params)
+        return TrackerResponse.from_bytes(announce, interval, raw_peers)
+    else:
+        raise ValueError(f"Announce needs to be HTTP/S or UDP.")
