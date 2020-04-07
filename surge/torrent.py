@@ -143,8 +143,20 @@ class FileWriter(actor.Actor):
                     await f.seek(c.file_offset)
                     await f.write(data[c.piece_offset : c.piece_offset + c.length])
             self._outstanding.remove(piece)
+
+            # Print a progress bar.
             n = len(self._metainfo.pieces)
-            print(f"Progress: {n - len(self._outstanding)}/{n} pieces.")
+            i = n - len(self._outstanding)
+            progress = f"Progress: {i}/{n} pieces."
+            width, _ = os.get_terminal_size()
+            parts = width - len(progress) - 4
+            if parts < 10:
+                print("\r\x1b[K" + progress, end="")
+            else:
+                done = parts * i // n
+                bar = "[" + done * "#" + (parts - done) * " " + "]"
+                print("\r\x1b[K" + progress + " " + bar + " ", end="")
+
         self._download.done()
 
     ### Queue interface
