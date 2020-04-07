@@ -17,6 +17,7 @@ class PeerQueue(actor.Actor):
         self._stack = announce_list[::-1]
         self._tracker_params = tracker_params
 
+        self._sleep = None
         self._peers = asyncio.Queue()
 
     ### Actor implementation
@@ -38,10 +39,17 @@ class PeerQueue(actor.Actor):
                 for peer in set(resp.peers) - seen_peers:
                     self._peers.put_nowait(peer)
                     seen_peers.add(peer)
-                await asyncio.sleep(resp.interval)
+                self._sleep = asyncio.create_task(asyncio.sleep(resp.interval))
+                await self._sleep
 
     ### Queue interface
 
     async def get(self) -> metadata.Peer:
         """Return a peer that we have not yet connected to."""
-        return await self._peers.get()
+        try:
+            peer = self._peers.get_nowait()
+        except asyncio.QueueEmpty:
+            if self._sleep is not None:
+                self._sleep.cancel()
+            peer = await self._peers.get()
+        return peer
