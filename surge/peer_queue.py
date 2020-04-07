@@ -32,7 +32,7 @@ class PeerQueue(actor.Actor):
                 resp = await tracker_protocol.request_peers(
                     announce, self._tracker_params
                 )
-            except ConnectionError as e:
+            except Exception as e:
                 logging.debug("Couldn't connect to %r: %r", announce, e)
                 self._stack.pop()
             else:
