@@ -106,8 +106,9 @@ async def _request_peers_udp(url, tracker_params):
     return (interval, data[20:])
 
 
-async def request_peers(announce: str,
-                        tracker_params: metadata.TrackerParameters) -> TrackerResponse:
+async def request_peers(
+    announce: str, tracker_params: metadata.TrackerParameters
+) -> TrackerResponse:
     """Request peers from the URL `announce`."""
     url = urllib.parse.urlparse(announce)
     if url.scheme in ("http", "https"):

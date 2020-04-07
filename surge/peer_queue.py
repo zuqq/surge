@@ -9,9 +9,9 @@ from . import tracker_protocol
 
 
 class PeerQueue(actor.Actor):
-    def __init__(self,
-                 announce_list: List[str],
-                 tracker_params: metadata.TrackerParameters):
+    def __init__(
+        self, announce_list: List[str], tracker_params: metadata.TrackerParameters
+    ):
         super().__init__()
 
         self._stack = announce_list[::-1]
@@ -29,8 +29,9 @@ class PeerQueue(actor.Actor):
                 raise RuntimeError("No trackers available.")
             announce = self._stack[-1]
             try:
-                resp = await tracker_protocol.request_peers(announce,
-                                                            self._tracker_params)
+                resp = await tracker_protocol.request_peers(
+                    announce, self._tracker_params
+                )
             except ConnectionError as e:
                 logging.debug("Couldn't connect to %r: %r", announce, e)
                 self._stack.pop()

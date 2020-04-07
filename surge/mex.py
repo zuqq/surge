@@ -1,3 +1,5 @@
+from typing import List
+
 import asyncio
 import dataclasses
 import hashlib
@@ -12,7 +14,13 @@ from . import peer_queue
 
 
 class Download(actor.Supervisor):
-    def __init__(self, announce_list, tracker_params, *, max_peers=50):
+    def __init__(
+        self,
+        announce_list: List[str],
+        tracker_params: metadata.TrackerParameters,
+        *,
+        max_peers: int = 50,
+    ):
         super().__init__()
 
         self._announce_list = announce_list
@@ -30,8 +38,8 @@ class Download(actor.Supervisor):
             peer = await self._peer_queue.get()
             await self.spawn_child(PeerConnection(self, self._tracker_params, peer))
 
-    async def wait_done(self):
-        """Return the metainfo file once it has been downloaded."""
+    async def wait_done(self) -> bytes:
+        """Return the raw metainfo file once it has been downloaded."""
         await self._done.wait()
         return self._result
 
@@ -52,14 +60,21 @@ class Download(actor.Supervisor):
 
     ### Messages from PeerConnection
 
-    def done(self, raw_metainfo):
+    def done(self, raw_metainfo: bytes):
         """Signal that `raw_metainfo` has been received and verified."""
         self._result = raw_metainfo
         self._done.set()
 
 
 class PeerConnection(actor.Actor):
-    def __init__(self, download, tracker_params, peer, *, max_requests=10):
+    def __init__(
+        self,
+        download: Download,
+        tracker_params: metadata.TrackerParameters,
+        peer: metadata.Peer,
+        *,
+        max_requests: int = 10,
+    ):
         super().__init__()
 
         self._download = download
@@ -141,7 +156,7 @@ class PeerConnection(actor.Actor):
         await self._writer.drain()
         await self._unchoked.wait()
 
-    async def _request_timer(self, index, *, timeout=10):
+    async def _timeout(self, index, *, timeout=10):
         await asyncio.sleep(timeout)
         self._crash(TimeoutError(f"Request timed out."))
 
@@ -158,10 +173,12 @@ class PeerConnection(actor.Actor):
                 offset, message = bencoding.decode_from(payload, 1)
                 if message[b"msg_type"] == 1:
                     index = message[b"piece"]
+                    if index not in self._timer:
+                        continue
                     self._timer.pop(index).cancel()
-                    self._data[index] = payload[offset:]
-                    self._outstanding -= 1
                     self._slots.release()
+                    self._outstanding -= 1
+                    self._data[index] = payload[offset:]
                 elif message[b"msg_type"] == 2:
                     raise ConnectionError("Peer sent reject.")
                 if not self._outstanding:
@@ -184,7 +201,7 @@ class PeerConnection(actor.Actor):
             )
             self._writer.write(message)
             await self._writer.drain()
-            self._timer[i] = asyncio.create_task(self._request_timer(i))
+            self._timer[i] = asyncio.create_task(self._timeout(i))
 
     ### Actor implementation
 
