@@ -144,17 +144,25 @@ class FileWriter(actor.Actor):
                     await f.write(data[c.piece_offset : c.piece_offset + c.length])
             self._outstanding.remove(piece)
 
-            # Print a progress bar.
+            # Print a counter and progress bar.
             n = len(self._metainfo.pieces)
             i = n - len(self._outstanding)
-            progress = f"Progress: {i}/{n} pieces."
+            digits = len(str(n))
+            # Right-align the number of downloaded pieces in a cell of width
+            # `digits`, so that the components never move.
+            progress = f"Download progress: {i : >{digits}}/{n} pieces."
             width, _ = os.get_terminal_size()
+            # Number of parts that the progress bar is split up into. Reserve
+            # one character for each of the left and right deliminators, and
+            # one space on each side.
             parts = width - len(progress) - 4
             if parts < 10:
                 print("\r\x1b[K" + progress, end="")
             else:
+                # The number of cells of the progress bar to fill up.
                 done = parts * i // n
-                bar = "[" + done * "#" + (parts - done) * " " + "]"
+                # Left-align the filled-up cells.
+                bar = f"[{done * '#' : <{parts}}]"
                 print("\r\x1b[K" + progress + " " + bar + " ", end="")
 
         self._download.done()

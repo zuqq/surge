@@ -36,7 +36,6 @@ class PeerQueue(actor.Actor):
                 logging.debug("Couldn't connect to %r: %r", announce, e)
                 self._stack.pop()
             else:
-                print(f"Got {len(resp.peers)} peer(s) from {resp.announce}.")
                 for peer in set(resp.peers) - seen_peers:
                     self._peers.put_nowait(peer)
                     seen_peers.add(peer)

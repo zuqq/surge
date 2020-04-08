@@ -33,13 +33,15 @@ def main():
         print(f"Logging to {logfile}.")
 
     if args.file:
-        print(f"Downloading {args.file}.")
+        print(f"Using file {args.file}.")
 
         with open(args.file, "rb") as f:
             raw_metainfo = f.read()
         tracker_params = metadata.TrackerParameters.from_bytes(raw_metainfo)
 
     if args.magnet:
+        print("Downloading metadata from peers.")
+
         info_hash, announce_list = magnet.parse(args.magnet)
         tracker_params = metadata.TrackerParameters(info_hash)
         info = runners.run(mex.Download(announce_list, tracker_params))
@@ -54,7 +56,6 @@ def main():
                 b"e",
             ]
         )
-        print("Downloaded metadata from peers.")
 
     metainfo = metadata.Metainfo.from_bytes(raw_metainfo)
 
@@ -69,7 +70,7 @@ def main():
 
     runners.run(torrent.Download(metainfo, tracker_params, available_pieces))
 
-    print("Exiting.")
+    print("Done.")
 
 
 if __name__ == "__main__":
