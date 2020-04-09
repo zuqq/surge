@@ -114,8 +114,7 @@ async def request_peers(
     if url.scheme in ("http", "https"):
         resp = await _request_peers_http(url, tracker_params)
         return TrackerResponse.from_dict(announce, resp)
-    elif url.scheme == "udp":
+    if url.scheme == "udp":
         interval, raw_peers = await _request_peers_udp(url, tracker_params)
         return TrackerResponse.from_bytes(announce, interval, raw_peers)
-    else:
-        raise ValueError(f"Announce needs to be HTTP/S or UDP.")
+    raise ValueError(f"Announce needs to be HTTP/S or UDP.")

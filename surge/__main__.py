@@ -1,6 +1,5 @@
 import argparse
 import logging
-import os
 
 from . import bencoding
 from . import magnet

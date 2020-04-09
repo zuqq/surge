@@ -41,6 +41,7 @@ def decode_from(bs, offset):
         return _dict(bs, offset)
     if bs[offset] in (ord(str(i)) for i in range(10)):
         return _str(bs, offset)
+    raise ValueError(repr(bs[offset:]))
 
 
 def decode(bs):
@@ -48,6 +49,7 @@ def decode(bs):
     offset, rval = decode_from(bs, 0)
     if offset == len(bs):
         return rval
+    raise ValueError(repr(bs))
 
 
 def raw_val(bs, key):

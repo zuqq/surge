@@ -12,7 +12,6 @@ from . import actor
 from . import metadata
 from . import peer_protocol
 from . import peer_queue
-from . import tracker_protocol
 
 
 class Download(actor.Supervisor):
@@ -285,10 +284,9 @@ class PeerConnection(actor.Actor):
             message_type, payload = await self._read_peer_message()
             if message_type == peer_protocol.PeerMessage.BITFIELD:
                 break
-            elif message_type == peer_protocol.PeerMessage.EXTENSION_PROTOCOL:
+            if message_type == peer_protocol.PeerMessage.EXTENSION_PROTOCOL:
                 continue
-            else:
-                raise ConnectionError("Peer didn't send a bitfield.")
+            raise ConnectionError("Peer didn't send a bitfield.")
 
         pieces = peer_protocol.parse_bitfield(payload, self._metainfo.pieces)
         self._download.set_have(self._peer, pieces)
@@ -328,7 +326,7 @@ class PeerConnection(actor.Actor):
                 self._slots.release()
                 self._block_queue.task_done(block, data)
 
-    async def _timeout(self, block, *, timeout=10):
+    async def _timeout(self, *, timeout=10):
         await asyncio.sleep(timeout)
         self._crash(TimeoutError("Request timed out."))
 
@@ -341,7 +339,7 @@ class PeerConnection(actor.Actor):
                 break
             self._writer.write(peer_protocol.request(block))
             await self._writer.drain()
-            self._timer[block] = asyncio.create_task(self._timeout(block))
+            self._timer[block] = asyncio.create_task(self._timeout())
 
     ### Actor implementation
 
@@ -396,14 +394,15 @@ class BlockQueue(actor.Actor):
         self._data[piece] = {}
 
     def _remove(self, piece):
-        if piece in self._outstanding:
-            # If `piece` is the newest piece, discard the stack; otherwise
-            # there is nothing to do.
-            if self._stack and self._stack[-1].piece == piece:
-                self._stack = []
-            # TODO: Send cancel messages to the peer.
-            self._outstanding.pop(piece)
-            return self._data.pop(piece)
+        if piece not in self._outstanding:
+            return
+        # If `piece` is the newest piece, discard the stack; otherwise
+        # there is nothing to do.
+        if self._stack and self._stack[-1].piece == piece:
+            self._stack = []
+        # TODO: Send cancel messages to the peer.
+        self._outstanding.pop(piece)
+        return self._data.pop(piece)
 
     ### Queue interface
 

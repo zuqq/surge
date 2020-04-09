@@ -1,13 +1,11 @@
 from typing import List
 
 import asyncio
-import dataclasses
 import hashlib
 import struct
 
 from . import actor
 from . import bencoding
-from . import magnet
 from . import metadata
 from . import peer_protocol
 from . import peer_queue
@@ -156,7 +154,7 @@ class PeerConnection(actor.Actor):
         await self._writer.drain()
         await self._unchoked.wait()
 
-    async def _timeout(self, index, *, timeout=10):
+    async def _timeout(self, *, timeout=10):
         await asyncio.sleep(timeout)
         self._crash(TimeoutError(f"Request timed out."))
 
@@ -201,7 +199,7 @@ class PeerConnection(actor.Actor):
             )
             self._writer.write(message)
             await self._writer.drain()
-            self._timer[i] = asyncio.create_task(self._timeout(i))
+            self._timer[i] = asyncio.create_task(self._timeout())
 
     ### Actor implementation
 
