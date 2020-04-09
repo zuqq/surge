@@ -1,9 +1,11 @@
 Surge
 =====
 
-Surge is a client for the BitTorrent network, built on top of Python's
+Surge is a client for the `BitTorrent`_ network, built on top of Python's
 coroutine-based concurrency model and the asyncio event loop. Please note that
 Surge is download-only for now.
+
+.. _`BitTorrent`: http://bittorrent.org/beps/bep_0003.html
 
 Installation
 ------------
@@ -34,36 +36,41 @@ appropriate environment it can be run as ``python -m surge``.
 
 .. code-block::
 
-    $ python -m surge debian.torrent
-    Downloading debian.torrent to download/.
-    Got 50 peers from http://bttracker.debian.org:6969/announce.
-    Progress: 1/1340 pieces.
-    Progress: 2/1340 pieces.
-    Progress: 3/1340 pieces.
-    (...)
-    Progress: 1340/1340 pieces.
-    Exiting.
+    $ python -m surge --file debian.torrent
+    Using file debian.torrent.
+    Download progress: 1340/1340 pieces. [########################################]
+    Done.
 
 **Help page:**
 
 .. code-block::
 
     $ python -m surge --help
-    usage: __main__.py [-h] [--debug] [--resume] file
+    usage: __main__.py [-h] (--file FILE | --magnet MAGNET) [--debug] [--resume]
 
     Download files from the BitTorrent network.
 
-    positional arguments:
-    file        path to the torrent file
-
     optional arguments:
-    -h, --help  show this help message and exit
-    --debug     enable logging
-    --resume    resume download
+      -h, --help       show this help message and exit
+      --file FILE      torrent file
+      --magnet MAGNET  magnet link
+      --debug          enable logging
+      --resume         resume download
 
 
 Architecture
 ------------
+
+Protocol extensions
+~~~~~~~~~~~~~~~~~~~
+
+Surge supports the following extensions to the BitTorrent protocol:
+
+- `Metadata file exchange`_
+- `UDP tracker protocol`_
+
+.. _`Metadata file exchange`: http://bittorrent.org/beps/bep_0009.html
+.. _`UDP tracker protocol`: http://bittorrent.org/beps/bep_0015.html
 
 Features
 ~~~~~~~~
@@ -85,7 +92,7 @@ Incremental writes:
 
 Request queuing:
     Surge keeps open multiple requests from each peer, improving network
-    performance.
+    throughput.
 
 Actor model
 ~~~~~~~~~~~
