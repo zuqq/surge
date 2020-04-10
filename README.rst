@@ -1,11 +1,9 @@
 Surge
 =====
 
-Surge is a client for the `BitTorrent`_ network, built on top of Python's
+Surge is a client for the BitTorrent network, built on top of Python's
 coroutine-based concurrency model and the asyncio event loop. Please note that
 Surge is download-only for now.
-
-.. _`BitTorrent`: http://bittorrent.org/beps/bep_0003.html
 
 Installation
 ------------
@@ -64,15 +62,16 @@ Architecture
 Protocol extensions
 ~~~~~~~~~~~~~~~~~~~
 
-Surge supports the following extensions to the BitTorrent protocol:
+Surge supports the following extensions to the `BitTorrent protocol`_:
 
 - `Metadata file exchange`_
 - `Tracker list`_
 - `UDP tracker protocol`_
 - `Compact tracker response`_
 
+.. _`BitTorrent protocol`: http://bittorrent.org/beps/bep_0003.html
 .. _`Metadata file exchange`: http://bittorrent.org/beps/bep_0009.html
-.. _`Announce list`: http://bittorrent.org/beps/bep_0012.html
+.. _`Tracker list`: http://bittorrent.org/beps/bep_0012.html
 .. _`UDP tracker protocol`: http://bittorrent.org/beps/bep_0015.html
 .. _`Compact tracker response`: http://bittorrent.org/beps/bep_0023.html
 
