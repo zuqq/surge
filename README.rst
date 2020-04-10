@@ -67,10 +67,14 @@ Protocol extensions
 Surge supports the following extensions to the BitTorrent protocol:
 
 - `Metadata file exchange`_
+- `Tracker list`_
 - `UDP tracker protocol`_
+- `Compact tracker response`_
 
 .. _`Metadata file exchange`: http://bittorrent.org/beps/bep_0009.html
+.. _`Announce list`: http://bittorrent.org/beps/bep_0012.html
 .. _`UDP tracker protocol`: http://bittorrent.org/beps/bep_0015.html
+.. _`Compact tracker response`: http://bittorrent.org/beps/bep_0023.html
 
 Features
 ~~~~~~~~
