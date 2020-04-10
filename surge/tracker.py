@@ -87,20 +87,20 @@ async def _request_peers_http(url, tracker_params):
     return resp
 
 
-class TrackerMessage(enum.Enum):
+class Message(enum.Enum):
     CONNECT = 0
     ANNOUNCE = 1
 
 
 def _connect_request(trans_id):
-    return struct.pack(">ql4s", 0x41727101980, TrackerMessage.CONNECT.value, trans_id)
+    return struct.pack(">ql4s", 0x41727101980, Message.CONNECT.value, trans_id)
 
 
 def _announce_request(trans_id, conn_id, tracker_params):
     return struct.pack(
         ">8sl4s20s20sqqqlL4slH",
         conn_id,
-        TrackerMessage.ANNOUNCE.value,
+        Message.ANNOUNCE.value,
         trans_id,
         tracker_params.info_hash,
         tracker_params.peer_id,

@@ -122,9 +122,9 @@ class PeerConnection(actor.Actor):
 
         while True:
             message_type, payload = await self._read_peer_message()
-            if message_type == peer_protocol.PeerMessage.BITFIELD:
+            if message_type == peer_protocol.Message.BITFIELD:
                 continue
-            if message_type == peer_protocol.PeerMessage.EXTENSION_PROTOCOL:
+            if message_type == peer_protocol.Message.EXTENSION_PROTOCOL:
                 break
             raise ConnectionError("Peer sent unexpected message.")
 
@@ -158,11 +158,11 @@ class PeerConnection(actor.Actor):
     async def _receive(self):
         while True:
             message_type, payload = await self._read_peer_message()
-            if message_type == peer_protocol.PeerMessage.CHOKE:
+            if message_type == peer_protocol.Message.CHOKE:
                 self._unchoked.clear()
-            elif message_type == peer_protocol.PeerMessage.UNCHOKE:
+            elif message_type == peer_protocol.Message.UNCHOKE:
                 self._unchoked.set()
-            elif message_type == peer_protocol.PeerMessage.EXTENSION_PROTOCOL:
+            elif message_type == peer_protocol.Message.EXTENSION_PROTOCOL:
                 if payload[0] != 3:
                     raise ConnectionError("Peer sent unsupported extension message.")
                 offset, message = bencoding.decode_from(payload, 1)

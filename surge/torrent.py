@@ -284,9 +284,9 @@ class PeerConnection(actor.Actor):
         # TODO: Accept peers that don't send a bitfield.
         while True:
             message_type, payload = await self._read_peer_message()
-            if message_type == peer_protocol.PeerMessage.BITFIELD:
+            if message_type == peer_protocol.Message.BITFIELD:
                 break
-            if message_type == peer_protocol.PeerMessage.EXTENSION_PROTOCOL:
+            if message_type == peer_protocol.Message.EXTENSION_PROTOCOL:
                 continue
             raise ConnectionError("Peer didn't send a bitfield.")
 
@@ -313,14 +313,14 @@ class PeerConnection(actor.Actor):
     async def _receive_blocks(self):
         while True:
             message_type, payload = await self._read_peer_message()
-            if message_type == peer_protocol.PeerMessage.CHOKE:
+            if message_type == peer_protocol.Message.CHOKE:
                 self._unchoked.clear()
-            elif message_type == peer_protocol.PeerMessage.UNCHOKE:
+            elif message_type == peer_protocol.Message.UNCHOKE:
                 self._unchoked.set()
-            elif message_type == peer_protocol.PeerMessage.HAVE:
+            elif message_type == peer_protocol.Message.HAVE:
                 piece = peer_protocol.parse_have(payload, self._metainfo.pieces)
                 self._download.add_to_have(self._peer, piece)
-            elif message_type == peer_protocol.PeerMessage.BLOCK:
+            elif message_type == peer_protocol.Message.BLOCK:
                 block, data = peer_protocol.parse_block(payload, self._metainfo.pieces)
                 if block not in self._timer:
                     continue

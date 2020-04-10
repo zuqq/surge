@@ -4,7 +4,7 @@ import struct
 from . import metadata
 
 
-class PeerMessage(enum.Enum):
+class Message(enum.Enum):
     """Map peer message types to their identifiers."""
 
     KEEPALIVE = None
@@ -24,8 +24,8 @@ class PeerMessage(enum.Enum):
 def message_type(message):
     """Return a lowercase representation of the message's type."""
     if not message:
-        return PeerMessage.KEEPALIVE
-    return PeerMessage(message[0])
+        return Message.KEEPALIVE
+    return Message(message[0])
 
 
 def handshake(info_hash, peer_id):
@@ -37,7 +37,7 @@ def handshake(info_hash, peer_id):
 
 def interested():
     """Return the length-prefixed "interested" message."""
-    return struct.pack(">LB", 1, PeerMessage.INTERESTED.value)
+    return struct.pack(">LB", 1, Message.INTERESTED.value)
 
 
 def request(block):
@@ -45,7 +45,7 @@ def request(block):
     return struct.pack(
         ">LBLLL",
         1 + 4 + 4 + 4,
-        PeerMessage.REQUEST.value,
+        Message.REQUEST.value,
         block.piece.index,
         block.piece_offset,
         block.length,
@@ -57,7 +57,7 @@ def cancel(block):
     return struct.pack(
         ">LBLLL",
         1 + 4 + 4 + 4,
-        PeerMessage.CANCEL.value,
+        Message.CANCEL.value,
         block.piece.index,
         block.piece_offset,
         block.length,
