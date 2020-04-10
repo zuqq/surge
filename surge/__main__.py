@@ -7,6 +7,7 @@ from . import metadata
 from . import mex
 from . import runners
 from . import torrent
+from . import tracker
 
 
 def main():
@@ -32,17 +33,17 @@ def main():
         print(f"Logging to {logfile}.")
 
     if args.file:
-        print(f"Using file {args.file}.")
+        print(f"Using metainfo file {args.file}.")
 
         with open(args.file, "rb") as f:
             raw_metainfo = f.read()
-        tracker_params = metadata.TrackerParameters.from_bytes(raw_metainfo)
+        tracker_params = tracker.Parameters.from_bytes(raw_metainfo)
 
     if args.magnet:
-        print("Downloading metadata from peers.")
+        print("Downloading metainfo file from peers.")
 
         info_hash, announce_list = magnet.parse(args.magnet)
-        tracker_params = metadata.TrackerParameters(info_hash)
+        tracker_params = tracker.Parameters(info_hash)
         info = runners.run(mex.Download(announce_list, tracker_params))
         # Peers only send us the raw value associated with the `b"info"` key,
         # so we still need to build the metainfo dictionary.

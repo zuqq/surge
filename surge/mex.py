@@ -6,16 +6,16 @@ import struct
 
 from . import actor
 from . import bencoding
-from . import metadata
 from . import peer_protocol
 from . import peer_queue
+from . import tracker
 
 
 class Download(actor.Supervisor):
     def __init__(
         self,
         announce_list: List[str],
-        tracker_params: metadata.TrackerParameters,
+        tracker_params: tracker.Parameters,
         *,
         max_peers: int = 50,
     ):
@@ -68,8 +68,8 @@ class PeerConnection(actor.Actor):
     def __init__(
         self,
         download: Download,
-        tracker_params: metadata.TrackerParameters,
-        peer: metadata.Peer,
+        tracker_params: tracker.Parameters,
+        peer: tracker.Peer,
         *,
         max_requests: int = 10,
     ):
@@ -118,18 +118,15 @@ class PeerConnection(actor.Actor):
         self._writer.write(message)
         await self._writer.drain()
 
-        response = await self._reader.readexactly(68)
-        if not peer_protocol.valid_handshake(response, self._tracker_params.info_hash):
-            raise ConnectionError("Peer sent invalid handshake.")
+        _ = await self._reader.readexactly(68)
 
         while True:
             message_type, payload = await self._read_peer_message()
             if message_type == peer_protocol.PeerMessage.BITFIELD:
                 continue
-            elif message_type == peer_protocol.PeerMessage.EXTENSION_PROTOCOL:
+            if message_type == peer_protocol.PeerMessage.EXTENSION_PROTOCOL:
                 break
-            else:
-                raise ConnectionError("Peer sent unexpected message.")
+            raise ConnectionError("Peer sent unexpected message.")
 
         if payload[0] != 0:
             raise ConnectionError("Peer didn't send an extension protocol handshake.")

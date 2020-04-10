@@ -12,13 +12,14 @@ from . import actor
 from . import metadata
 from . import peer_protocol
 from . import peer_queue
+from . import tracker
 
 
 class Download(actor.Supervisor):
     def __init__(
         self,
         metainfo: metadata.Metainfo,
-        tracker_params: metadata.TrackerParameters,
+        tracker_params: tracker.Parameters,
         available_pieces: Set[metadata.Piece],
         *,
         max_peers: int = 50,
@@ -85,7 +86,7 @@ class Download(actor.Supervisor):
 
     ### Messages from PieceQueue
 
-    def cancel_piece(self, peers: Iterable[metadata.Peer], piece: metadata.Piece):
+    def cancel_piece(self, peers: Iterable[tracker.Peer], piece: metadata.Piece):
         """Signal that `piece` does not need to be downloaded anymore; `peers`
         is a iterable for the peers that we are currently downloading `piece`
         from."""
@@ -94,20 +95,20 @@ class Download(actor.Supervisor):
 
     ### Messages from PeerConnection
 
-    def set_have(self, peer: metadata.Peer, pieces: Iterable[metadata.Piece]):
+    def set_have(self, peer: tracker.Peer, pieces: Iterable[metadata.Piece]):
         """Signal that the elements of `pieces` are available from `peer`."""
         self._piece_queue.set_have(peer, pieces)
 
-    def add_to_have(self, peer: metadata.Peer, piece: metadata.Piece):
+    def add_to_have(self, peer: tracker.Peer, piece: metadata.Piece):
         """Signal that `piece` is available from `peer`."""
         self._piece_queue.add_to_have(peer, piece)
 
-    def get_piece(self, peer: metadata.Peer) -> Optional[metadata.Piece]:
+    def get_piece(self, peer: tracker.Peer) -> Optional[metadata.Piece]:
         """Return a piece to download from `peer`, if there is one, and `None`
         otherwise."""
         return self._piece_queue.get_nowait(peer)
 
-    def piece_done(self, peer: metadata.Peer, piece: metadata.Piece, data: bytes):
+    def piece_done(self, peer: tracker.Peer, piece: metadata.Piece, data: bytes):
         """Signal that `data` was received and verified for `piece`."""
         self._file_writer.put_nowait(piece, data)
         self._piece_queue.task_done(peer, piece)
@@ -128,6 +129,28 @@ class FileWriter(actor.Actor):
         self._outstanding = set(metainfo.pieces) - available_pieces
         self._piece_data = asyncio.Queue()
 
+    def _print_progress(self):
+        # Print a counter and progress bar.
+        n = len(self._metainfo.pieces)
+        i = n - len(self._outstanding)
+        digits = len(str(n))
+        # Right-align the number of downloaded pieces in a cell of width
+        # `digits`, so that the components never move.
+        progress = f"Download progress: {i : >{digits}}/{n} pieces."
+        width, _ = os.get_terminal_size()
+        # Number of parts that the progress bar is split up into. Reserve
+        # one character for each of the left and right deliminators, and
+        # one space on each side.
+        parts = width - len(progress) - 4
+        if parts < 10:
+            print("\r\x1b[K" + progress, end="")
+        else:
+            # The number of cells of the progress bar to fill up.
+            done = parts * i // n
+            # Left-align the filled-up cells.
+            bar = f"[{done * '#' : <{parts}}]"
+            print("\r\x1b[K" + progress + " " + bar + " ", end="")
+
     async def _main_coro(self):
         piece_to_chunks = metadata.piece_to_chunks(
             self._metainfo.pieces, self._metainfo.files
@@ -142,27 +165,7 @@ class FileWriter(actor.Actor):
                     await f.seek(c.file_offset)
                     await f.write(data[c.piece_offset : c.piece_offset + c.length])
             self._outstanding.remove(piece)
-
-            # Print a counter and progress bar.
-            n = len(self._metainfo.pieces)
-            i = n - len(self._outstanding)
-            digits = len(str(n))
-            # Right-align the number of downloaded pieces in a cell of width
-            # `digits`, so that the components never move.
-            progress = f"Download progress: {i : >{digits}}/{n} pieces."
-            width, _ = os.get_terminal_size()
-            # Number of parts that the progress bar is split up into. Reserve
-            # one character for each of the left and right deliminators, and
-            # one space on each side.
-            parts = width - len(progress) - 4
-            if parts < 10:
-                print("\r\x1b[K" + progress, end="")
-            else:
-                # The number of cells of the progress bar to fill up.
-                done = parts * i // n
-                # Left-align the filled-up cells.
-                bar = f"[{done * '#' : <{parts}}]"
-                print("\r\x1b[K" + progress + " " + bar + " ", end="")
+            self._print_progress()
 
         self._download.done()
 
@@ -191,15 +194,15 @@ class PieceQueue(actor.Actor):
         self._borrowers = collections.defaultdict(set)
         self._outstanding = set(metainfo.pieces) - available_pieces
 
-    def set_have(self, peer: metadata.Peer, pieces: Iterable[metadata.Piece]):
+    def set_have(self, peer: tracker.Peer, pieces: Iterable[metadata.Piece]):
         """Signal that elements of `pieces` are available from `peer`."""
         self._available[peer] = set(pieces)
 
-    def add_to_have(self, peer: metadata.Peer, piece: metadata.Piece):
+    def add_to_have(self, peer: tracker.Peer, piece: metadata.Piece):
         """Signal that `piece` is available from `peer`."""
         self._available[peer].add(piece)
 
-    def drop_peer(self, peer: metadata.Peer):
+    def drop_peer(self, peer: tracker.Peer):
         """Signal that `peer` was dropped."""
         self._available.pop(peer)
         for piece, borrowers in list(self._borrowers.items()):
@@ -210,7 +213,7 @@ class PieceQueue(actor.Actor):
 
     ### Queue interface
 
-    def get_nowait(self, peer: metadata.Peer) -> Optional[metadata.Piece]:
+    def get_nowait(self, peer: tracker.Peer) -> Optional[metadata.Piece]:
         """Return a piece to download from `peer`, if there is one, and `None`
         otherwise."""
         pool = self._outstanding or set(self._borrowers)
@@ -225,7 +228,7 @@ class PieceQueue(actor.Actor):
         self._borrowers[piece].add(peer)
         return piece
 
-    def task_done(self, peer: metadata.Peer, piece: metadata.Piece):
+    def task_done(self, peer: tracker.Peer, piece: metadata.Piece):
         """Signal that `piece` was downloaded from `peer`."""
         if piece not in self._borrowers:
             return
@@ -238,8 +241,8 @@ class PeerConnection(actor.Actor):
         self,
         download: Download,
         metainfo: metadata.Metainfo,
-        tracker_params: metadata.TrackerParameters,
-        peer: metadata.Peer,
+        tracker_params: tracker.Parameters,
+        peer: tracker.Peer,
         *,
         max_requests: int = 10,
     ):
@@ -275,9 +278,8 @@ class PeerConnection(actor.Actor):
         self._writer.write(message)
         await self._writer.drain()
 
-        response = await self._reader.readexactly(68)
-        if not peer_protocol.valid_handshake(response, self._tracker_params.info_hash):
-            raise ConnectionError("Peer sent invalid handshake.")
+        # TODO: Validate the peer's handshake.
+        _ = await self._reader.readexactly(68)
 
         # TODO: Accept peers that don't send a bitfield.
         while True:

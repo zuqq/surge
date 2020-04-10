@@ -64,11 +64,6 @@ def cancel(block):
     )
 
 
-def valid_handshake(message, info_hash, *, extension_protocol=False):
-    # TODO
-    return True
-
-
 def parse_have(payload, pieces):
     """Return the piece that the given "have" message is about."""
     (piece_index,) = struct.unpack(">L", payload)

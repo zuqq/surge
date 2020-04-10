@@ -93,10 +93,10 @@ def _encode_str(bs):
 def encode(obj):
     if isinstance(obj, int):
         return _encode_int(obj)
-    elif isinstance(obj, list):
+    if isinstance(obj, list):
         return _encode_list(obj)
-    elif isinstance(obj, dict):
+    if isinstance(obj, dict):
         return _encode_dict(obj)
-    elif isinstance(obj, bytes):
+    if isinstance(obj, bytes):
         return _encode_str(obj)
     raise ValueError(repr(obj))

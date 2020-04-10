@@ -4,14 +4,11 @@ import asyncio
 import logging
 
 from . import actor
-from . import metadata
-from . import tracker_protocol
+from . import tracker
 
 
 class PeerQueue(actor.Actor):
-    def __init__(
-        self, announce_list: List[str], tracker_params: metadata.TrackerParameters
-    ):
+    def __init__(self, announce_list: List[str], tracker_params: tracker.Parameters):
         super().__init__()
 
         self._stack = announce_list[::-1]
@@ -29,9 +26,7 @@ class PeerQueue(actor.Actor):
                 raise RuntimeError("No trackers available.")
             announce = self._stack[-1]
             try:
-                resp = await tracker_protocol.request_peers(
-                    announce, self._tracker_params
-                )
+                resp = await tracker.request_peers(announce, self._tracker_params)
             except Exception as e:
                 logging.debug("Couldn't connect to %r: %r", announce, e)
                 self._stack.pop()
@@ -44,7 +39,7 @@ class PeerQueue(actor.Actor):
 
     ### Queue interface
 
-    async def get(self) -> metadata.Peer:
+    async def get(self) -> tracker.Peer:
         """Return a peer that we have not yet connected to."""
         try:
             peer = self._peers.get_nowait()

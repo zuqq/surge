@@ -1,9 +1,8 @@
-from typing import List, Optional
+from typing import List
 
 import dataclasses
 import hashlib
 import os
-import secrets
 
 from . import bencoding
 
@@ -154,36 +153,3 @@ class Metainfo:
         piece_length = info[b"piece length"]
         pieces = _parse_hashes(info[b"pieces"], length, piece_length)
         return cls(announce_list, length, piece_length, pieces, folder, files)
-
-
-@dataclasses.dataclass
-class TrackerParameters:
-    info_hash: bytes
-    peer_id: bytes = secrets.token_bytes(20)
-    port: int = 6881
-    uploaded: int = 0
-    downloaded: int = 0
-    left: int = 0
-    event: str = "started"
-    compact: int = 1  # See BEP 23.
-
-    @classmethod
-    def from_bytes(cls, raw_metainfo):
-        raw_info = bencoding.raw_val(raw_metainfo, b"info")
-        info_hash = hashlib.sha1(raw_info).digest()
-        return cls(info_hash)
-
-
-@dataclasses.dataclass(eq=True, frozen=True)
-class Peer:
-    address: str
-    port: int
-    id: Optional[bytes] = None
-
-    @classmethod
-    def from_bytes(cls, bs):
-        return cls(".".join(str(b) for b in bs[:4]), int.from_bytes(bs[4:], "big"))
-
-    @classmethod
-    def from_dict(cls, d):
-        return cls(d[b"ip"].decode(), d[b"port"], d[b"peer id"])
