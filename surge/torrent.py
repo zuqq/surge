@@ -188,14 +188,11 @@ class FileWriter(actor.Actor):
 class PieceQueue(actor.Actor):
     """Tracks piece availability.
 
-    More precisely, this class keeps track of which pieces the connected pieces
-    have and which pieces are being downloaded from the at the moment.
+    More precisely, this class keeps track of which pieces the connected peers
+    have and which pieces are being downloaded from them.
 
-    If there are no missing pieces that are not being downloaded right now, we
-    enter endgame mode. In endgame mode, missing pieces can be downloaded from
-    multiple peers at the same time; as soon as the piece is received for the
-    first time, the other peers are notified that the piece is not needed
-    anymore.
+    The parent `Download` instance calls `get_nowait` to get pieces to download;
+    successful downloads are reported via `task_done`.
     """
     def __init__(
             self,
@@ -234,15 +231,17 @@ class PieceQueue(actor.Actor):
     ### Queue interface
 
     def get_nowait(self, peer: tracker.Peer) -> Optional[metadata.Piece]:
+        """Return a piece to download from `peer`."""
         # If there are missing pieces that are not being downloaded right now,
-        # randomly choose from those. Otherwise we are in endgame mode and
-        # randomly choose from all missing pieces.
+        # choose from those. Otherwise we choose from all missing pieces.
         pool = self._outstanding or set(self._borrowers)
         if not pool:
             return None
+        # Try to return a missing piece that the peer has.
         available = pool & self._available[peer]
         if available:
             piece = random.choice(list(available))
+        # If there are none, fall back to a random missing piece.
         else:
             piece = random.choice(list(pool))
         pool.remove(piece)
@@ -250,6 +249,12 @@ class PieceQueue(actor.Actor):
         return piece
 
     def task_done(self, peer: tracker.Peer, piece: metadata.Piece):
+        """Mark `piece` as downloaded.
+
+        If `piece` is also being downloaded from peers other than `peer`,
+        instruct the corresponding `PeerConnection` instances to cancel the
+        download.
+        """
         if piece not in self._borrowers:
             return
         borrowers = self._borrowers.pop(piece)
@@ -401,8 +406,8 @@ class BlockQueue(actor.Actor):
     """Supplies fresh blocks and keeps track of downloaded ones.
 
     This class exposes a queue interface that the parent `PeerConnection`
-    instance to obtain blocks to request from the peer (by calling `get`) and
-    later return the blocks and the received data (by calling `task_done`).
+    instance uses to obtain blocks to request from the peer (by calling `get`)
+    and later return the blocks and the received data (by calling `task_done`).
 
     In order to supply a continuous stream of blocks, a new piece is started as
     soon as all blocks from the last one are being requested.
@@ -436,8 +441,7 @@ class BlockQueue(actor.Actor):
     def _remove(self, piece):
         if piece not in self._outstanding:
             return
-        # If `piece` is the newest piece, discard the stack; otherwise
-        # there is nothing to do.
+        # If `piece` is the newest piece, discard the stack.
         if self._stack and self._stack[-1].piece == piece:
             self._stack = []
         # TODO: Send cancel messages to the peer.
@@ -447,6 +451,7 @@ class BlockQueue(actor.Actor):
     ### Queue interface
 
     async def get(self) -> Optional[metadata.Block]:
+        """Return a block to download from the peer."""
         if not self._stack:
             piece = self._peer_connection.get_piece()
             if piece is None:
@@ -455,6 +460,12 @@ class BlockQueue(actor.Actor):
         return self._stack.pop()
 
     def task_done(self, block: metadata.Block, data: bytes):
+        """Mark `block` as downloaded and supply the received data.
+
+        If `block` was the last outstanding block of `block.piece`, check
+        the piece's data. If the check passes, forward the piece and its
+        data to the parent; else raise `ValueError`.
+        """
         piece = block.piece
         if piece not in self._outstanding or block not in self._outstanding[piece]:
             return
