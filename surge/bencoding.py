@@ -3,7 +3,7 @@
 
 def _int(bs, offset):
     # Note that this doesn't follow the specification in BEP 3, because it
-    # ignores leading zeroes instead of throwing an error.
+    # ignores leading zeros instead of raising an exception.
     end = bs.index(b"e", offset)
     return end + 1, int(bs[offset + 1 : end].decode("ascii"))
 

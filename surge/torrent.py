@@ -16,14 +16,27 @@ from . import tracker
 
 
 class Download(actor.Supervisor):
+    """Root node of this module's actor tree.
+
+    Children:
+        - One instance of `FileWriter`
+        - One instance of `PeerQueue`
+        - One instance of `PieceQueue`
+        - Up to `max_peers` instances of `PeerConnection`
+
+    Messages between the `PeerConnection` instances and the other actors are
+    routed through this class, because an actor should only hold references to
+    its parent and children.
+    """
+
     def __init__(
-        self,
-        metainfo: metadata.Metainfo,
-        tracker_params: tracker.Parameters,
-        available_pieces: Set[metadata.Piece],
-        *,
-        max_peers: int = 50,
-    ):
+            self,
+            metainfo: metadata.Metainfo,
+            tracker_params: tracker.Parameters,
+            available_pieces: Set[metadata.Piece],
+            *,
+            max_peers: int = 50,
+        ):
         super().__init__()
 
         self._metainfo = metainfo
@@ -52,7 +65,6 @@ class Download(actor.Supervisor):
             self._peer_to_connection[peer] = connection
 
     async def wait_done(self):
-        """Wait until all pieces have been received."""
         await self._done.wait()
 
     ### Actor implementation
@@ -81,46 +93,43 @@ class Download(actor.Supervisor):
     ### Messages from FileWriter
 
     def done(self):
-        """Signal that every piece has been downloaded."""
         self._done.set()
 
     ### Messages from PieceQueue
 
     def cancel_piece(self, peers: Iterable[tracker.Peer], piece: metadata.Piece):
-        """Signal that `piece` does not need to be downloaded anymore; `peers`
-        is a iterable for the peers that we are currently downloading `piece`
-        from."""
         for peer in peers:
             self._peer_to_connection[peer].cancel_piece(piece)
 
     ### Messages from PeerConnection
 
     def set_have(self, peer: tracker.Peer, pieces: Iterable[metadata.Piece]):
-        """Signal that the elements of `pieces` are available from `peer`."""
         self._piece_queue.set_have(peer, pieces)
 
     def add_to_have(self, peer: tracker.Peer, piece: metadata.Piece):
-        """Signal that `piece` is available from `peer`."""
         self._piece_queue.add_to_have(peer, piece)
 
     def get_piece(self, peer: tracker.Peer) -> Optional[metadata.Piece]:
-        """Return a piece to download from `peer`, if there is one, and `None`
-        otherwise."""
         return self._piece_queue.get_nowait(peer)
 
     def piece_done(self, peer: tracker.Peer, piece: metadata.Piece, data: bytes):
-        """Signal that `data` was received and verified for `piece`."""
         self._file_writer.put_nowait(piece, data)
         self._piece_queue.task_done(peer, piece)
 
 
 class FileWriter(actor.Actor):
+    """Writes downloaded pieces to the filesystem.
+
+    Downloaded pieces are supplied via the method `put_nowait` and then written
+    to the filesystem with `aiofiles`.
+    """
+
     def __init__(
-        self,
-        download: Download,
-        metainfo: metadata.Metainfo,
-        available_pieces: Set[metadata.Piece],
-    ):
+            self,
+            download: Download,
+            metainfo: metadata.Metainfo,
+            available_pieces: Set[metadata.Piece],
+        ):
         super().__init__()
 
         self._download = download
@@ -159,6 +168,8 @@ class FileWriter(actor.Actor):
             piece, data = await self._piece_data.get()
             if piece not in self._outstanding:
                 continue
+            # Write the piece to the filesystem by writing each of its chunks
+            # to the corresponding file.
             for c in piece_to_chunks[piece]:
                 file_path = os.path.join(self._metainfo.folder, c.file.path)
                 async with aiofiles.open(file_path, "rb+") as f:
@@ -166,44 +177,53 @@ class FileWriter(actor.Actor):
                     await f.write(data[c.piece_offset : c.piece_offset + c.length])
             self._outstanding.remove(piece)
             self._print_progress()
-
         self._download.done()
 
     ### Queue interface
 
     def put_nowait(self, piece: metadata.Piece, data: bytes):
-        """Signal that `data` was received and verified for `piece`."""
         self._piece_data.put_nowait((piece, data))
 
 
 class PieceQueue(actor.Actor):
+    """Tracks piece availability.
+
+    More precisely, this class keeps track of which pieces the connected pieces
+    have and which pieces are being downloaded from the at the moment.
+
+    If there are no missing pieces that are not being downloaded right now, we
+    enter endgame mode. In endgame mode, missing pieces can be downloaded from
+    multiple peers at the same time; as soon as the piece is received for the
+    first time, the other peers are notified that the piece is not needed
+    anymore.
+    """
     def __init__(
-        self,
-        download: Download,
-        metainfo: metadata.Metainfo,
-        available_pieces: Set[metadata.Piece],
-    ):
+            self,
+            download: Download,
+            metainfo: metadata.Metainfo,
+            available_pieces: Set[metadata.Piece],
+        ):
         super().__init__()
 
         self._download = download
 
-        # `self._available[peer]` is the set of pieces that `peer` has.
-        self._available = collections.defaultdict(set)
-        # `self._borrowers[piece]` is the set of peers that `piece` is being
-        # downloaded from.
+        # Bookkeeping:
+        # - `self._available[peer]` is the set of pieces that `peer` has;
+        # - `self._borrowers[piece]` is the set of peers that `piece` is being
+        # downloaded from;
+        # - `self._outstanding` is the set of pieces that are missing, except
+        # those that are being downloaded right now.
         self._borrowers = collections.defaultdict(set)
+        self._available = collections.defaultdict(set)
         self._outstanding = set(metainfo.pieces) - available_pieces
 
     def set_have(self, peer: tracker.Peer, pieces: Iterable[metadata.Piece]):
-        """Signal that elements of `pieces` are available from `peer`."""
         self._available[peer] = set(pieces)
 
     def add_to_have(self, peer: tracker.Peer, piece: metadata.Piece):
-        """Signal that `piece` is available from `peer`."""
         self._available[peer].add(piece)
 
     def drop_peer(self, peer: tracker.Peer):
-        """Signal that `peer` was dropped."""
         self._available.pop(peer)
         for piece, borrowers in list(self._borrowers.items()):
             borrowers.discard(peer)
@@ -214,8 +234,9 @@ class PieceQueue(actor.Actor):
     ### Queue interface
 
     def get_nowait(self, peer: tracker.Peer) -> Optional[metadata.Piece]:
-        """Return a piece to download from `peer`, if there is one, and `None`
-        otherwise."""
+        # If there are missing pieces that are not being downloaded right now,
+        # randomly choose from those. Otherwise we are in endgame mode and
+        # randomly choose from all missing pieces.
         pool = self._outstanding or set(self._borrowers)
         if not pool:
             return None
@@ -229,7 +250,6 @@ class PieceQueue(actor.Actor):
         return piece
 
     def task_done(self, peer: tracker.Peer, piece: metadata.Piece):
-        """Signal that `piece` was downloaded from `peer`."""
         if piece not in self._borrowers:
             return
         borrowers = self._borrowers.pop(piece)
@@ -237,15 +257,20 @@ class PieceQueue(actor.Actor):
 
 
 class PeerConnection(actor.Actor):
+    """Encapsulates the connection with a peer.
+
+    Children:
+        - One instance of `BlockQueue`.
+    """
     def __init__(
-        self,
-        download: Download,
-        metainfo: metadata.Metainfo,
-        tracker_params: tracker.Parameters,
-        peer: tracker.Peer,
-        *,
-        max_requests: int = 10,
-    ):
+            self,
+            download: Download,
+            metainfo: metadata.Metainfo,
+            tracker_params: tracker.Parameters,
+            peer: tracker.Peer,
+            *,
+            max_requests: int = 10,
+        ):
         super().__init__()
 
         self._download = download
@@ -357,7 +382,6 @@ class PeerConnection(actor.Actor):
     ### Messages from Download
 
     def cancel_piece(self, piece: metadata.Piece):
-        """Signal that `piece` does not need to be downloaded anymore."""
         self._block_queue.cancel_piece(piece)
 
     ### Messages from BlockQueue
@@ -367,24 +391,38 @@ class PeerConnection(actor.Actor):
         await self._writer.drain()
 
     def get_piece(self) -> Optional[metadata.Piece]:
-        """Return a piece to download, if there is one, and `None` otherwise."""
         return self._download.get_piece(self._peer)
 
     def piece_done(self, piece: metadata.Piece, data: bytes):
-        """Signal that `data` was received (and verified) for `piece`."""
         self._download.piece_done(self._peer, piece, data)
 
 
 class BlockQueue(actor.Actor):
+    """Supplies fresh blocks and keeps track of downloaded ones.
+
+    This class exposes a queue interface that the parent `PeerConnection`
+    instance to obtain blocks to request from the peer (by calling `get`) and
+    later return the blocks and the received data (by calling `task_done`).
+
+    In order to supply a continuous stream of blocks, a new piece is started as
+    soon as all blocks from the last one are being requested.
+
+    Once all blocks belonging to a piece have been downloaded, the data is
+    checked against the corresponding hash from the metainfo file; if the
+    hashes match up, the piece and its data are sent to the parent.
+    """
     def __init__(self, peer_connection: PeerConnection):
         super().__init__()
 
         self._peer_connection = peer_connection
 
-        # Because requests are pipelined, we can be requesting blocks from
-        # multiple pieces at the same time. However, as we request the blocks
-        # in order, the stack always consists of blocks belonging to the newest
-        # piece only.
+        # Bookkeeping:
+        # - `self._stack` is a list of the newest piece's blocks that have not
+        # been requested yet;
+        # - `self._outstanding[piece]` is the set of blocks of `piece` that
+        # still need to be downloaded;
+        # - `self._data[block.piece][block]` is the data that was received
+        # for `block`.
         self._stack = []
         self._outstanding = {}
         self._data = {}
@@ -409,7 +447,6 @@ class BlockQueue(actor.Actor):
     ### Queue interface
 
     async def get(self) -> Optional[metadata.Block]:
-        """Return a block to request, if there is one, and `None` otherwise."""
         if not self._stack:
             piece = self._peer_connection.get_piece()
             if piece is None:
@@ -418,9 +455,6 @@ class BlockQueue(actor.Actor):
         return self._stack.pop()
 
     def task_done(self, block: metadata.Block, data: bytes):
-        """Signal that `data` was received for `block`. Raises `ValueError` if
-        the length or SHA1 digest of `data` doesn't match with the information
-        from the metainfo file."""
         piece = block.piece
         if piece not in self._outstanding or block not in self._outstanding[piece]:
             return
@@ -437,5 +471,4 @@ class BlockQueue(actor.Actor):
     ### Messages from PeerConnection
 
     def cancel_piece(self, piece: metadata.Piece):
-        """Signal that `piece` does not need to be downloaded anymore."""
         self._remove(piece)

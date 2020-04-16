@@ -4,6 +4,7 @@ import urllib.parse
 
 
 def parse(magnet: str) -> Tuple[bytes, List[str]]:
+    """Parse a magnet link into (info_hash, announce_list)."""
     url = urllib.parse.urlparse(magnet)
     qs = urllib.parse.parse_qs(url.query)
     (xt,) = qs["xt"]

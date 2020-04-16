@@ -8,9 +8,14 @@ from . import tracker
 
 
 class PeerQueue(actor.Actor):
+    """Requests peers from the tracker and supplies them via the `get` method.
+
+    Note that this class prematurely requests more peers if it runs out.
+    """
     def __init__(self, announce_list: List[str], tracker_params: tracker.Parameters):
         super().__init__()
 
+        # Available trackers; unreachable or unresponsive trackers are discarded.
         self._stack = announce_list[::-1]
         self._tracker_params = tracker_params
 
@@ -40,7 +45,10 @@ class PeerQueue(actor.Actor):
     ### Queue interface
 
     async def get(self) -> tracker.Peer:
-        """Return a peer that we have not yet connected to."""
+        """Return a fresh peer.
+
+        If the internal peer supply is empty, request more from the tracker.
+        """
         try:
             peer = self._peers.get_nowait()
         except asyncio.QueueEmpty:
