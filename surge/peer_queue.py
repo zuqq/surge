@@ -12,12 +12,18 @@ class PeerQueue(actor.Actor):
 
     Note that this class prematurely requests more peers if it runs out.
     """
-    def __init__(self, announce_list: List[str], tracker_params: tracker.Parameters):
+    def __init__(
+            self,
+            announce_list: List[str],
+            tracker_params: tracker.Parameters,
+            *,
+            max_tries: int = 5):
         super().__init__()
 
         # Available trackers; unreachable or unresponsive trackers are discarded.
         self._stack = announce_list[::-1]
         self._tracker_params = tracker_params
+        self._max_tries = max_tries
 
         self._sleep = None
         self._peers = asyncio.Queue()
@@ -30,17 +36,24 @@ class PeerQueue(actor.Actor):
             if not self._stack:
                 raise RuntimeError("No trackers available.")
             announce = self._stack[-1]
-            try:
-                resp = await tracker.request_peers(announce, self._tracker_params)
-            except Exception as e:
-                logging.debug("Couldn't connect to %r: %r", announce, e)
-                self._stack.pop()
+            tries = 0
+            while tries < self._max_tries:
+                try:
+                    resp = await tracker.request_peers(announce, self._tracker_params)
+                except Exception as e:
+                    logging.debug("Couldn't connect to %r: %r", announce, e)
+                    tries += 1
+                else:
+                    logging.debug("Got %r peers from %r.", len(resp.peers), announce)
+                    for peer in set(resp.peers) - seen_peers:
+                        self._peers.put_nowait(peer)
+                        seen_peers.add(peer)
+                    self._sleep = asyncio.create_task(asyncio.sleep(resp.interval))
+                    await self._sleep
+                    break
             else:
-                for peer in set(resp.peers) - seen_peers:
-                    self._peers.put_nowait(peer)
-                    seen_peers.add(peer)
-                self._sleep = asyncio.create_task(asyncio.sleep(resp.interval))
-                await self._sleep
+                logging.debug("Dropping %r.", announce)
+                self._stack.pop()
 
     ### Queue interface
 

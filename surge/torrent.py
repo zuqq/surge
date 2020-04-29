@@ -118,10 +118,10 @@ class Download(actor.Supervisor):
 
 
 class FileWriter(actor.Actor):
-    """Writes downloaded pieces to the filesystem.
+    """Writes downloaded pieces to the file system.
 
     Downloaded pieces are supplied via the method `put_nowait` and then written
-    to the filesystem with `aiofiles`.
+    to the file system with `aiofiles`.
     """
 
     def __init__(
@@ -147,9 +147,9 @@ class FileWriter(actor.Actor):
         # `digits`, so that the components never move.
         progress = f"Download progress: {i : >{digits}}/{n} pieces."
         width, _ = os.get_terminal_size()
-        # Number of parts that the progress bar is split up into. Reserve
-        # one character for each of the left and right deliminators, and
-        # one space on each side.
+        # Number of parts that the progress bar is split up into. Reserve one
+        # character for each of the left and right delimiters, and one space on
+        # each side.
         parts = width - len(progress) - 4
         if parts < 10:
             print("\r\x1b[K" + progress, end="")
@@ -168,7 +168,7 @@ class FileWriter(actor.Actor):
             piece, data = await self._piece_data.get()
             if piece not in self._outstanding:
                 continue
-            # Write the piece to the filesystem by writing each of its chunks
+            # Write the piece to the file system by writing each of its chunks
             # to the corresponding file.
             for c in piece_to_chunks[piece]:
                 file_path = os.path.join(self._metainfo.folder, c.file.path)
@@ -413,8 +413,8 @@ class BlockQueue(actor.Actor):
     soon as all blocks from the last one are being requested.
 
     Once all blocks belonging to a piece have been downloaded, the data is
-    checked against the corresponding hash from the metainfo file; if the
-    hashes match up, the piece and its data are sent to the parent.
+    checked against the corresponding hash from the metainfo file; if the hashes
+    match up, the piece and its data are sent to the parent.
     """
     def __init__(self, peer_connection: PeerConnection):
         super().__init__()
@@ -462,9 +462,9 @@ class BlockQueue(actor.Actor):
     def task_done(self, block: metadata.Block, data: bytes):
         """Mark `block` as downloaded and supply the received data.
 
-        If `block` was the last outstanding block of `block.piece`, check
-        the piece's data. If the check passes, forward the piece and its
-        data to the parent; else raise `ValueError`.
+        If `block` was the last outstanding block of `block.piece`, check the
+        piece's data. If the check passes, forward the piece and its data to the
+        parent; else raise `ValueError`.
         """
         piece = block.piece
         if piece not in self._outstanding or block not in self._outstanding[piece]:

@@ -45,7 +45,10 @@ def decode_from(bs, offset):
 
 
 def decode(bs):
-    """Return the Python object corresponding to the bencoded object `bs`."""
+    """Return the Python object corresponding to the bencoded object `bs`.
+
+    Raises `ValueError` if `bs` is not valid BEncoding.
+    """
     offset, rval = decode_from(bs, 0)
     if offset == len(bs):
         return rval
@@ -54,7 +57,10 @@ def decode(bs):
 
 def raw_val(bs, key):
     """Return the bencoded value corresponding to `key` in the bencoded
-    dictionary `bs`."""
+    dictionary `bs`.
+
+    Raises `KeyError` if `key` is not a key of `bs`.
+    """
     offset = 1
     while offset < len(bs) and bs[offset] != ord("e"):
         offset, curr_key = _str(bs, offset)
@@ -62,7 +68,7 @@ def raw_val(bs, key):
         if curr_key == key:
             return bs[offset:next_offset]
         offset = next_offset
-    raise KeyError
+    raise KeyError(repr(key))
 
 
 def _encode_int(n):
@@ -91,6 +97,10 @@ def _encode_str(bs):
 
 
 def encode(obj):
+    """Encode `obj` in BEncoding.
+
+    Raises `ValueError` iff `obj` is not representable in BEncoding.
+    """
     if isinstance(obj, int):
         return _encode_int(obj)
     if isinstance(obj, list):

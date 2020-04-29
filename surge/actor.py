@@ -67,7 +67,10 @@ class Actor:
         self.parent.report_crash(self)
 
     def report_crash(self, reporter: Actor):
-        """Signal that `reporter` crashed, which crashes `self`."""
+        """Signal that `reporter` crashed, which crashes `self`.
+
+        If `self` has no parent, `SystemExit` is raised.
+        """
         if reporter in self.children:
             self._crash()
 
