@@ -432,19 +432,10 @@ class BlockQueue(actor.Actor):
         self._outstanding = {}
         self._data = {}
 
-    def _add(self, piece):
-        blocks = metadata.blocks(piece)
-        self._stack = blocks[::-1]
-        self._outstanding[piece] = set(blocks)
-        self._data[piece] = {}
-
-    def _remove(self, piece):
-        if piece not in self._outstanding:
-            return
+    def _pop(self, piece):
         # If `piece` is the newest piece, discard the stack.
         if self._stack and self._stack[-1].piece == piece:
             self._stack = []
-        # TODO: Send cancel messages to the peer.
         self._outstanding.pop(piece)
         return self._data.pop(piece)
 
@@ -456,7 +447,10 @@ class BlockQueue(actor.Actor):
             piece = self._peer_connection.get_piece()
             if piece is None:
                 return None
-            self._add(piece)
+            blocks = metadata.blocks(piece)
+            self._stack = blocks[::-1]
+            self._outstanding[piece] = set(blocks)
+            self._data[piece] = {}
         return self._stack.pop()
 
     def task_done(self, block: metadata.Block, data: bytes):
@@ -472,14 +466,18 @@ class BlockQueue(actor.Actor):
         self._outstanding[piece].remove(block)
         self._data[piece][block] = data
         if not self._outstanding[piece]:
-            block_to_data = self._remove(piece)
+            block_to_data = self._pop(piece)
             data = b"".join(block_to_data[block] for block in sorted(block_to_data))
             if len(data) == piece.length and hashlib.sha1(data).digest() == piece.hash:
                 self._peer_connection.piece_done(piece, data)
             else:
-                raise ValueError(f"Peer sent invalid data.")
+                raise ValueError("Peer sent invalid data.")
 
     ### Messages from PeerConnection
 
     def cancel_piece(self, piece: metadata.Piece):
-        self._remove(piece)
+        # TODO: Send cancel messages to the peer.
+        try:
+            self._pop(piece)
+        except KeyError:
+            pass
