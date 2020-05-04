@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 
 from . import bencoding
 from . import magnet
@@ -17,31 +18,30 @@ def main():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--file", help="torrent file")
     group.add_argument("--magnet", help="magnet link")
-    parser.add_argument("--debug", help="enable logging", action="store_true")
+    parser.add_argument("--folder", help="destination folder")
+    parser.add_argument("--log", help="log file")
+    parser.add_argument("--peers", help="number of peers", default=50, type=int)
     parser.add_argument("--resume", help="resume download", action="store_true")
     args = parser.parse_args()
 
-    if args.debug:
-        logfile = "debug.log"
+    if args.log:
         logging.basicConfig(
             level=logging.DEBUG,
-            filename=logfile,
+            filename=args.log,
             filemode="w",
             format="%(asctime)s,%(msecs)03d %(levelname)s: %(message)s",
             datefmt="%H:%M:%S",
         )
-        print(f"Logging to {logfile}.")
+        print(f"Logging to {args.log}.")
 
     if args.file:
         print(f"Using metainfo file {args.file}.")
-
         with open(args.file, "rb") as f:
             raw_metainfo = f.read()
         tracker_params = tracker.Parameters.from_bytes(raw_metainfo)
 
     if args.magnet:
         print("Downloading metainfo file from peers.")
-
         info_hash, announce_list = magnet.parse(args.magnet)
         tracker_params = tracker.Parameters(info_hash)
         info = runners.run(mex.Download(announce_list, tracker_params))
@@ -59,6 +59,10 @@ def main():
 
     metainfo = metadata.Metainfo.from_bytes(raw_metainfo)
 
+    if args.folder:
+        metainfo.folder = os.path.join(args.folder, metainfo.folder)
+        print(f"Downloading to {metainfo.folder}.")
+
     if args.resume:
         print("Checking for available pieces.")
         available_pieces = metadata.available_pieces(
@@ -68,7 +72,11 @@ def main():
     else:
         available_pieces = set()
 
-    runners.run(torrent.Download(metainfo, tracker_params, available_pieces))
+    runners.run(
+        torrent.Download(
+            metainfo, tracker_params, available_pieces, max_peers=args.peers
+        )
+    )
 
     print("Done.")
 
