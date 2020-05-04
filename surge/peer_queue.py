@@ -17,7 +17,8 @@ class PeerQueue(actor.Actor):
             announce_list: List[str],
             tracker_params: tracker.Parameters,
             *,
-            max_tries: int = 5):
+            max_tries: int = 5
+        ):
         super().__init__()
 
         # Available trackers; unreachable or unresponsive trackers are discarded.

@@ -210,8 +210,8 @@ class PieceQueue(actor.Actor):
         # downloaded from;
         # - `self._outstanding` is the set of pieces that are missing, except
         # those that are being downloaded right now.
-        self._borrowers = collections.defaultdict(set)
         self._available = collections.defaultdict(set)
+        self._borrowers = collections.defaultdict(set)
         self._outstanding = set(metainfo.pieces) - available_pieces
 
     def set_have(self, peer: tracker.Peer, pieces: Iterable[metadata.Piece]):

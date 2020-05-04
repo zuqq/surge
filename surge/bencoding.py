@@ -41,7 +41,7 @@ def decode_from(bs, offset):
         return _dict(bs, offset)
     if bs[offset] in (ord(str(i)) for i in range(10)):
         return _str(bs, offset)
-    raise ValueError(repr(bs[offset:]))
+    raise ValueError(bs[offset:])
 
 
 def decode(bs):
@@ -52,7 +52,7 @@ def decode(bs):
     offset, rval = decode_from(bs, 0)
     if offset == len(bs):
         return rval
-    raise ValueError(repr(bs))
+    raise ValueError(bs)
 
 
 def raw_val(bs, key):
@@ -68,7 +68,7 @@ def raw_val(bs, key):
         if curr_key == key:
             return bs[offset:next_offset]
         offset = next_offset
-    raise KeyError(repr(key))
+    raise KeyError(key)
 
 
 def _encode_int(n):
@@ -99,7 +99,7 @@ def _encode_str(bs):
 def encode(obj):
     """Encode `obj` in BEncoding.
 
-    Raises `ValueError` iff `obj` is not representable in BEncoding.
+    Raises `ValueError` if `obj` is not representable in BEncoding.
     """
     if isinstance(obj, int):
         return _encode_int(obj)

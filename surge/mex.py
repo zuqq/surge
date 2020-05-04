@@ -13,12 +13,12 @@ from . import tracker
 
 class Download(actor.Supervisor):
     def __init__(
-        self,
-        announce_list: List[str],
-        tracker_params: tracker.Parameters,
-        *,
-        max_peers: int = 50,
-    ):
+            self,
+            announce_list: List[str],
+            tracker_params: tracker.Parameters,
+            *,
+            max_peers: int = 50,
+        ):
         super().__init__()
 
         self._announce_list = announce_list
@@ -66,13 +66,13 @@ class Download(actor.Supervisor):
 
 class PeerConnection(actor.Actor):
     def __init__(
-        self,
-        download: Download,
-        tracker_params: tracker.Parameters,
-        peer: tracker.Peer,
-        *,
-        max_requests: int = 10,
-    ):
+            self,
+            download: Download,
+            tracker_params: tracker.Parameters,
+            peer: tracker.Peer,
+            *,
+            max_requests: int = 10,
+        ):
         super().__init__()
 
         self._download = download
