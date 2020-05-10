@@ -62,6 +62,8 @@ class Actor:
         self.crashed = True
         if reason is not None:
             logging.debug("%r crashed with %r.", self, reason)
+        if not self.running:
+            return
         if self.parent is None:
             raise SystemExit(f"Unsupervised actor {repr(self)} crashed.")
         self.parent.report_crash(self)
@@ -79,7 +81,6 @@ class Actor:
         if not self.running:
             return
         self.running = False
-        self.crashed = True  # In case the crash happened in a different branch.
 
         logging.debug("Stopping %r.", self)
 

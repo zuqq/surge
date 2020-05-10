@@ -23,7 +23,6 @@ async def test_start_stop():
     await a.stop()
 
     assert not a.running
-    assert a.crashed
 
 
 @pytest.mark.asyncio
