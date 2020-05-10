@@ -46,10 +46,13 @@ class Actor:
         if self.running:
             return
         self.running = True
+
         self.parent = parent
-        logging.debug("Starting %r.", self)
+
         for coro in self._coros:
             self._tasks.add(asyncio.create_task(coro))
+
+        logging.debug("%r started", self)
 
     async def spawn_child(self, child: Actor):
         """Start `child` and add it to `self`'s children."""
@@ -60,8 +63,10 @@ class Actor:
         if self.crashed:
             return
         self.crashed = True
+
         if reason is not None:
-            logging.debug("%r crashed with %r.", self, reason)
+            logging.warning("%r crashed with %r", self, reason)
+
         if not self.running:
             return
         if self.parent is None:
@@ -82,8 +87,6 @@ class Actor:
             return
         self.running = False
 
-        logging.debug("Stopping %r.", self)
-
         for task in self._tasks:
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
@@ -92,6 +95,8 @@ class Actor:
             await child.stop()
 
         await self._on_stop()
+
+        logging.debug("%r stopped", self)
 
     ### User logic
 

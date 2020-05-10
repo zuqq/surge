@@ -5,7 +5,7 @@ import signal
 
 
 def handler(sig):
-    logging.debug("Received %r.", sig)
+    logging.critical("%r", sig)
     raise SystemExit(sig.value)
 
 

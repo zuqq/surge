@@ -42,10 +42,10 @@ class PeerQueue(actor.Actor):
                 try:
                     resp = await tracker.request_peers(announce, self._tracker_params)
                 except Exception as e:
-                    logging.debug("Couldn't connect to %r: %r", announce, e)
+                    logging.warning("%r failed with %r", announce, e)
                     tries += 1
                 else:
-                    logging.debug("Got %r peers from %r.", len(resp.peers), announce)
+                    logging.info("%r sent %r peers", announce, len(resp.peers))
                     for peer in set(resp.peers) - seen_peers:
                         self._peers.put_nowait(peer)
                         seen_peers.add(peer)
@@ -53,8 +53,8 @@ class PeerQueue(actor.Actor):
                     await self._sleep
                     break
             else:
-                logging.debug("Dropping %r.", announce)
                 self._stack.pop()
+                logging.warning("%r dropped", announce)
 
     ### Queue interface
 
