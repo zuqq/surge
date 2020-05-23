@@ -41,7 +41,7 @@ def main():
         tracker_params = tracker.Parameters.from_bytes(raw_metainfo)
 
     if args.magnet:
-        print("Downloading metainfo file from peers.")
+        print("Getting metainfo file from peers.")
         info_hash, announce_list = magnet.parse(args.magnet)
         tracker_params = tracker.Parameters(info_hash)
         info = runners.run(mex.Download(announce_list, tracker_params))
@@ -56,6 +56,7 @@ def main():
                 b"e",
             ]
         )
+        print("Got metainfo file.")
 
     metainfo = metadata.Metainfo.from_bytes(raw_metainfo)
 

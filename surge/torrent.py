@@ -164,6 +164,7 @@ class FileWriter(actor.Actor):
         piece_to_chunks = metadata.piece_to_chunks(
             self._metainfo.pieces, self._metainfo.files
         )
+        self._print_progress()
         while self._outstanding:
             piece, data = await self._piece_data.get()
             if piece not in self._outstanding:

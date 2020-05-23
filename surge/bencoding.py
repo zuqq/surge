@@ -109,4 +109,4 @@ def encode(obj):
         return _encode_dict(obj)
     if isinstance(obj, bytes):
         return _encode_str(obj)
-    raise ValueError(repr(obj))
+    raise ValueError(obj)
