@@ -33,6 +33,8 @@ def main():
             datefmt="%H:%M:%S",
         )
         print(f"Logging to {args.log}.")
+    else:
+        logging.disable(logging.CRITICAL)
 
     if args.file:
         print(f"Using metainfo file {args.file}.")
