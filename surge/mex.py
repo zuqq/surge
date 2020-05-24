@@ -6,6 +6,8 @@ import struct
 
 from . import actor
 from . import bencoding
+from . import extension_protocol
+from . import metadata_protocol
 from . import peer_protocol
 from . import peer_queue
 from . import tracker
@@ -110,11 +112,7 @@ class PeerConnection(actor.Actor):
         )
         await self._writer.drain()
 
-        # Extension handshake
-        payload = bencoding.encode({b"m": {b"ut_metadata": 3}})
-        message = struct.pack(
-            f">LBB{len(payload)}s", 1 + 1 + len(payload), 20, 0, payload
-        )
+        message = extension_protocol.handshake()
         self._writer.write(message)
         await self._writer.drain()
 
@@ -128,8 +126,10 @@ class PeerConnection(actor.Actor):
                 break
             raise ConnectionError("Peer sent unexpected message.")
 
-        if payload[0] != 0:
-            raise ConnectionError("Peer didn't send an extension protocol handshake.")
+        try:
+            _ = extension_protocol.message_type(payload)
+        except ValueError:
+            raise ConnectionError("Peer sent invalid extension protocol message.")
         d = bencoding.decode(payload[1:])
         self._ut_metadata = d[b"m"][b"ut_metadata"]
         self._metadata_size = d[b"metadata_size"]
@@ -163,19 +163,22 @@ class PeerConnection(actor.Actor):
             elif message_type == peer_protocol.Message.UNCHOKE:
                 self._unchoked.set()
             elif message_type == peer_protocol.Message.EXTENSION_PROTOCOL:
-                if payload[0] != 3:
-                    raise ConnectionError("Peer sent unsupported extension message.")
-                offset, message = bencoding.decode_from(payload, 1)
-                if message[b"msg_type"] == 1:
+                message_type = extension_protocol.message_type(payload)
+                if message_type != extension_protocol.Message.UT_METADATA:
+                    raise ConnectionError("Peer sent invalid extension message.")
+                message, data = metadata_protocol.parse_message(payload[1:])
+                if message[b"msg_type"] == metadata_protocol.Message.DATA.value:
                     index = message[b"piece"]
                     if index not in self._timer:
                         continue
                     self._timer.pop(index).cancel()
                     self._slots.release()
                     self._outstanding -= 1
-                    self._data[index] = payload[offset:]
-                elif message[b"msg_type"] == 2:
+                    self._data[index] = data
+                elif message[b"msg_type"] == metadata_protocol.Message.REJECT.value:
                     raise ConnectionError("Peer sent reject.")
+                else:
+                    raise ConnectionError("Peer sent invalid metadata message.")
                 if not self._outstanding:
                     data = b"".join(self._data[index] for index in sorted(self._data))
                     if hashlib.sha1(data).digest() != self._tracker_params.info_hash:
@@ -186,14 +189,7 @@ class PeerConnection(actor.Actor):
         for i in range(self._outstanding):
             await self._unchoke()
             await self._slots.acquire()
-            payload = bencoding.encode({b"msg_type": 0, b"piece": i})
-            message = struct.pack(
-                f">LBB{len(payload)}s",
-                1 + 1 + len(payload),
-                20,
-                self._ut_metadata,
-                payload,
-            )
+            message = metadata_protocol.request(i, self._ut_metadata)
             self._writer.write(message)
             await self._writer.drain()
             self._timer[i] = asyncio.create_task(self._timeout())

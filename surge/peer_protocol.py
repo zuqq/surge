@@ -22,7 +22,6 @@ class Message(enum.Enum):
 
 
 def message_type(message):
-    """Return a lowercase representation of the message's type."""
     if not message:
         return Message.KEEPALIVE
     return Message(message[0])
