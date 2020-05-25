@@ -117,9 +117,10 @@ def _announce_request(trans_id, conn_id, tracker_params):
 
 async def _request_peers_udp(url, tracker_params):
     loop = asyncio.get_running_loop()
-    transport, protocol = await loop.create_datagram_endpoint(
+    _, protocol = await loop.create_datagram_endpoint(
         udp.DatagramStream, remote_addr=(url.hostname, url.port)
     )
+
     trans_id = secrets.token_bytes(4)
 
     protocol.write(_connect_request(trans_id))
@@ -134,7 +135,9 @@ async def _request_peers_udp(url, tracker_params):
     data = await asyncio.wait_for(protocol.read(), timeout=1)
     _, _, interval, _, _ = struct.unpack(">l4slll", data[:20])
 
-    transport.close()
+    protocol.close()
+    await protocol.wait_closed()
+
     return (interval, data[20:])
 
 
