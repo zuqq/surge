@@ -81,11 +81,8 @@ class Download(actor.Supervisor):
 
     async def _on_child_crash(self, child):
         if isinstance(child, PeerConnection):
-            for peer, connection in self._peer_to_connection.items():
-                if connection is child:
-                    break
-            self._piece_queue.drop_peer(peer)
-            self._peer_to_connection.pop(peer)
+            self._piece_queue.drop_peer(child.peer)
+            self._peer_to_connection.pop(child.peer)
             self._peer_connection_slots.release()
         else:
             self._crash(RuntimeError(f"Irreplaceable actor {repr(child)} crashed."))
@@ -285,7 +282,7 @@ class PeerConnection(actor.Actor):
         self._metainfo = metainfo
         self._tracker_params = tracker_params
 
-        self._peer = peer
+        self.peer = peer
 
         self._reader = None
         self._writer = None
@@ -302,7 +299,7 @@ class PeerConnection(actor.Actor):
 
     async def _connect(self):
         self._reader, self._writer = await asyncio.open_connection(
-            self._peer.address, self._peer.port
+            self.peer.address, self.peer.port
         )
 
         message = peer_protocol.handshake(
@@ -324,7 +321,7 @@ class PeerConnection(actor.Actor):
             raise ConnectionError("Peer didn't send a bitfield.")
 
         pieces = peer_protocol.parse_bitfield(payload, self._metainfo.pieces)
-        self._download.set_have(self._peer, pieces)
+        self._download.set_have(self.peer, pieces)
 
     async def _disconnect(self):
         if self._writer is None:
@@ -352,7 +349,7 @@ class PeerConnection(actor.Actor):
                 self._unchoked.set()
             elif message_type == peer_protocol.Message.HAVE:
                 piece = peer_protocol.parse_have(payload, self._metainfo.pieces)
-                self._download.add_to_have(self._peer, piece)
+                self._download.add_to_have(self.peer, piece)
             elif message_type == peer_protocol.Message.BLOCK:
                 block, data = peer_protocol.parse_block(payload, self._metainfo.pieces)
                 if block not in self._timer:
@@ -399,10 +396,10 @@ class PeerConnection(actor.Actor):
         await self._writer.drain()
 
     def get_piece(self) -> Optional[metadata.Piece]:
-        return self._download.get_piece(self._peer)
+        return self._download.get_piece(self.peer)
 
     def piece_done(self, piece: metadata.Piece, data: bytes):
-        self._download.piece_done(self._peer, piece, data)
+        self._download.piece_done(self.peer, piece, data)
 
 
 class BlockQueue(actor.Actor):
