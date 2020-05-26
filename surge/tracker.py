@@ -2,15 +2,14 @@ from typing import List, Optional
 
 import asyncio
 import dataclasses
-import enum
 import hashlib
 import secrets
-import struct
 import urllib.parse
 
 import aiohttp
 
 from . import bencoding
+from . import tracker_protocol
 from . import udp
 
 
@@ -87,34 +86,6 @@ async def _request_peers_http(url, tracker_params):
     return resp
 
 
-class Message(enum.Enum):
-    CONNECT = 0
-    ANNOUNCE = 1
-
-
-def _connect_request(trans_id):
-    return struct.pack(">ql4s", 0x41727101980, Message.CONNECT.value, trans_id)
-
-
-def _announce_request(trans_id, conn_id, tracker_params):
-    return struct.pack(
-        ">8sl4s20s20sqqqlL4slH",
-        conn_id,
-        Message.ANNOUNCE.value,
-        trans_id,
-        tracker_params.info_hash,
-        tracker_params.peer_id,
-        tracker_params.downloaded,
-        tracker_params.left,
-        tracker_params.uploaded,
-        0,
-        0,
-        secrets.token_bytes(4),
-        -1,
-        6881,
-    )
-
-
 async def _request_peers_udp(url, tracker_params):
     loop = asyncio.get_running_loop()
     _, protocol = await loop.create_datagram_endpoint(
@@ -123,17 +94,17 @@ async def _request_peers_udp(url, tracker_params):
 
     trans_id = secrets.token_bytes(4)
 
-    protocol.send(_connect_request(trans_id))
+    protocol.send(tracker_protocol.connect(trans_id))
     await protocol.drain()
 
     data = await asyncio.wait_for(protocol.recv(), timeout=1)
-    _, _, conn_id = struct.unpack(">l4s8s", data)
+    _, _, conn_id = tracker_protocol.parse_connect(data)
 
-    protocol.send(_announce_request(trans_id, conn_id, tracker_params))
+    protocol.send(tracker_protocol.announce(trans_id, conn_id, tracker_params))
     await protocol.drain()
 
     data = await asyncio.wait_for(protocol.recv(), timeout=1)
-    _, _, interval, _, _ = struct.unpack(">l4slll", data[:20])
+    _, _, interval, _, _ = tracker_protocol.parse_announce(data[:20])
 
     protocol.close()
     await protocol.wait_closed()
