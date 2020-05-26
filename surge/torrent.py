@@ -222,6 +222,8 @@ class PieceQueue(actor.Actor):
         self._available[peer].add(piece)
 
     def drop_peer(self, peer: tracker.Peer):
+        if peer not in self._available:
+            return
         self._available.pop(peer)
         for piece, borrowers in list(self._borrowers.items()):
             borrowers.discard(peer)

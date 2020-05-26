@@ -45,13 +45,15 @@ class PeerQueue(actor.Actor):
     async def _main_coro(self):
         seen_peers = set()
         while True:
+            if not self._announce_list:
+                raise RuntimeError("No trackers available.")
             coros = []
             for announce in self._announce_list:
                 coros.append(self._request_peers(announce))
             results = await asyncio.gather(*coros, return_exceptions=True)
 
             good_announces = []
-            interval = 3600
+            interval = 0
             for result in results:
                 if not isinstance(result, ConnectionError):
                     for peer in set(result.peers) - seen_peers:
@@ -62,7 +64,10 @@ class PeerQueue(actor.Actor):
             self._announce_list = good_announces
 
             self._sleep = asyncio.create_task(asyncio.sleep(interval))
-            await self._sleep
+            try:
+                await self._sleep
+            except asyncio.CancelledError:
+                pass
 
     ### Queue interface
 
