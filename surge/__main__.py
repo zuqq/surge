@@ -15,13 +15,13 @@ def main():
     parser = argparse.ArgumentParser(
         description="Download files from the BitTorrent network."
     )
+    parser.add_argument("--resume", help="resume download", action="store_true")
+    parser.add_argument("--peers", help="number of peers", default=50, type=int)
+    parser.add_argument("--folder", help="destination folder")
+    parser.add_argument("--log", help="log file")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--file", help="torrent file")
     group.add_argument("--magnet", help="magnet link")
-    parser.add_argument("--folder", help="destination folder")
-    parser.add_argument("--log", help="log file")
-    parser.add_argument("--peers", help="number of peers", default=50, type=int)
-    parser.add_argument("--resume", help="resume download", action="store_true")
     args = parser.parse_args()
 
     if args.log:

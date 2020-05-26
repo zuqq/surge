@@ -2,7 +2,6 @@ from typing import List
 
 import asyncio
 import hashlib
-import struct
 
 from . import actor
 from . import bencoding

@@ -63,7 +63,7 @@ class TrackerConnection(actor.Actor):
         self.announce = announce
 
         self._tracker_params = tracker_params
-        self._max_tries = 5
+        self._max_tries = max_tries
 
     async def _main_coro(self):
         while True:
@@ -84,4 +84,4 @@ class TrackerConnection(actor.Actor):
                 raise ConnectionError("Tracker unreachable.")
             for peer in resp.peers:
                 self._peer_queue.put_nowait(peer)
-            await self._sleep(resp.interval)
+            await asyncio.sleep(resp.interval)
