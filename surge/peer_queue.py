@@ -1,4 +1,4 @@
-from typing import List
+from typing import Iterable
 
 import asyncio
 import logging
@@ -7,79 +7,81 @@ from . import actor
 from . import tracker
 
 
-class PeerQueue(actor.Actor):
-    """Requests peers from the tracker and supplies them via the `get` method.
+class PeerQueue(actor.Supervisor):
+    """Requests peers from trackers and supplies them via the `get` method."""
 
-    Note that this class prematurely requests more peers if it runs out.
-    """
     def __init__(
-            self,
-            announce_list: List[str],
-            tracker_params: tracker.Parameters,
+            self, announces: Iterable[str], tracker_params: tracker.Parameters,
         ):
         super().__init__()
 
         # Available trackers; unreachable or unresponsive trackers are discarded.
-        self._announce_list = announce_list
+        self._announces = set(announces)
         self._tracker_params = tracker_params
 
-        self._sleep = None
         self._peers = asyncio.Queue()
-
-    async def _request_peers(self, announce, *, max_tries=5):
-        tries = 0
-        while tries < max_tries:
-            try:
-                resp = await tracker.request_peers(announce, self._tracker_params)
-            except Exception as e:
-                logging.warning("%r failed with %r", announce, e)
-                tries += 1
-            else:
-                logging.info("%r sent %r peers", announce, len(resp.peers))
-                return resp
-        logging.warning("%r unreachable", announce)
-        raise ConnectionError("Tracker unreachable.")
+        self._seen_peers = set()
 
     ### Actor implementation
 
     async def _main_coro(self):
-        seen_peers = set()
-        while True:
-            if not self._announce_list:
-                raise RuntimeError("No trackers available.")
-            coros = []
-            for announce in self._announce_list:
-                coros.append(self._request_peers(announce))
-            results = await asyncio.gather(*coros, return_exceptions=True)
+        for announce in self._announces:
+            await self.spawn_child(
+                TrackerConnection(self, announce, self._tracker_params)
+            )
 
-            good_announces = []
-            interval = 0
-            for result in results:
-                if not isinstance(result, ConnectionError):
-                    for peer in set(result.peers) - seen_peers:
-                        self._peers.put_nowait(peer)
-                        seen_peers.add(peer)
-                    good_announces.append(result.announce)
-                    interval = max(interval, result.interval)
-            self._announce_list = good_announces
-
-            self._sleep = asyncio.create_task(asyncio.sleep(interval))
-            try:
-                await self._sleep
-            except asyncio.CancelledError:
-                pass
+    async def _on_child_crash(self, child):
+        if isinstance(child, TrackerConnection):
+            self._announces.remove(child.announce)
 
     ### Queue interface
 
     async def get(self) -> tracker.Peer:
-        """Return a fresh peer.
+        """Return a fresh peer."""
+        return await self._peers.get()
 
-        If the internal peer supply is empty, request more from the tracker.
-        """
-        try:
-            peer = self._peers.get_nowait()
-        except asyncio.QueueEmpty:
-            if self._sleep is not None:
-                self._sleep.cancel()
-            peer = await self._peers.get()
-        return peer
+    def put_nowait(self, peer: tracker.Peer):
+        if peer in self._seen_peers:
+            return
+        self._seen_peers.add(peer)
+        self._peers.put_nowait(peer)
+
+
+class TrackerConnection(actor.Actor):
+    def __init__(
+            self,
+            peer_queue: PeerQueue,
+            announce: str,
+            tracker_params: tracker.Parameters,
+            *,
+            max_tries: int = 5
+        ):
+        super().__init__()
+
+        self._peer_queue = peer_queue
+
+        self.announce = announce
+
+        self._tracker_params = tracker_params
+        self._max_tries = 5
+
+    async def _main_coro(self):
+        while True:
+            tries = 0
+            while tries < self._max_tries:
+                try:
+                    resp = await tracker.request_peers(
+                        self.announce, self._tracker_params
+                    )
+                except Exception as e:
+                    logging.warning("%r failed with %r", self.announce, e)
+                    tries += 1
+                else:
+                    logging.info("%r sent %r peers", self.announce, len(resp.peers))
+                    break
+            else:
+                logging.warning("%r unreachable", self.announce)
+                raise ConnectionError("Tracker unreachable.")
+            for peer in resp.peers:
+                self._peer_queue.put_nowait(peer)
+            await self._sleep(resp.interval)
