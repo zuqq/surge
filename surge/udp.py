@@ -9,7 +9,7 @@ class DatagramStream(asyncio.DatagramProtocol):
         self._drained = asyncio.Event()
         self._inbox = asyncio.Queue()
 
-    ### Protocol
+    ### asyncio.BaseProtocol
 
     def connection_made(self, transport):
         self._drained.set()
@@ -25,26 +25,29 @@ class DatagramStream(asyncio.DatagramProtocol):
     def resume_writing(self):
         self._drained.set()
 
+    ### asyncio.DatagramProtocol
+
     def datagram_received(self, data, addr):
-        self._inbox.put_nowait(data)
+        self._inbox.put_nowait((data, addr))
 
     def error_received(self, exc):
         self._exception = self._exception or exc
 
-    ### Stream interface
+    ### Interface
 
-    def write(self, message):
-        self._transport.sendto(message)
+    def send(self, data):
+        self._transport.sendto(data, addr=None)
 
     async def drain(self):
         if self._exception is not None:
             raise self._exception
         await self._drained.wait()
 
-    async def read(self):
+    async def recv(self):
         if self._exception is not None:
             raise self._exception
-        return await self._inbox.get()
+        data, _ = await self._inbox.get()
+        return data
 
     def close(self):
         if self._transport is not None:

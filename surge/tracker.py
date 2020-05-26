@@ -123,16 +123,16 @@ async def _request_peers_udp(url, tracker_params):
 
     trans_id = secrets.token_bytes(4)
 
-    protocol.write(_connect_request(trans_id))
+    protocol.send(_connect_request(trans_id))
     await protocol.drain()
 
-    data = await asyncio.wait_for(protocol.read(), timeout=1)
+    data = await asyncio.wait_for(protocol.recv(), timeout=1)
     _, _, conn_id = struct.unpack(">l4s8s", data)
 
-    protocol.write(_announce_request(trans_id, conn_id, tracker_params))
+    protocol.send(_announce_request(trans_id, conn_id, tracker_params))
     await protocol.drain()
 
-    data = await asyncio.wait_for(protocol.read(), timeout=1)
+    data = await asyncio.wait_for(protocol.recv(), timeout=1)
     _, _, interval, _, _ = struct.unpack(">l4slll", data[:20])
 
     protocol.close()
