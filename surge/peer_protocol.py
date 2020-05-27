@@ -89,3 +89,15 @@ def parse_block(payload, pieces):
     block_data = payload[8:]
     block = metadata.Block(pieces[piece_index], piece_offset, len(block_data))
     return block, block_data
+
+
+def parse(message, pieces):
+    """Return the pair (type, content) for the given message."""
+    mt = message_type(message)
+    if mt == Message.HAVE:
+        return (mt, parse_have(message[1:], pieces))
+    elif mt == Message.BITFIELD:
+        return (mt, parse_bitfield(message[1:], pieces))
+    elif mt == Message.BLOCK:
+        return (mt, parse_block(message[1:], pieces))
+    return (mt, None)
