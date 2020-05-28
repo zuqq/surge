@@ -63,6 +63,22 @@ def cancel(block):
     )
 
 
+class InvalidHandshake(Exception):
+    pass
+
+
+def parse_handshake(payload):
+    try:
+        pstrlen, pstr, reserved, info_hash, peer_id = struct.unpack(
+            ">B19sQ20s20s", payload
+        )
+    except struct.error:
+        raise InvalidHandshake
+    if pstrlen != 19 or pstr != b"BitTorrent protocol":
+        raise InvalidHandshake
+    return (reserved, info_hash, peer_id)
+
+
 def parse_have(payload, pieces):
     """Return the piece that the given "have" message is about."""
     (piece_index,) = struct.unpack(">L", payload)

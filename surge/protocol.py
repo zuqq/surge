@@ -13,6 +13,7 @@ class InsufficientData(Exception):
 class State:
     waiter = None
 
+
 class Closed(State):
     pass
 
@@ -22,10 +23,9 @@ class Open(State):
     def read(conn):
         try:
             conn.read_handshake()
+            conn.read_messages()
         except InsufficientData:
             pass
-        else:
-            conn.read_messages()
 
 
 class Established(State):
@@ -71,9 +71,9 @@ class Protocol(asyncio.Protocol):
         self.handshake = loop.create_future()
         self.bitfield = loop.create_future()
 
-        # This doesn't contain `Open` because in that state we only want to
-        # receive the handshake message, which is special because it doesn't
-        # have a length prefix.
+        # Transitions from a state to itself with no side effect are implicit.
+        # The `Open` state is treated separately because the handshake message
+        # doesn't have a length prefix.
         self._successor = {
             (Established, peer_protocol.Message.BITFIELD): Choked,
             (Choked, peer_protocol.Message.UNCHOKE): Unchoked,
@@ -109,9 +109,12 @@ class Protocol(asyncio.Protocol):
     def read_handshake(self):
         if len(self._buffer) < 68:
             raise InsufficientData
-        # TODO: Validate the handshake.
         self.state = Established
-        self.handshake.set_result(bytes(self._buffer[:68]))
+        try:
+            result = peer_protocol.parse_handshake(self._buffer[:68])
+            self.handshake.set_result(result)
+        except peer_protocol.InvalidHandshake as e:
+            self.handshake.set_exception(e)
         del self._buffer[:68]
 
     def read_messages(self):
