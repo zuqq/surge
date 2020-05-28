@@ -36,7 +36,7 @@ class Protocol(asyncio.Protocol):
         # Transitions from a state to itself with no side effect are implicit.
         # The `Open` state is treated separately because the handshake message
         # doesn't have a length prefix.
-        self._successor = {
+        self._transition = {
             (Established, Message.BITFIELD): (self.bitfield.set_result, Choked),
             (Choked, Message.UNCHOKE): (None, Unchoked),
             (Choked, Message.BLOCK): (self._block_data.put_nowait, Choked),
@@ -54,11 +54,11 @@ class Protocol(asyncio.Protocol):
     def _state(self, next_state):
         self.__class__ = next_state
 
-    def _transition(self, message_type, payload):
+    def _feed(self, message_type, payload):
         start_state = self._state
-        if (start_state, message_type) not in self._successor:
+        if (start_state, message_type) not in self._transition:
             return
-        (side_effect, end_state) = self._successor[(start_state, message_type)]
+        (side_effect, end_state) = self._transition[(start_state, message_type)]
         self._state = end_state
         if side_effect is not None:
             side_effect(payload)
@@ -84,7 +84,7 @@ class Protocol(asyncio.Protocol):
                 break
             message = bytes(self._buffer[4 : 4 + n])
             del self._buffer[: 4 + n]
-            self._transition(*parse(message, self._pieces))
+            self._feed(*parse(message, self._pieces))
 
     ### asyncio.Protocol implementation
 
