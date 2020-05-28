@@ -109,8 +109,6 @@ class Protocol(asyncio.Protocol):
         raise ConnectionError("Reading from closed connection.")
 
     def _write(self, data):
-        if self._exc is not None:
-            raise self._exc
         self._transport.write(data)
 
     ### Public interface
@@ -119,6 +117,8 @@ class Protocol(asyncio.Protocol):
         raise ConnectionError("Requesting on closed connection.")
 
     async def receive(self):
+        if self._exc is not None:
+            raise self._exc
         return await self._block_data.get()
 
     def close(self):
@@ -149,6 +149,8 @@ class Established(Protocol):
 
 class Choked(Established):
     async def request(self, block):
+        if self._exc is not None:
+            raise self._exc
         # Register with Unchoked so that we are woken up if the unchoke happens.
         loop = asyncio.get_running_loop()
         Unchoked.waiter = loop.create_future()
@@ -160,4 +162,6 @@ class Choked(Established):
 
 class Unchoked(Established):
     async def request(self, block):
+        if self._exc is not None:
+            raise self._exc
         self._write(request(block))
