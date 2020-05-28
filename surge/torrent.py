@@ -2,6 +2,7 @@ from typing import Iterable, Optional, Set
 
 import asyncio
 import collections
+import functools
 import hashlib
 import os
 import random
@@ -10,8 +11,8 @@ import aiofiles
 
 from . import actor
 from . import metadata
-from . import peer_protocol
 from . import peer_queue
+from . import protocol
 from . import tracker
 
 
@@ -284,79 +285,26 @@ class PeerConnection(actor.Actor):
 
         self.peer = peer
 
-        self._reader = None
-        self._writer = None
-        self._unchoked = asyncio.Event()
+        self._protocol = None
 
         self._block_queue = None
         self._slots = asyncio.Semaphore(max_requests)
         self._timer = {}
 
-    async def _read_peer_message(self):
-        len_prefix = int.from_bytes(await self._reader.readexactly(4), "big")
-        message = await self._reader.readexactly(len_prefix)
-        return peer_protocol.message_type(message), message[1:]
-
-    async def _connect(self):
-        self._reader, self._writer = await asyncio.open_connection(
-            self.peer.address, self.peer.port
-        )
-
-        message = peer_protocol.handshake(
-            self._tracker_params.info_hash, self._tracker_params.peer_id
-        )
-        self._writer.write(message)
-        await self._writer.drain()
-
-        # TODO: Validate the peer's handshake.
-        _ = await self._reader.readexactly(68)
-
-        # TODO: Accept peers that don't send a bitfield.
-        while True:
-            message_type, payload = await self._read_peer_message()
-            if message_type == peer_protocol.Message.BITFIELD:
-                break
-            if message_type == peer_protocol.Message.EXTENSION_PROTOCOL:
-                continue
-            raise ConnectionError("Peer didn't send a bitfield.")
-
-        pieces = peer_protocol.parse_bitfield(payload, self._metainfo.pieces)
-        self._download.set_have(self.peer, pieces)
-
     async def _disconnect(self):
-        if self._writer is None:
+        if self._protocol is None:
             return
-        self._writer.close()
-        try:
-            await self._writer.wait_closed()
-        # https://bugs.python.org/issue38856
-        except (BrokenPipeError, ConnectionResetError):
-            pass
-
-    async def _unchoke(self):
-        if self._unchoked.is_set():
-            return
-        self._writer.write(peer_protocol.interested())
-        await self._writer.drain()
-        await self._unchoked.wait()
+        self._protocol.close()
+        await self._protocol.wait_closed()
 
     async def _receive_blocks(self):
         while True:
-            message_type, payload = await self._read_peer_message()
-            if message_type == peer_protocol.Message.CHOKE:
-                self._unchoked.clear()
-            elif message_type == peer_protocol.Message.UNCHOKE:
-                self._unchoked.set()
-            elif message_type == peer_protocol.Message.HAVE:
-                piece = peer_protocol.parse_have(payload, self._metainfo.pieces)
-                self._download.add_to_have(self.peer, piece)
-            elif message_type == peer_protocol.Message.BLOCK:
-                block, data = peer_protocol.parse_block(payload, self._metainfo.pieces)
-                if block not in self._timer:
-                    continue
-                self._timer.pop(block).cancel()
-                self._slots.release()
-                self._block_queue.task_done(block, data)
+            block, data = await self._protocol.receive()
+            if block not in self._timer:
+                continue
+            self._timer.pop(block).cancel()
+            self._slots.release()
+            self._block_queue.task_done(block, data)
 
     async def _timeout(self, *, timeout=10):
         await asyncio.sleep(timeout)
@@ -364,19 +312,33 @@ class PeerConnection(actor.Actor):
 
     async def _request_blocks(self):
         while True:
-            await self._unchoke()
             await self._slots.acquire()
             block = await self._block_queue.get()
             if block is None:
                 break
-            self._writer.write(peer_protocol.request(block))
-            await self._writer.drain()
+            await self._protocol.request(block)
             self._timer[block] = asyncio.create_task(self._timeout())
 
     ### Actor implementation
 
     async def _main_coro(self):
-        await self._connect()
+        loop = asyncio.get_running_loop()
+        _, self._protocol = await loop.create_connection(
+            functools.partial(
+                protocol.Protocol,
+                self._tracker_params.info_hash,
+                self._tracker_params.peer_id,
+                self._metainfo.pieces
+                ),
+            self.peer.address,
+            self.peer.port
+        )
+
+        # TODO: Validate the peer's handshake.
+        _, _, _ = await self._protocol.handshake
+        pieces = await self._protocol.bitfield
+        self._download.set_have(self.peer, pieces)
+
         self._block_queue = BlockQueue(self)
         await self.spawn_child(self._block_queue)
         await asyncio.gather(self._receive_blocks(), self._request_blocks())
@@ -390,10 +352,6 @@ class PeerConnection(actor.Actor):
         self._block_queue.cancel_piece(piece)
 
     ### Messages from BlockQueue
-
-    async def cancel_block(self, block: metadata.Block):
-        self._writer.write(peer_protocol.cancel(block))
-        await self._writer.drain()
 
     def get_piece(self) -> Optional[metadata.Piece]:
         return self._download.get_piece(self.peer)
