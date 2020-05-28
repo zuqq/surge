@@ -10,51 +10,8 @@ class InsufficientData(Exception):
     pass
 
 
-class State:
-    waiter = None
-
-
-class Closed(State):
-    pass
-
-
-class Open(State):
-    @staticmethod
-    def read(conn):
-        try:
-            conn.read_handshake()
-            conn.read_messages()
-        except InsufficientData:
-            pass
-
-
-class Established(State):
-    @staticmethod
-    def read(conn):
-        conn.read_messages()
-
-
-class Choked(Established):
-    @staticmethod
-    async def request(conn, block):
-        # Register with Unchoked so that we are woken up if the unchoke happens.
-        loop = asyncio.get_running_loop()
-        Unchoked.waiter = loop.create_future()
-        conn.write(peer_protocol.interested())
-        # Wait for the unchoke to happen.
-        await Unchoked.waiter
-        conn.write(peer_protocol.request(block))
-
-
-class Unchoked(Established):
-    @staticmethod
-    async def request(conn, block):
-        conn.write(peer_protocol.request(block))
-
-
 class Protocol(asyncio.Protocol):
     def __init__(self, info_hash, peer_id, pieces):
-        self.state = Closed
 
         self._info_hash = info_hash
         self._peer_id = peer_id
@@ -93,8 +50,15 @@ class Protocol(asyncio.Protocol):
 
     ### State machine interface
 
+    @property
+    def state(self):
+        return self.__class__
+
+    @state.setter
+    def state(self, next_state):
+        self.__class__ = next_state
+
     def transition(self, message_type, payload):
-        print(message_type)
         start_state = self.state
         if (start_state, message_type) not in self._successor:
             return
@@ -136,13 +100,17 @@ class Protocol(asyncio.Protocol):
     def connection_lost(self, exc):
         if self._exc is None:
             self._exc = exc
+        self.state = Protocol
         self._closed.set()
 
     def data_received(self, data):
         self._buffer.extend(data)
-        self.state.read(self)
+        self.read()
 
     ### Stream interface
+
+    def read(self):
+        raise ConnectionError("Reading from closed connection.")
 
     def write(self, data):
         if self._exc is not None:
@@ -160,7 +128,39 @@ class Protocol(asyncio.Protocol):
     ### Protocol interface
 
     async def request(self, block: metadata.Block):
-        await self.state.request(self, block)
+        raise ConnectionError("Requesting on closed connection.")
 
     async def receive(self) -> Tuple[metadata.Block, bytes]:
         return await self._block_data.get()
+
+
+class Open(Protocol):
+    def read(self):
+        try:
+            self.read_handshake()
+        except InsufficientData:
+            return
+        self.read_messages()
+
+
+class Established(Protocol):
+    waiter = None
+
+    def read(self):
+        self.read_messages()
+
+
+class Choked(Established):
+    async def request(self, block):
+        # Register with Unchoked so that we are woken up if the unchoke happens.
+        loop = asyncio.get_running_loop()
+        Unchoked.waiter = loop.create_future()
+        self.write(peer_protocol.interested())
+        # Wait for the unchoke to happen.
+        await Unchoked.waiter
+        self.write(peer_protocol.request(block))
+
+
+class Unchoked(Established):
+    async def request(self, block):
+        self.write(peer_protocol.request(block))
