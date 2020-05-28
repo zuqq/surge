@@ -1,9 +1,14 @@
-from typing import Tuple
-
 import asyncio
 
-from . import metadata
-from . import peer_protocol
+from .peer_protocol import (
+    InvalidHandshake,
+    Message,
+    handshake,
+    interested,
+    parse,
+    parse_handshake,
+    request,
+)
 
 
 class InsufficientData(Exception):
@@ -27,24 +32,16 @@ class Protocol(asyncio.Protocol):
         self.handshake = loop.create_future()
         self.bitfield = loop.create_future()
 
+        # Maps (start_state, message_type) to (side_effect, end_state).
         # Transitions from a state to itself with no side effect are implicit.
         # The `Open` state is treated separately because the handshake message
         # doesn't have a length prefix.
         self._successor = {
-            (Established, peer_protocol.Message.BITFIELD): Choked,
-            (Choked, peer_protocol.Message.UNCHOKE): Unchoked,
-            (Choked, peer_protocol.Message.BLOCK): Choked,
-            (Unchoked, peer_protocol.Message.CHOKE): Choked,
-            (Unchoked, peer_protocol.Message.BLOCK): Unchoked,
-        }
-
-        # Since there is at most one edge between any two states, a mapping
-        # from (start_state, end_state) to effect is enough. The `Open` state
-        # is again special.
-        self._effect = {
-            (Established, Choked): self.bitfield.set_result,
-            (Choked, Choked): self._block_data.put_nowait,
-            (Unchoked, Unchoked): self._block_data.put_nowait,
+            (Established, Message.BITFIELD): (self.bitfield.set_result, Choked),
+            (Choked, Message.UNCHOKE): (None, Unchoked),
+            (Choked, Message.BLOCK): (self._block_data.put_nowait, Choked),
+            (Unchoked, Message.CHOKE): (None, Choked),
+            (Unchoked, Message.BLOCK): (self._block_data.put_nowait, Unchoked),
         }
 
     ### State machine
@@ -61,10 +58,10 @@ class Protocol(asyncio.Protocol):
         start_state = self._state
         if (start_state, message_type) not in self._successor:
             return
-        end_state = self._successor[(start_state, message_type)]
+        (side_effect, end_state) = self._successor[(start_state, message_type)]
         self._state = end_state
-        if (start_state, end_state) in self._effect:
-            self._effect[start_state, end_state](payload)
+        if side_effect is not None:
+            side_effect(payload)
         if end_state.waiter is not None:
             end_state.waiter.set_result(None)
             end_state.waiter = None
@@ -74,9 +71,9 @@ class Protocol(asyncio.Protocol):
             raise InsufficientData
         self._state = Established
         try:
-            result = peer_protocol.parse_handshake(self._buffer[:68])
+            result = parse_handshake(self._buffer[:68])
             self.handshake.set_result(result)
-        except peer_protocol.InvalidHandshake as e:
+        except InvalidHandshake as e:
             self.handshake.set_exception(e)
         del self._buffer[:68]
 
@@ -87,14 +84,14 @@ class Protocol(asyncio.Protocol):
                 break
             message = bytes(self._buffer[4 : 4 + n])
             del self._buffer[: 4 + n]
-            self._transition(*peer_protocol.parse(message, self._pieces))
+            self._transition(*parse(message, self._pieces))
 
     ### asyncio.Protocol implementation
 
     def connection_made(self, transport):
         self._state = Open
         self._transport = transport
-        self._write(peer_protocol.handshake(self._info_hash, self._peer_id))
+        self._write(handshake(self._info_hash, self._peer_id))
 
     def connection_lost(self, exc):
         if self._exc is None:
@@ -118,10 +115,10 @@ class Protocol(asyncio.Protocol):
 
     ### Public interface
 
-    async def request(self, block: metadata.Block):
+    async def request(self, block):
         raise ConnectionError("Requesting on closed connection.")
 
-    async def receive(self) -> Tuple[metadata.Block, bytes]:
+    async def receive(self):
         return await self._block_data.get()
 
     def close(self):
@@ -155,12 +152,12 @@ class Choked(Established):
         # Register with Unchoked so that we are woken up if the unchoke happens.
         loop = asyncio.get_running_loop()
         Unchoked.waiter = loop.create_future()
-        self._write(peer_protocol.interested())
+        self._write(interested())
         # Wait for the unchoke to happen.
         await Unchoked.waiter
-        self._write(peer_protocol.request(block))
+        self._write(request(block))
 
 
 class Unchoked(Established):
     async def request(self, block):
-        self._write(peer_protocol.request(block))
+        self._write(request(block))
