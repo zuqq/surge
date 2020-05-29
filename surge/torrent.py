@@ -44,6 +44,7 @@ class Download(actor.Supervisor):
 
         metadata.ensure_files_exist(self._metainfo.folder, self._metainfo.files)
 
+        self._printer = None
         self._writer = None
         self._peer_queue = None
         self._piece_queue = None
@@ -67,12 +68,13 @@ class Download(actor.Supervisor):
     ### Actor implementation
 
     async def _main_coro(self):
+        self._printer = Printer(len(self._metainfo.pieces), len(self._available_pieces))
         self._writer = Writer(self._metainfo, self._available_pieces)
         self._peer_queue = peer_queue.PeerQueue(
             self._metainfo.announce_list, self._tracker_params
         )
         self._piece_queue = PieceQueue(self._metainfo, self._available_pieces)
-        for c in (self._writer, self._peer_queue, self._piece_queue):
+        for c in (self._printer, self._writer, self._peer_queue, self._piece_queue):
             await self.spawn_child(c)
         await self._spawn_peer_connections()
 
@@ -107,8 +109,47 @@ class Download(actor.Supervisor):
         return self._piece_queue.get_nowait(peer)
 
     def piece_done(self, peer: tracker.Peer, piece: metadata.Piece, data: bytes):
+        self._printer.advance()
         self._writer.put_nowait(piece, data)
         self._piece_queue.task_done(peer, piece)
+
+
+class Printer(actor.Actor):
+    def __init__(self, pieces: int, available: int):
+        super().__init__()
+
+        self._pieces = pieces
+        self._available = available
+        self._event = asyncio.Event()
+
+    async def _main_coro(self):
+        while True:
+            await self._event.wait()
+            self._event.clear()
+            # Print a counter and progress bar.
+            n = self._pieces
+            i = self._available
+            digits = len(str(n))
+            # Right-align the number of downloaded pieces in a cell of width
+            # `digits`, so that the components never move.
+            progress = f"Download progress: {i : >{digits}}/{n} pieces."
+            width, _ = os.get_terminal_size()
+            # Number of parts that the progress bar is split up into. Reserve one
+            # character for each of the left and right delimiters, and one space on
+            # each side.
+            parts = width - len(progress) - 4
+            if parts < 10:
+                print("\r\x1b[K" + progress, end="")
+            else:
+                # The number of cells of the progress bar to fill up.
+                done = parts * i // n
+                # Left-align the filled-up cells.
+                bar = f"[{done * '#' : <{parts}}]"
+                print("\r\x1b[K" + progress + " " + bar + " ", end="")
+
+    def advance(self):
+        self._available += 1
+        self._event.set()
 
 
 class Writer(actor.Actor):
@@ -128,33 +169,10 @@ class Writer(actor.Actor):
         self._outstanding = set(metainfo.pieces) - available_pieces
         self._piece_data = asyncio.Queue()
 
-    def _print_progress(self):
-        # Print a counter and progress bar.
-        n = len(self._metainfo.pieces)
-        i = n - len(self._outstanding)
-        digits = len(str(n))
-        # Right-align the number of downloaded pieces in a cell of width
-        # `digits`, so that the components never move.
-        progress = f"Download progress: {i : >{digits}}/{n} pieces."
-        width, _ = os.get_terminal_size()
-        # Number of parts that the progress bar is split up into. Reserve one
-        # character for each of the left and right delimiters, and one space on
-        # each side.
-        parts = width - len(progress) - 4
-        if parts < 10:
-            print("\r\x1b[K" + progress, end="")
-        else:
-            # The number of cells of the progress bar to fill up.
-            done = parts * i // n
-            # Left-align the filled-up cells.
-            bar = f"[{done * '#' : <{parts}}]"
-            print("\r\x1b[K" + progress + " " + bar + " ", end="")
-
     async def _main_coro(self):
         piece_to_chunks = metadata.piece_to_chunks(
             self._metainfo.pieces, self._metainfo.files
         )
-        self._print_progress()
         while self._outstanding:
             piece, data = await self._piece_data.get()
             if piece not in self._outstanding:
@@ -167,7 +185,6 @@ class Writer(actor.Actor):
                     await f.seek(c.file_offset)
                     await f.write(data[c.piece_offset : c.piece_offset + c.length])
             self._outstanding.remove(piece)
-            self._print_progress()
         self.parent.done()
 
     ### Queue interface
