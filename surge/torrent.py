@@ -37,7 +37,6 @@ class Download(actor.Supervisor):
 
         self._piece_data = asyncio.Queue()
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
-        self._peer_to_connection = {}
 
     async def _spawn_peer_connections(self):
         while True:
@@ -45,7 +44,6 @@ class Download(actor.Supervisor):
             peer = await self._peer_queue.get()
             connection = PeerConnection(self._metainfo, self._tracker_params, peer)
             await self.spawn_child(connection)
-            self._peer_to_connection[peer] = connection
 
     async def _write_pieces(self):
         piece_to_chunks = metadata.piece_to_chunks(
@@ -85,18 +83,16 @@ class Download(actor.Supervisor):
     async def _on_child_crash(self, child):
         if isinstance(child, PeerConnection):
             for piece, borrowers in list(self._borrowers.items()):
-                borrowers.discard(child.peer)
+                borrowers.discard(child)
                 if not borrowers:
                     self._borrowers.pop(piece)
-                    self._outstanding.add(piece)
-            self._peer_to_connection.pop(child.peer)
             self._peer_connection_slots.release()
         else:
             self._crash(RuntimeError(f"Irreplaceable actor {repr(child)} crashed."))
 
     ### Messages from PeerConnection
 
-    def get_piece(self, peer, available):
+    def get_piece(self, peer_connection, available):
         borrowed = set(self._borrowers)
         pool = self._outstanding - borrowed or borrowed
         if not pool:
@@ -105,14 +101,14 @@ class Download(actor.Supervisor):
             piece = random.choice(list(pool & available))
         except IndexError:
             piece = random.choice(list(pool))
-        self._borrowers[piece].add(peer)
+        self._borrowers[piece].add(peer_connection)
         return piece
 
-    def piece_done(self, peer: tracker.Peer, piece: metadata.Piece, data: bytes):
+    def piece_done(self, peer_connection, piece, data):
         if piece not in self._borrowers:
             return
-        for borrower in self._borrowers.pop(piece) - {peer}:
-            self._peer_to_connection[borrower].cancel_piece(piece)
+        for borrower in self._borrowers.pop(piece) - {peer_connection}:
+            borrower.cancel_piece(piece)
         self._piece_data.put_nowait((piece, data))
 
 
@@ -166,7 +162,7 @@ class PeerConnection(actor.Actor):
         self._metainfo = metainfo
         self._tracker_params = tracker_params
 
-        self.peer = peer
+        self._peer = peer
 
         self._protocol = None
         self._slots = asyncio.Semaphore(max_requests)
@@ -207,7 +203,7 @@ class PeerConnection(actor.Actor):
                 data = b"".join(block_to_data[block] for block in sorted(block_to_data))
                 if (len(data) == piece.length
                         and hashlib.sha1(data).digest() == piece.hash):
-                    self.parent.piece_done(self.peer, piece, data)
+                    self.parent.piece_done(self, piece, data)
                 else:
                     raise ValueError("Peer sent invalid data.")
             self._slots.release()
@@ -220,7 +216,7 @@ class PeerConnection(actor.Actor):
         while True:
             await self._slots.acquire()
             if not self._stack:
-                piece = self.parent.get_piece(self.peer, self._protocol.available)
+                piece = self.parent.get_piece(self, self._protocol.available)
                 if piece is None:
                     return None
                 blocks = metadata.blocks(piece)
@@ -250,8 +246,8 @@ class PeerConnection(actor.Actor):
                 self._tracker_params.peer_id,
                 self._metainfo.pieces,
             ),
-            self.peer.address,
-            self.peer.port,
+            self._peer.address,
+            self._peer.port,
         )
 
         # TODO: Validate the peer's handshake.
