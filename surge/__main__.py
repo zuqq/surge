@@ -71,19 +71,12 @@ def main():
     if args.resume:
         print("Checking for available pieces...", end="")
         outstanding -= metadata.available_pieces(
-            metainfo.pieces,
-            metainfo.files,
-            metainfo.folder
+            metainfo.pieces, metainfo.files, metainfo.folder
         )
         print("Done.")
 
     runners.run(
-        torrent.Download(
-            metainfo,
-            tracker_params,
-            outstanding,
-            max_peers=args.peers
-        )
+        torrent.Download(metainfo, tracker_params, outstanding, max_peers=args.peers)
     )
 
 

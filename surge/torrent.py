@@ -17,12 +17,14 @@ from . import tracker
 
 
 class Download(actor.Supervisor):
-    def __init__(self,
-                 metainfo: metadata.Metainfo,
-                 tracker_params: tracker.Parameters,
-                 outstanding: Set[metadata.Piece],
-                 *,
-                 max_peers: int = 50):
+    def __init__(
+        self,
+        metainfo: metadata.Metainfo,
+        tracker_params: tracker.Parameters,
+        outstanding: Set[metadata.Piece],
+        *,
+        max_peers: int = 50,
+    ):
         super().__init__()
 
         self._metainfo = metainfo
@@ -47,8 +49,7 @@ class Download(actor.Supervisor):
 
     async def _write_pieces(self):
         piece_to_chunks = metadata.piece_to_chunks(
-            self._metainfo.pieces,
-            self._metainfo.files
+            self._metainfo.pieces, self._metainfo.files
         )
         while self._outstanding:
             piece, data = await self._piece_data.get()
@@ -70,8 +71,7 @@ class Download(actor.Supervisor):
 
     async def _main_coro(self):
         self._peer_queue = peer_queue.PeerQueue(
-            self._metainfo.announce_list,
-            self._tracker_params
+            self._metainfo.announce_list, self._tracker_params
         )
         await self.spawn_child(self._peer_queue)
 
@@ -151,12 +151,14 @@ class Printer(actor.Actor):
 
 
 class PeerConnection(actor.Actor):
-    def __init__(self,
-                 metainfo: metadata.Metainfo,
-                 tracker_params: tracker.Parameters,
-                 peer: tracker.Peer,
-                 *,
-                 max_requests: int = 10):
+    def __init__(
+        self,
+        metainfo: metadata.Metainfo,
+        tracker_params: tracker.Parameters,
+        peer: tracker.Peer,
+        *,
+        max_requests: int = 10,
+    ):
         super().__init__()
 
         self._metainfo = metainfo
@@ -201,8 +203,10 @@ class PeerConnection(actor.Actor):
             if not self._outstanding[piece]:
                 block_to_data = self._pop(piece)
                 data = b"".join(block_to_data[block] for block in sorted(block_to_data))
-                if (len(data) == piece.length
-                        and hashlib.sha1(data).digest() == piece.hash):
+                if (
+                    len(data) == piece.length
+                    and hashlib.sha1(data).digest() == piece.hash
+                ):
                     self.parent.piece_done(self, piece, data)
                 else:
                     raise ValueError("Peer sent invalid data.")

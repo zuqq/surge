@@ -60,8 +60,7 @@ class Protocol(asyncio.Protocol):
     def _feed(self, message_type, payload):
         start_state = self._state
         (side_effect, end_state) = self._transition.get(
-            (start_state, message_type),
-            (None, start_state)
+            (start_state, message_type), (None, start_state)
         )
         self._state = end_state
         if side_effect is not None:

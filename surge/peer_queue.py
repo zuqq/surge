@@ -11,8 +11,8 @@ class PeerQueue(actor.Supervisor):
     """Requests peers from trackers and supplies them via the `get` method."""
 
     def __init__(
-            self, announces: Iterable[str], tracker_params: tracker.Parameters,
-        ):
+        self, announces: Iterable[str], tracker_params: tracker.Parameters,
+    ):
         super().__init__()
 
         # Available trackers; unreachable or unresponsive trackers are discarded.
@@ -49,13 +49,13 @@ class PeerQueue(actor.Supervisor):
 
 class TrackerConnection(actor.Actor):
     def __init__(
-            self,
-            peer_queue: PeerQueue,
-            announce: str,
-            tracker_params: tracker.Parameters,
-            *,
-            max_tries: int = 5
-        ):
+        self,
+        peer_queue: PeerQueue,
+        announce: str,
+        tracker_params: tracker.Parameters,
+        *,
+        max_tries: int = 5
+    ):
         super().__init__()
 
         self._peer_queue = peer_queue
