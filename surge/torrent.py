@@ -62,6 +62,7 @@ class Download(actor.Supervisor):
                     await f.seek(c.file_offset)
                     await f.write(data[c.piece_offset : c.piece_offset + c.length])
             self._outstanding.remove(piece)
+            self._printer.advance()
         self._done.set_result(None)
 
     async def wait_done(self):
@@ -108,14 +109,11 @@ class Download(actor.Supervisor):
         return piece
 
     def piece_done(self, peer: tracker.Peer, piece: metadata.Piece, data: bytes):
-        if piece not in self._outstanding:
+        if piece not in self._borrowers:
             return
         for borrower in self._borrowers.pop(piece) - {peer}:
             self._peer_to_connection[borrower].cancel_piece(piece)
         self._piece_data.put_nowait((piece, data))
-        self._printer.advance()
-        if not (self._outstanding or self._borrowers):
-            self._piece_data.put_nowait((None, b""))
 
 
 class Printer(actor.Actor):
