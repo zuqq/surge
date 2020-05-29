@@ -32,14 +32,18 @@ class Protocol(asyncio.Protocol):
         self.handshake = loop.create_future()
         self.bitfield = loop.create_future()
 
+        self.available = set()
+
         # Maps (start_state, message_type) to (side_effect, end_state).
         # Transitions from a state to itself with no side effect are implicit.
         # The `Open` state is treated separately because the handshake message
         # doesn't have a length prefix.
         self._transition = {
-            (Established, Message.BITFIELD): (self.bitfield.set_result, Choked),
+            (Established, Message.BITFIELD): (self._set_bitfield, Choked),
             (Choked, Message.UNCHOKE): (None, Unchoked),
+            (Choked, Message.HAVE): (self.available.add, Choked),
             (Choked, Message.BLOCK): (self._block_data.put_nowait, Choked),
+            (Unchoked, Message.HAVE): (self.available.add, Unchoked),
             (Unchoked, Message.CHOKE): (None, Choked),
             (Unchoked, Message.BLOCK): (self._block_data.put_nowait, Unchoked),
         }
@@ -65,6 +69,10 @@ class Protocol(asyncio.Protocol):
         if end_state.waiter is not None:
             end_state.waiter.set_result(None)
             end_state.waiter = None
+
+    def _set_bitfield(self, available):
+        self.available = available
+        self.bitfield.set_result(None)
 
     def _read_handshake(self):
         if len(self._buffer) < 68:

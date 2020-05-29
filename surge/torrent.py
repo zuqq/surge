@@ -177,7 +177,6 @@ class PeerConnection(actor.Actor):
         self._tracker_params = tracker_params
 
         self.peer = peer
-        self._available = set()
 
         self._protocol = None
         self._slots = asyncio.Semaphore(max_requests)
@@ -231,7 +230,7 @@ class PeerConnection(actor.Actor):
         while True:
             await self._slots.acquire()
             if not self._stack:
-                piece = self.parent.get_piece(self.peer, self._available)
+                piece = self.parent.get_piece(self.peer, self._protocol.available)
                 if piece is None:
                     return None
                 blocks = metadata.blocks(piece)
@@ -267,7 +266,8 @@ class PeerConnection(actor.Actor):
 
         # TODO: Validate the peer's handshake.
         _, _, _ = await self._protocol.handshake
-        self._available = await self._protocol.bitfield
+
+        await self._protocol.bitfield
 
         await asyncio.gather(self._receive_blocks(), self._request_blocks())
 
