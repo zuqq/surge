@@ -20,21 +20,20 @@ class Download(actor.Supervisor):
     def __init__(self,
                  metainfo: metadata.Metainfo,
                  tracker_params: tracker.Parameters,
-                 available_pieces: Set[metadata.Piece],
+                 outstanding: Set[metadata.Piece],
                  *,
                  max_peers: int = 50):
         super().__init__()
 
         self._metainfo = metainfo
         self._tracker_params = tracker_params
-        self._outstanding = set(metainfo.pieces) - available_pieces
+        self._outstanding = outstanding
         self._borrowers = collections.defaultdict(set)
 
         self._printer = None
         self._peer_queue = None
 
-        loop = asyncio.get_event_loop()
-        self._done = loop.create_future()
+        self._done = asyncio.get_event_loop().create_future()
 
         self._piece_data = asyncio.Queue()
         self._peer_connection_slots = asyncio.Semaphore(max_peers)

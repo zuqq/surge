@@ -67,8 +67,7 @@ class Protocol(asyncio.Protocol):
         if side_effect is not None:
             side_effect(payload)
         if end_state in self._waiters:
-            waiters = self._waiters.pop(end_state)
-            for waiter in waiters:
+            for waiter in self._waiters.pop(end_state):
                 waiter.set_result(None)
 
     def _set_bitfield(self, available):
@@ -153,8 +152,7 @@ class Choked(Established):
         if self._exc is not None:
             raise self._exc
         # Register with Unchoked so that we are woken up if the unchoke happens.
-        loop = asyncio.get_running_loop()
-        waiter = loop.create_future()
+        waiter = asyncio.get_running_loop().create_future()
         self._waiters[Unchoked].add(waiter)
         self._write(interested())
         # Wait for the unchoke to happen.

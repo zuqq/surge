@@ -63,7 +63,7 @@ def piece_to_chunks(pieces, files):
 
 
 def available_pieces(pieces, files, folder):
-    """Return a list of all pieces that are present in `folder`."""
+    """Return the set of pieces that are present in `folder`."""
     result = set()
     chunks = piece_to_chunks(pieces, files)
     for piece in pieces:

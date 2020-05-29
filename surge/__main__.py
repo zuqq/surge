@@ -67,18 +67,23 @@ def main():
         metainfo.folder = os.path.join(args.folder, metainfo.folder)
         print(f"Downloading to {metainfo.folder}.")
 
+    outstanding = set(metainfo.pieces)
+
     if args.resume:
         print("Checking for available pieces.")
-        available_pieces = metadata.available_pieces(
-            metainfo.pieces, metainfo.files, metainfo.folder
+        outstanding -= metadata.available_pieces(
+            metainfo.pieces,
+            metainfo.files,
+            metainfo.folder
         )
         print(f"Found {len(available_pieces)} valid pieces.")
-    else:
-        available_pieces = set()
 
     runners.run(
         torrent.Download(
-            metainfo, tracker_params, available_pieces, max_peers=args.peers
+            metainfo,
+            tracker_params,
+            outstanding,
+            max_peers=args.peers
         )
     )
 
