@@ -32,7 +32,6 @@ def main():
             format="%(asctime)s,%(msecs)03d %(levelname)s: %(message)s",
             datefmt="%H:%M:%S",
         )
-        print(f"Logging to {args.log}.")
     else:
         logging.disable(logging.CRITICAL)
 
@@ -43,7 +42,7 @@ def main():
         tracker_params = tracker.Parameters.from_bytes(raw_metainfo)
 
     if args.magnet:
-        print("Getting metainfo file from peers.")
+        print("Getting metainfo file from peers...", end="")
         info_hash, announce_list = magnet.parse(args.magnet)
         tracker_params = tracker.Parameters(info_hash)
         info = runners.run(mex.Download(announce_list, tracker_params))
@@ -58,7 +57,7 @@ def main():
                 b"e",
             ]
         )
-        print("Got metainfo file.")
+        print("Done.")
 
     metainfo = metadata.Metainfo.from_bytes(raw_metainfo)
     metadata.ensure_files_exist(metainfo.folder, metainfo.files)
@@ -70,13 +69,13 @@ def main():
     outstanding = set(metainfo.pieces)
 
     if args.resume:
-        print("Checking for available pieces.")
+        print("Checking for available pieces...", end="")
         outstanding -= metadata.available_pieces(
             metainfo.pieces,
             metainfo.files,
             metainfo.folder
         )
-        print(f"Found {len(available_pieces)} valid pieces.")
+        print("Done.")
 
     runners.run(
         torrent.Download(
@@ -86,8 +85,6 @@ def main():
             max_peers=args.peers
         )
     )
-
-    print("Done.")
 
 
 if __name__ == "__main__":

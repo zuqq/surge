@@ -108,8 +108,8 @@ def parse(message, pieces):
     mt = message_type(message)
     if mt == Message.HAVE:
         return (mt, parse_have(message[1:], pieces))
-    elif mt == Message.BITFIELD:
+    if mt == Message.BITFIELD:
         return (mt, parse_bitfield(message[1:], pieces))
-    elif mt == Message.BLOCK:
+    if mt == Message.BLOCK:
         return (mt, parse_block(message[1:], pieces))
     return (mt, None)
