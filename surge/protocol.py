@@ -42,8 +42,8 @@ class Protocol(asyncio.Protocol):
             (Choked, Message.UNCHOKE): (None, Unchoked),
             (Choked, Message.HAVE): (self.available.add, Choked),
             (Choked, Message.BLOCK): (self._block_data.put_nowait, Choked),
-            (Unchoked, Message.HAVE): (self.available.add, Unchoked),
             (Unchoked, Message.CHOKE): (None, Choked),
+            (Unchoked, Message.HAVE): (self.available.add, Unchoked),
             (Unchoked, Message.BLOCK): (self._block_data.put_nowait, Unchoked),
         }
 
@@ -59,9 +59,10 @@ class Protocol(asyncio.Protocol):
 
     def _feed(self, message_type, payload):
         start_state = self._state
-        if (start_state, message_type) not in self._transition:
-            return
-        (side_effect, end_state) = self._transition[(start_state, message_type)]
+        (side_effect, end_state) = self._transition.get(
+            (start_state, message_type),
+            (None, start_state)
+        )
         self._state = end_state
         if side_effect is not None:
             side_effect(payload)
