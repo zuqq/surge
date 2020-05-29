@@ -20,7 +20,6 @@ class Download(actor.Supervisor):
     """Root node of this module's actor tree.
 
     Children:
-        - One instance of `Writer`
         - One instance of `PeerQueue`
         - One instance of `PieceQueue`
         - Up to `max_peers` instances of `PeerConnection`
@@ -40,18 +39,19 @@ class Download(actor.Supervisor):
 
         self._metainfo = metainfo
         self._tracker_params = tracker_params
-        self._available_pieces = available_pieces
+        self._outstanding = set(metainfo.pieces) - available_pieces
 
         metadata.ensure_files_exist(self._metainfo.folder, self._metainfo.files)
 
         self._printer = None
-        self._writer = None
         self._peer_queue = None
         self._piece_queue = None
 
-        self._done = asyncio.Event()
-        self._peer_connection_slots = asyncio.Semaphore(max_peers)
+        loop = asyncio.get_event_loop()
+        self._done = loop.create_future()
 
+        self._piece_data = asyncio.Queue()
+        self._peer_connection_slots = asyncio.Semaphore(max_peers)
         self._peer_to_connection = {}
 
     async def _spawn_peer_connections(self):
@@ -62,21 +62,40 @@ class Download(actor.Supervisor):
             await self.spawn_child(connection)
             self._peer_to_connection[peer] = connection
 
+    async def _write_pieces(self):
+        piece_to_chunks = metadata.piece_to_chunks(
+            self._metainfo.pieces,
+            self._metainfo.files
+        )
+        while self._outstanding:
+            piece, data = await self._piece_data.get()
+            if piece not in self._outstanding:
+                continue
+            # Write the piece to the file system by writing each of its chunks
+            # to the corresponding file.
+            for c in piece_to_chunks[piece]:
+                file_path = os.path.join(self._metainfo.folder, c.file.path)
+                async with aiofiles.open(file_path, "rb+") as f:
+                    await f.seek(c.file_offset)
+                    await f.write(data[c.piece_offset : c.piece_offset + c.length])
+            self._outstanding.remove(piece)
+        self._done.set_result(None)
+
     async def wait_done(self):
-        await self._done.wait()
+        return await self._done
 
     ### Actor implementation
 
     async def _main_coro(self):
-        self._printer = Printer(len(self._metainfo.pieces), len(self._available_pieces))
-        self._writer = Writer(self._metainfo, self._available_pieces)
+        self._printer = Printer(len(self._metainfo.pieces), len(self._outstanding))
         self._peer_queue = peer_queue.PeerQueue(
-            self._metainfo.announce_list, self._tracker_params
+            self._metainfo.announce_list,
+            self._tracker_params
         )
-        self._piece_queue = PieceQueue(self._metainfo, self._available_pieces)
-        for c in (self._printer, self._writer, self._peer_queue, self._piece_queue):
+        self._piece_queue = PieceQueue(self._metainfo, self._outstanding)
+        for c in (self._printer, self._peer_queue, self._piece_queue):
             await self.spawn_child(c)
-        await self._spawn_peer_connections()
+        await asyncio.gather(self._spawn_peer_connections(), self._write_pieces())
 
     async def _on_child_crash(self, child):
         if isinstance(child, PeerConnection):
@@ -85,11 +104,6 @@ class Download(actor.Supervisor):
             self._peer_connection_slots.release()
         else:
             self._crash(RuntimeError(f"Irreplaceable actor {repr(child)} crashed."))
-
-    ### Messages from Writer
-
-    def done(self):
-        self._done.set()
 
     ### Messages from PieceQueue
 
@@ -110,16 +124,16 @@ class Download(actor.Supervisor):
 
     def piece_done(self, peer: tracker.Peer, piece: metadata.Piece, data: bytes):
         self._printer.advance()
-        self._writer.put_nowait(piece, data)
+        self._piece_data.put_nowait((piece, data))
         self._piece_queue.task_done(peer, piece)
 
 
 class Printer(actor.Actor):
-    def __init__(self, pieces: int, available: int):
+    def __init__(self, pieces: int, outstanding: int):
         super().__init__()
 
         self._pieces = pieces
-        self._available = available
+        self._outstanding = outstanding
         self._event = asyncio.Event()
 
     async def _main_coro(self):
@@ -128,7 +142,7 @@ class Printer(actor.Actor):
             self._event.clear()
             # Print a counter and progress bar.
             n = self._pieces
-            i = self._available
+            i = n - self._outstanding
             digits = len(str(n))
             # Right-align the number of downloaded pieces in a cell of width
             # `digits`, so that the components never move.
@@ -148,49 +162,8 @@ class Printer(actor.Actor):
                 print("\r\x1b[K" + progress + " " + bar + " ", end="")
 
     def advance(self):
-        self._available += 1
+        self._outstanding -= 1
         self._event.set()
-
-
-class Writer(actor.Actor):
-    """Writes downloaded pieces to the file system.
-
-    Downloaded pieces are supplied via the method `put_nowait` and then written
-    to the file system with `aiofiles`.
-    """
-
-    def __init__(self,
-                 metainfo: metadata.Metainfo,
-                 available_pieces: Set[metadata.Piece]):
-        super().__init__()
-
-        self._metainfo = metainfo
-
-        self._outstanding = set(metainfo.pieces) - available_pieces
-        self._piece_data = asyncio.Queue()
-
-    async def _main_coro(self):
-        piece_to_chunks = metadata.piece_to_chunks(
-            self._metainfo.pieces, self._metainfo.files
-        )
-        while self._outstanding:
-            piece, data = await self._piece_data.get()
-            if piece not in self._outstanding:
-                continue
-            # Write the piece to the file system by writing each of its chunks
-            # to the corresponding file.
-            for c in piece_to_chunks[piece]:
-                file_path = os.path.join(self._metainfo.folder, c.file.path)
-                async with aiofiles.open(file_path, "rb+") as f:
-                    await f.seek(c.file_offset)
-                    await f.write(data[c.piece_offset : c.piece_offset + c.length])
-            self._outstanding.remove(piece)
-        self.parent.done()
-
-    ### Queue interface
-
-    def put_nowait(self, piece: metadata.Piece, data: bytes):
-        self._piece_data.put_nowait((piece, data))
 
 
 class PieceQueue(actor.Actor):
@@ -205,7 +178,7 @@ class PieceQueue(actor.Actor):
 
     def __init__(self,
                  metainfo: metadata.Metainfo,
-                 available_pieces: Set[metadata.Piece]):
+                 outstanding: Iterable[metadata.Piece]):
         super().__init__()
 
         # Bookkeeping:
@@ -216,7 +189,7 @@ class PieceQueue(actor.Actor):
         # those that are being downloaded right now.
         self._available = collections.defaultdict(set)
         self._borrowers = collections.defaultdict(set)
-        self._outstanding = set(metainfo.pieces) - available_pieces
+        self._outstanding = set(outstanding)
 
     def set_have(self, peer: tracker.Peer, pieces: Iterable[metadata.Piece]):
         self._available[peer] = set(pieces)
