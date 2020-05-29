@@ -23,6 +23,8 @@ class Protocol(asyncio.Protocol):
 
         self._block_data = asyncio.Queue()
 
+        self._waiter = {}
+
         loop = asyncio.get_event_loop()
         self.handshake = loop.create_future()
         self.bitfield = loop.create_future()
@@ -61,9 +63,8 @@ class Protocol(asyncio.Protocol):
         self._state = end_state
         if side_effect is not None:
             side_effect(payload)
-        if end_state.waiter is not None:
-            end_state.waiter.set_result(None)
-            end_state.waiter = None
+        if end_state in self._waiter:
+            self._waiter.pop(end_state).set_result(None)
 
     def _set_bitfield(self, available):
         self.available = available
@@ -138,8 +139,6 @@ class Open(Protocol):
 
 
 class Established(Protocol):
-    waiter = None
-
     def _read(self):
         self._read_messages()
 
@@ -150,10 +149,11 @@ class Choked(Established):
             raise self._exc
         # Register with Unchoked so that we are woken up if the unchoke happens.
         loop = asyncio.get_running_loop()
-        Unchoked.waiter = loop.create_future()
+        waiter = loop.create_future()
+        self._waiter[Unchoked] = waiter
         self._write(interested())
         # Wait for the unchoke to happen.
-        await Unchoked.waiter
+        await waiter
         self._write(request(block))
 
 
