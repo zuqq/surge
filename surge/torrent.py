@@ -96,24 +96,26 @@ class Download(actor.Supervisor):
     ### Messages from PeerConnection
 
     def get_piece(self, peer, available):
-        pool = self._outstanding or set(self._borrowers)
+        borrowed = set(self._borrowers)
+        pool = self._outstanding - borrowed or borrowed
         if not pool:
             return None
         try:
             piece = random.choice(list(pool & available))
         except IndexError:
             piece = random.choice(list(pool))
-        self._outstanding.discard(piece)
         self._borrowers[piece].add(peer)
         return piece
 
     def piece_done(self, peer: tracker.Peer, piece: metadata.Piece, data: bytes):
-        if piece not in self._borrowers:
+        if piece not in self._outstanding:
             return
         for borrower in self._borrowers.pop(piece) - {peer}:
             self._peer_to_connection[borrower].cancel_piece(piece)
         self._piece_data.put_nowait((piece, data))
         self._printer.advance()
+        if not (self._outstanding or self._borrowers):
+            self._piece_data.put_nowait((None, b""))
 
 
 class Printer(actor.Actor):
