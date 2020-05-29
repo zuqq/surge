@@ -26,32 +26,36 @@ class Actor:
 
     def __init__(self):
         self.parent: Optional[Actor] = None
+        self.children: Set[Actor] = set()
 
         self.running = False
         self.crashed = False
 
-        self.children: Set[Actor] = set()
-
-        self._coros: Set[Awaitable] = {self._run_main_coro()}
+        self._coros: Set[Awaitable] = {self._main_coro()}
         self._tasks: Set[asyncio.Task] = set()
+        # Task that runs the elements of `self._coros` and reports any
+        # `Exception` they throw.
+        self._runner: Optional[asyncio.Task] = None
 
-    async def _run_main_coro(self):
+    async def _run_coros(self):
+        self._tasks = {asyncio.create_task(coro) for coro in self._coros}
         try:
-            await self._main_coro()
+            await asyncio.gather(*self._tasks)
+        # Note that this *does not* catch `asyncio.CancelledError`, because the
+        # latter is only a `BaseException`. Instead, cancelling any element of
+        # `self._tasks` will also cancel this coroutine.
         except Exception as e:
             self._crash(e)
 
     async def start(self, parent: Optional[Actor] = None):
         """Start `self` and set its parent to `parent`."""
+        self.parent = parent
+
         if self.running:
             return
         self.running = True
 
-        self.parent = parent
-
-        for coro in self._coros:
-            self._tasks.add(asyncio.create_task(coro))
-
+        self._runner = asyncio.create_task(self._run_coros())
         logging.debug("%r started", self)
 
     async def spawn_child(self, child: Actor):
@@ -60,15 +64,13 @@ class Actor:
         self.children.add(child)
 
     def _crash(self, reason: Optional[Exception] = None):
-        if self.crashed:
+        if self.crashed or not self.running:
             return
         self.crashed = True
 
         if reason is not None:
             logging.warning("%r crashed with %r", self, reason)
 
-        if not self.running:
-            return
         if self.parent is None:
             raise SystemExit(f"Unsupervised actor {repr(self)} crashed.")
         self.parent.report_crash(self)
@@ -91,11 +93,18 @@ class Actor:
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
 
+        if self._runner is not None:
+            # Cancel `self._runner`, because `self._coros` may be empty.
+            self._runner.cancel()
+            try:
+                await self._runner
+            except asyncio.CancelledError:
+                pass
+
         for child in self.children:
             await child.stop()
 
         await self._on_stop()
-
         logging.debug("%r stopped", self)
 
     ### User logic
