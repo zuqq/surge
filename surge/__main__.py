@@ -61,6 +61,7 @@ def main():
         print("Got metainfo file.")
 
     metainfo = metadata.Metainfo.from_bytes(raw_metainfo)
+    metadata.ensure_files_exist(metainfo.folder, metainfo.files)
 
     if args.folder:
         metainfo.folder = os.path.join(args.folder, metainfo.folder)

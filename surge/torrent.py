@@ -30,8 +30,6 @@ class Download(actor.Supervisor):
         self._outstanding = set(metainfo.pieces) - available_pieces
         self._borrowers = collections.defaultdict(set)
 
-        metadata.ensure_files_exist(self._metainfo.folder, self._metainfo.files)
-
         self._printer = None
         self._peer_queue = None
 
@@ -59,8 +57,6 @@ class Download(actor.Supervisor):
             piece, data = await self._piece_data.get()
             if piece not in self._outstanding:
                 continue
-            # Write the piece to the file system by writing each of its chunks
-            # to the corresponding file.
             for c in piece_to_chunks[piece]:
                 file_path = os.path.join(self._metainfo.folder, c.file.path)
                 async with aiofiles.open(file_path, "rb+") as f:
@@ -101,17 +97,12 @@ class Download(actor.Supervisor):
     ### Messages from PeerConnection
 
     def get_piece(self, peer, available):
-        # If there are missing pieces that are not being downloaded right now,
-        # choose from those. Otherwise we choose from all missing pieces.
         pool = self._outstanding or set(self._borrowers)
         if not pool:
             return None
-        # Try to return a missing piece that the peer has.
-        good = pool & available
-        if good:
-            piece = random.choice(list(good))
-        # If there are none, fall back to a random missing piece.
-        else:
+        try:
+            piece = random.choice(list(pool & available))
+        except IndexError:
             piece = random.choice(list(pool))
         self._outstanding.discard(piece)
         self._borrowers[piece].add(peer)

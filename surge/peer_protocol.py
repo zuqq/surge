@@ -63,19 +63,15 @@ def cancel(block):
     )
 
 
-class InvalidHandshake(Exception):
-    pass
-
-
 def parse_handshake(payload):
     try:
         pstrlen, pstr, reserved, info_hash, peer_id = struct.unpack(
             ">B19sQ20s20s", payload
         )
     except struct.error:
-        raise InvalidHandshake
+        raise ValueError("Wrong length.")
     if pstrlen != 19 or pstr != b"BitTorrent protocol":
-        raise InvalidHandshake
+        raise ValueError("Wrong protocol string.")
     return (reserved, info_hash, peer_id)
 
 

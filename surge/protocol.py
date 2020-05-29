@@ -1,7 +1,6 @@
 import asyncio
 
 from .peer_protocol import (
-    InvalidHandshake,
     Message,
     handshake,
     interested,
@@ -9,10 +8,6 @@ from .peer_protocol import (
     parse_handshake,
     request,
 )
-
-
-class InsufficientData(Exception):
-    pass
 
 
 class Protocol(asyncio.Protocol):
@@ -28,7 +23,7 @@ class Protocol(asyncio.Protocol):
 
         self._block_data = asyncio.Queue()
 
-        loop = asyncio.get_running_loop()
+        loop = asyncio.get_event_loop()
         self.handshake = loop.create_future()
         self.bitfield = loop.create_future()
 
@@ -55,8 +50,8 @@ class Protocol(asyncio.Protocol):
         return self.__class__
 
     @_state.setter
-    def _state(self, next_state):
-        self.__class__ = next_state
+    def _state(self, state):
+        self.__class__ = state
 
     def _feed(self, message_type, payload):
         start_state = self._state
@@ -73,17 +68,6 @@ class Protocol(asyncio.Protocol):
     def _set_bitfield(self, available):
         self.available = available
         self.bitfield.set_result(None)
-
-    def _read_handshake(self):
-        if len(self._buffer) < 68:
-            raise InsufficientData
-        self._state = Established
-        try:
-            result = parse_handshake(self._buffer[:68])
-            self.handshake.set_result(result)
-        except InvalidHandshake as e:
-            self.handshake.set_exception(e)
-        del self._buffer[:68]
 
     def _read_messages(self):
         while len(self._buffer) >= 4:
@@ -140,11 +124,16 @@ class Protocol(asyncio.Protocol):
 
 class Open(Protocol):
     def _read(self):
-        try:
-            self._read_handshake()
-        except InsufficientData:
+        if len(self._buffer) < 68:
             return
-        # There might be more messages in the buffer, so we should consume them.
+        self._state = Established
+        try:
+            result = parse_handshake(self._buffer[:68])
+            self.handshake.set_result(result)
+        except ValueError as e:
+            self.handshake.set_exception(e)
+        del self._buffer[:68]
+        # There might be more messages in the buffer, so we consume them.
         self._read_messages()
 
 
