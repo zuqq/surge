@@ -20,7 +20,7 @@ class Download(actor.Supervisor):
     """Root node of this module's actor tree.
 
     Children:
-        - One instance of `FileWriter`
+        - One instance of `Writer`
         - One instance of `PeerQueue`
         - One instance of `PieceQueue`
         - Up to `max_peers` instances of `PeerConnection`
@@ -44,7 +44,7 @@ class Download(actor.Supervisor):
 
         metadata.ensure_files_exist(self._metainfo.folder, self._metainfo.files)
 
-        self._file_writer = None
+        self._writer = None
         self._peer_queue = None
         self._piece_queue = None
 
@@ -67,12 +67,12 @@ class Download(actor.Supervisor):
     ### Actor implementation
 
     async def _main_coro(self):
-        self._file_writer = FileWriter(self._metainfo, self._available_pieces)
+        self._writer = Writer(self._metainfo, self._available_pieces)
         self._peer_queue = peer_queue.PeerQueue(
             self._metainfo.announce_list, self._tracker_params
         )
         self._piece_queue = PieceQueue(self._metainfo, self._available_pieces)
-        for c in (self._file_writer, self._peer_queue, self._piece_queue):
+        for c in (self._writer, self._peer_queue, self._piece_queue):
             await self.spawn_child(c)
         await self._spawn_peer_connections()
 
@@ -84,7 +84,7 @@ class Download(actor.Supervisor):
         else:
             self._crash(RuntimeError(f"Irreplaceable actor {repr(child)} crashed."))
 
-    ### Messages from FileWriter
+    ### Messages from Writer
 
     def done(self):
         self._done.set()
@@ -107,11 +107,11 @@ class Download(actor.Supervisor):
         return self._piece_queue.get_nowait(peer)
 
     def piece_done(self, peer: tracker.Peer, piece: metadata.Piece, data: bytes):
-        self._file_writer.put_nowait(piece, data)
+        self._writer.put_nowait(piece, data)
         self._piece_queue.task_done(peer, piece)
 
 
-class FileWriter(actor.Actor):
+class Writer(actor.Actor):
     """Writes downloaded pieces to the file system.
 
     Downloaded pieces are supplied via the method `put_nowait` and then written
