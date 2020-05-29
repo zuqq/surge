@@ -1,4 +1,4 @@
-from typing import Iterable, Optional, Set
+from typing import Set
 
 import asyncio
 import collections
@@ -17,18 +17,6 @@ from . import tracker
 
 
 class Download(actor.Supervisor):
-    """Root node of this module's actor tree.
-
-    Children:
-        - One instance of `PeerQueue`
-        - One instance of `PieceQueue`
-        - Up to `max_peers` instances of `PeerConnection`
-
-    Messages between the `PeerConnection` instances and the other actors are
-    routed through this class, because an actor should only hold references to
-    its parent and children.
-    """
-
     def __init__(self,
                  metainfo: metadata.Metainfo,
                  tracker_params: tracker.Parameters,
@@ -40,12 +28,12 @@ class Download(actor.Supervisor):
         self._metainfo = metainfo
         self._tracker_params = tracker_params
         self._outstanding = set(metainfo.pieces) - available_pieces
+        self._borrowers = collections.defaultdict(set)
 
         metadata.ensure_files_exist(self._metainfo.folder, self._metainfo.files)
 
         self._printer = None
         self._peer_queue = None
-        self._piece_queue = None
 
         loop = asyncio.get_event_loop()
         self._done = loop.create_future()
@@ -87,45 +75,55 @@ class Download(actor.Supervisor):
     ### Actor implementation
 
     async def _main_coro(self):
-        self._printer = Printer(len(self._metainfo.pieces), len(self._outstanding))
         self._peer_queue = peer_queue.PeerQueue(
             self._metainfo.announce_list,
             self._tracker_params
         )
-        self._piece_queue = PieceQueue(self._metainfo, self._outstanding)
-        for c in (self._printer, self._peer_queue, self._piece_queue):
-            await self.spawn_child(c)
+        await self.spawn_child(self._peer_queue)
+
+        self._printer = Printer(len(self._metainfo.pieces), len(self._outstanding))
+        await self.spawn_child(self._printer)
+
         await asyncio.gather(self._spawn_peer_connections(), self._write_pieces())
 
     async def _on_child_crash(self, child):
         if isinstance(child, PeerConnection):
-            self._piece_queue.drop_peer(child.peer)
+            for piece, borrowers in list(self._borrowers.items()):
+                borrowers.discard(child.peer)
+                if not borrowers:
+                    self._borrowers.pop(piece)
+                    self._outstanding.add(piece)
             self._peer_to_connection.pop(child.peer)
             self._peer_connection_slots.release()
         else:
             self._crash(RuntimeError(f"Irreplaceable actor {repr(child)} crashed."))
 
-    ### Messages from PieceQueue
-
-    def cancel_piece(self, peers: Iterable[tracker.Peer], piece: metadata.Piece):
-        for peer in peers:
-            self._peer_to_connection[peer].cancel_piece(piece)
-
     ### Messages from PeerConnection
 
-    def set_have(self, peer: tracker.Peer, pieces: Iterable[metadata.Piece]):
-        self._piece_queue.set_have(peer, pieces)
-
-    def add_to_have(self, peer: tracker.Peer, piece: metadata.Piece):
-        self._piece_queue.add_to_have(peer, piece)
-
-    def get_piece(self, peer: tracker.Peer) -> Optional[metadata.Piece]:
-        return self._piece_queue.get_nowait(peer)
+    def get_piece(self, peer, available):
+        # If there are missing pieces that are not being downloaded right now,
+        # choose from those. Otherwise we choose from all missing pieces.
+        pool = self._outstanding or set(self._borrowers)
+        if not pool:
+            return None
+        # Try to return a missing piece that the peer has.
+        good = pool & available
+        if good:
+            piece = random.choice(list(good))
+        # If there are none, fall back to a random missing piece.
+        else:
+            piece = random.choice(list(pool))
+        self._outstanding.discard(piece)
+        self._borrowers[piece].add(peer)
+        return piece
 
     def piece_done(self, peer: tracker.Peer, piece: metadata.Piece, data: bytes):
-        self._printer.advance()
+        if piece not in self._borrowers:
+            return
+        for borrower in self._borrowers.pop(piece) - {peer}:
+            self._peer_to_connection[borrower].cancel_piece(piece)
         self._piece_data.put_nowait((piece, data))
-        self._piece_queue.task_done(peer, piece)
+        self._printer.advance()
 
 
 class Printer(actor.Actor):
@@ -166,80 +164,6 @@ class Printer(actor.Actor):
         self._event.set()
 
 
-class PieceQueue(actor.Actor):
-    """Tracks piece availability.
-
-    More precisely, this class keeps track of which pieces the connected peers
-    have and which pieces are being downloaded from them.
-
-    The parent `Download` instance calls `get_nowait` to get pieces to download;
-    successful downloads are reported via `task_done`.
-    """
-
-    def __init__(self,
-                 metainfo: metadata.Metainfo,
-                 outstanding: Iterable[metadata.Piece]):
-        super().__init__()
-
-        # Bookkeeping:
-        # - `self._available[peer]` is the set of pieces that `peer` has;
-        # - `self._borrowers[piece]` is the set of peers that `piece` is being
-        # downloaded from;
-        # - `self._outstanding` is the set of pieces that are missing, except
-        # those that are being downloaded right now.
-        self._available = collections.defaultdict(set)
-        self._borrowers = collections.defaultdict(set)
-        self._outstanding = set(outstanding)
-
-    def set_have(self, peer: tracker.Peer, pieces: Iterable[metadata.Piece]):
-        self._available[peer] = set(pieces)
-
-    def add_to_have(self, peer: tracker.Peer, piece: metadata.Piece):
-        self._available[peer].add(piece)
-
-    def drop_peer(self, peer: tracker.Peer):
-        if peer not in self._available:
-            return
-        self._available.pop(peer)
-        for piece, borrowers in list(self._borrowers.items()):
-            borrowers.discard(peer)
-            if not borrowers:
-                self._borrowers.pop(piece)
-                self._outstanding.add(piece)
-
-    ### Queue interface
-
-    def get_nowait(self, peer: tracker.Peer) -> Optional[metadata.Piece]:
-        """Return a piece to download from `peer`."""
-        # If there are missing pieces that are not being downloaded right now,
-        # choose from those. Otherwise we choose from all missing pieces.
-        pool = self._outstanding or set(self._borrowers)
-        if not pool:
-            return None
-        # Try to return a missing piece that the peer has.
-        available = pool & self._available[peer]
-        if available:
-            piece = random.choice(list(available))
-        # If there are none, fall back to a random missing piece.
-        else:
-            piece = random.choice(list(pool))
-        pool.remove(piece)
-        self._borrowers[piece].add(peer)
-        return piece
-
-    def task_done(self, peer: tracker.Peer, piece: metadata.Piece):
-        """Mark `piece` as downloaded.
-
-        If `piece` is also being downloaded from peers other than `peer`,
-        instruct the corresponding `PeerConnection` instances to cancel the
-        download.
-        """
-        if piece not in self._borrowers:
-            return
-        borrowers = self._borrowers.pop(piece)
-        self.parent.cancel_piece(borrowers - {peer}, piece)
-
-
 class PeerConnection(actor.Actor):
     def __init__(self,
                  metainfo: metadata.Metainfo,
@@ -249,9 +173,12 @@ class PeerConnection(actor.Actor):
                  max_requests: int = 10):
         super().__init__()
 
-        self.peer = peer
         self._metainfo = metainfo
         self._tracker_params = tracker_params
+
+        self.peer = peer
+        self._available = set()
+
         self._protocol = None
         self._slots = asyncio.Semaphore(max_requests)
         self._timer = {}
@@ -304,7 +231,7 @@ class PeerConnection(actor.Actor):
         while True:
             await self._slots.acquire()
             if not self._stack:
-                piece = self.parent.get_piece(self.peer)
+                piece = self.parent.get_piece(self.peer, self._available)
                 if piece is None:
                     return None
                 blocks = metadata.blocks(piece)
@@ -340,8 +267,7 @@ class PeerConnection(actor.Actor):
 
         # TODO: Validate the peer's handshake.
         _, _, _ = await self._protocol.handshake
-        pieces = await self._protocol.bitfield
-        self.parent.set_have(self.peer, pieces)
+        self._available = await self._protocol.bitfield
 
         await asyncio.gather(self._receive_blocks(), self._request_blocks())
 

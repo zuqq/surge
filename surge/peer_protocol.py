@@ -87,16 +87,16 @@ def parse_have(payload, pieces):
 
 def parse_bitfield(payload, pieces):
     """Return a list of the pieces whose bits are set in the given bitfield."""
-    available_pieces = []
+    available = set()
     i = 0
     for b in payload:
         mask = 1 << 7
         while mask and i < len(pieces):
             if b & mask:
-                available_pieces.append(pieces[i])
+                available.add(pieces[i])
             mask >>= 1
             i += 1
-    return available_pieces
+    return available
 
 
 def parse_block(payload, pieces):
