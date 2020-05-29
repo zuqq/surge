@@ -1,4 +1,5 @@
 import asyncio
+import collections
 
 from .peer_protocol import (
     Message,
@@ -23,7 +24,8 @@ class Protocol(asyncio.Protocol):
 
         self._block_data = asyncio.Queue()
 
-        self._waiter = {}
+        # `self._waiters[state]` is the set of `Future`s waiting for `state`.
+        self._waiters = collections.defaultdict(set)
 
         loop = asyncio.get_event_loop()
         self.handshake = loop.create_future()
@@ -63,8 +65,10 @@ class Protocol(asyncio.Protocol):
         self._state = end_state
         if side_effect is not None:
             side_effect(payload)
-        if end_state in self._waiter:
-            self._waiter.pop(end_state).set_result(None)
+        if end_state in self._waiters:
+            waiters = self._waiters.pop(end_state)
+            for waiter in waiters:
+                waiter.set_result(None)
 
     def _set_bitfield(self, available):
         self.available = available
@@ -150,7 +154,7 @@ class Choked(Established):
         # Register with Unchoked so that we are woken up if the unchoke happens.
         loop = asyncio.get_running_loop()
         waiter = loop.create_future()
-        self._waiter[Unchoked] = waiter
+        self._waiters[Unchoked].add(waiter)
         self._write(interested())
         # Wait for the unchoke to happen.
         await waiter
