@@ -103,7 +103,7 @@ def parse_block(payload, pieces):
     return block, block_data
 
 
-def parse(message, pieces):
+def parse(pieces, message):
     """Return the pair (type, content) for the given message."""
     mt = message_type(message)
     if mt == Message.HAVE:

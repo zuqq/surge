@@ -1,55 +1,119 @@
 from typing import List
 
 import asyncio
+import functools
 import hashlib
 
 from . import actor
 from . import bencoding
 from . import extension_protocol
+from . import metadata
 from . import metadata_protocol
 from . import peer_protocol
 from . import peer_queue
+from . import protocol
 from . import tracker
+
+
+def parse(message):
+    """Return the pair (type, content) for the given message."""
+    mt = peer_protocol.message_type(message)
+    if mt == peer_protocol.Message.EXTENSION_PROTOCOL:
+        payload = message[1:]
+        emt = extension_protocol.message_type(payload)
+        if emt == extension_protocol.Message.HANDSHAKE:
+            d = bencoding.decode(payload[1:])
+            return (emt, (d[b"m"][b"ut_metadata"], d[b"metadata_size"]))
+        elif emt == extension_protocol.Message.UT_METADATA:
+            d, payload = metadata_protocol.parse_message(payload[1:])
+            mmt = metadata_protocol.Message(d[b"msg_type"])
+            if mmt == metadata_protocol.Message.DATA:
+                return (mmt, (d[b"piece"], payload))
+            else:
+                return (mmt, None)
+    return (mt, None)
+
+
+class Protocol(protocol.Closed):
+    def __init__(self, info_hash, peer_id):
+        super().__init__(info_hash, peer_id)
+
+        self._parser = parse
+
+        self.metadata_size = asyncio.get_event_loop().create_future()
+
+        self._ut_metadata = None
+
+        self._transition = {
+            (protocol.Established, extension_protocol.Message.HANDSHAKE): (
+                self._extension_handshake,
+                Choked,
+            ),
+            (Choked, peer_protocol.Message.UNCHOKE): (None, Unchoked),
+            (Choked, metadata_protocol.Message.DATA): (
+                self._block_data.put_nowait,
+                Choked,
+            ),
+            (Unchoked, peer_protocol.Message.CHOKE): (None, Choked),
+            (Unchoked, metadata_protocol.Message.DATA): (
+                self._block_data.put_nowait,
+                Unchoked,
+            ),
+        }
+
+    def _extension_handshake(self, payload):
+        ut_metadata, metadata_size = payload
+        self._ut_metadata = ut_metadata
+        self.metadata_size.set_result(metadata_size)
+
+    def connection_made(self, transport):
+        self._state = protocol.Open
+        self._transport = transport
+        self._write(peer_protocol.handshake(self._info_hash, self._peer_id))
+        self._write(extension_protocol.handshake())
+
+
+class Choked(protocol.Established):
+    async def request(self, index):
+        if self._exc is not None:
+            raise self._exc
+        waiter = asyncio.get_running_loop().create_future()
+        self._waiters[Unchoked].add(waiter)
+        self._write(peer_protocol.interested())
+        await waiter
+        self._write(metadata_protocol.request(index, self._ut_metadata))
+
+
+class Unchoked(protocol.Established):
+    async def request(self, index):
+        if self._exc is not None:
+            raise self._exc
+        self._write(metadata_protocol.request(index, self._ut_metadata))
 
 
 class Download(actor.Supervisor):
     def __init__(
         self,
-        announce_list: List[str],
         tracker_params: tracker.Parameters,
+        announce_list: List[str],
         *,
-        max_peers: int = 50,
+        max_peers: int = 10,
     ):
         super().__init__()
 
-        self._announce_list = announce_list
         self._tracker_params = tracker_params
-
-        self._peer_queue = None
-
-        self._result = None
-        self._done = asyncio.Event()
+        self._peer_queue = peer_queue.PeerQueue(announce_list, tracker_params)
+        self._done = asyncio.get_event_loop().create_future()
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
-
-    async def _spawn_peer_connections(self):
-        while True:
-            await self._peer_connection_slots.acquire()
-            peer = await self._peer_queue.get()
-            await self.spawn_child(PeerConnection(self, self._tracker_params, peer))
-
-    async def wait_done(self) -> bytes:
-        """Return the raw metainfo file once it has been downloaded."""
-        await self._done.wait()
-        return self._result
 
     ### Actor implementation
 
     async def _main(self):
-        self._peer_queue = peer_queue.PeerQueue(
-            self._announce_list, self._tracker_params
-        )
         await self.spawn_child(self._peer_queue)
-        await self._spawn_peer_connections()
+        while True:
+            await self._peer_connection_slots.acquire()
+            peer = await self._peer_queue.get()
+            await self.spawn_child(PeerConnection(self._tracker_params, peer))
 
     async def _on_child_crash(self, child):
         if isinstance(child, PeerConnection):
@@ -61,145 +125,55 @@ class Download(actor.Supervisor):
 
     def done(self, raw_metainfo: bytes):
         """Signal that `raw_metainfo` has been received and verified."""
-        self._result = raw_metainfo
-        self._done.set()
+        self._done.set_result(raw_metainfo)
+
+    ### Interface
+
+    async def wait_done(self) -> bytes:
+        """Return the raw metainfo file once it has been downloaded."""
+        return await self._done
 
 
 class PeerConnection(actor.Actor):
     def __init__(
-        self,
-        download: Download,
-        tracker_params: tracker.Parameters,
-        peer: tracker.Peer,
-        *,
-        max_requests: int = 10,
+        self, tracker_params: tracker.Parameters, peer: tracker.Peer,
     ):
         super().__init__()
 
-        self._download = download
         self._tracker_params = tracker_params
-
         self._peer = peer
-
-        self._reader = None
-        self._writer = None
-        self._unchoked = asyncio.Event()
-
-        self._ut_metadata = None
-        self._metadata_size = None
-
-        self._outstanding = None
-        self._data = {}
-
-        self._timer = {}
-        self._slots = asyncio.Semaphore(max_requests)
-
-    async def _read_peer_message(self):
-        len_prefix = int.from_bytes(await self._reader.readexactly(4), "big")
-        message = await self._reader.readexactly(len_prefix)
-        return peer_protocol.message_type(message), message[1:]
-
-    async def _connect(self):
-        self._reader, self._writer = await asyncio.open_connection(
-            self._peer.address, self._peer.port
-        )
-
-        self._writer.write(
-            peer_protocol.handshake(
-                self._tracker_params.info_hash, self._tracker_params.peer_id
-            )
-        )
-        await self._writer.drain()
-
-        message = extension_protocol.handshake()
-        self._writer.write(message)
-        await self._writer.drain()
-
-        _ = await self._reader.readexactly(68)
-
-        while True:
-            message_type, payload = await self._read_peer_message()
-            if message_type == peer_protocol.Message.BITFIELD:
-                continue
-            if message_type == peer_protocol.Message.EXTENSION_PROTOCOL:
-                break
-            raise ConnectionError("Peer sent unexpected message.")
-
-        try:
-            _ = extension_protocol.message_type(payload)
-        except ValueError:
-            raise ConnectionError("Peer sent invalid extension protocol message.")
-        d = bencoding.decode(payload[1:])
-        self._ut_metadata = d[b"m"][b"ut_metadata"]
-        self._metadata_size = d[b"metadata_size"]
-
-    async def _disconnect(self):
-        if self._writer is None:
-            return
-        self._writer.close()
-        try:
-            await self._writer.wait_closed()
-        # https://bugs.python.org/issue38856
-        except (BrokenPipeError, ConnectionResetError):
-            pass
-
-    async def _unchoke(self):
-        if self._unchoked.is_set():
-            return
-        self._writer.write(peer_protocol.interested())
-        await self._writer.drain()
-        await self._unchoked.wait()
-
-    async def _timeout(self, *, timeout=10):
-        await asyncio.sleep(timeout)
-        self._crash(TimeoutError(f"Request timed out."))
-
-    async def _receive(self):
-        while True:
-            message_type, payload = await self._read_peer_message()
-            if message_type == peer_protocol.Message.CHOKE:
-                self._unchoked.clear()
-            elif message_type == peer_protocol.Message.UNCHOKE:
-                self._unchoked.set()
-            elif message_type == peer_protocol.Message.EXTENSION_PROTOCOL:
-                message_type = extension_protocol.message_type(payload)
-                if message_type != extension_protocol.Message.UT_METADATA:
-                    raise ConnectionError("Peer sent invalid extension message.")
-                message, data = metadata_protocol.parse_message(payload[1:])
-                if message[b"msg_type"] == metadata_protocol.Message.DATA.value:
-                    index = message[b"piece"]
-                    if index not in self._timer:
-                        continue
-                    self._timer.pop(index).cancel()
-                    self._slots.release()
-                    self._outstanding -= 1
-                    self._data[index] = data
-                elif message[b"msg_type"] == metadata_protocol.Message.REJECT.value:
-                    raise ConnectionError("Peer sent reject.")
-                else:
-                    raise ConnectionError("Peer sent invalid metadata message.")
-                if not self._outstanding:
-                    data = b"".join(self._data[index] for index in sorted(self._data))
-                    if hashlib.sha1(data).digest() != self._tracker_params.info_hash:
-                        raise ConnectionError("Peer sent invalid data.")
-                    self._download.done(data)
-
-    async def _request(self):
-        for i in range(self._outstanding):
-            await self._unchoke()
-            await self._slots.acquire()
-            message = metadata_protocol.request(i, self._ut_metadata)
-            self._writer.write(message)
-            await self._writer.drain()
-            self._timer[i] = asyncio.create_task(self._timeout())
+        self._protocol = None
 
     ### Actor implementation
 
     async def _main(self):
-        await self._connect()
-        # Integer division that rounds up.
-        self._outstanding = (self._metadata_size + 2 ** 14 - 1) // 2 ** 14
-        await asyncio.gather(self._receive(), self._request())
+        loop = asyncio.get_running_loop()
+        _, self._protocol = await loop.create_connection(
+            functools.partial(
+                Protocol, self._tracker_params.info_hash, self._tracker_params.peer_id,
+            ),
+            self._peer.address,
+            self._peer.port,
+        )
+
+        # TODO: Validate the peer's handshake.
+        _, _, _ = await self._protocol.handshake
+
+        metadata_size = await self._protocol.metadata_size
+
+        data = []
+        for i in range((metadata_size + 2 ** 14 - 1) // 2 ** 14):
+            await self._protocol.request(i)
+            index, payload = await self._protocol.receive()
+            if index == i:
+                data.append(payload)
+        info = b"".join(data)
+        if hashlib.sha1(info).digest() != self._tracker_params.info_hash:
+            raise ConnectionError("Peer sent invalid data.")
+        self.parent.done(info)
 
     async def _on_stop(self):
-        await self._disconnect()
+        if self._protocol is None:
+            return
+        self._protocol.close()
+        await self._protocol.wait_closed()

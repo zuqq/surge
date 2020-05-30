@@ -1,5 +1,6 @@
 import asyncio
 import collections
+import functools
 
 from .peer_protocol import (
     Message,
@@ -11,41 +12,30 @@ from .peer_protocol import (
 )
 
 
-class Protocol(asyncio.Protocol):
-    def __init__(self, info_hash, peer_id, pieces):
+class Closed(asyncio.Protocol):
+    def __init__(self, info_hash, peer_id):
         self._info_hash = info_hash
         self._peer_id = peer_id
-        self._pieces = pieces
+
+        self._parser = None
 
         self._transport = None
         self._exc = None
         self._closed = asyncio.Event()
         self._buffer = bytearray()
 
-        self._block_data = asyncio.Queue()
-
         # `self._waiters[state]` is the set of `Future`s waiting for `state`.
         self._waiters = collections.defaultdict(set)
 
-        loop = asyncio.get_event_loop()
-        self.handshake = loop.create_future()
-        self.bitfield = loop.create_future()
+        self.handshake = asyncio.get_event_loop().create_future()
 
-        self.available = set()
+        self._block_data = asyncio.Queue()
 
         # Maps (start_state, message_type) to (side_effect, end_state).
         # Transitions from a state to itself with no side effect are implicit.
         # The `Open` state is treated separately because the handshake message
         # doesn't have a length prefix.
-        self._transition = {
-            (Established, Message.BITFIELD): (self._set_bitfield, Choked),
-            (Choked, Message.UNCHOKE): (None, Unchoked),
-            (Choked, Message.HAVE): (self.available.add, Choked),
-            (Choked, Message.BLOCK): (self._block_data.put_nowait, Choked),
-            (Unchoked, Message.CHOKE): (None, Choked),
-            (Unchoked, Message.HAVE): (self.available.add, Unchoked),
-            (Unchoked, Message.BLOCK): (self._block_data.put_nowait, Unchoked),
-        }
+        self._transition = {}
 
     ### State machine
 
@@ -69,10 +59,6 @@ class Protocol(asyncio.Protocol):
             for waiter in self._waiters.pop(end_state):
                 waiter.set_result(None)
 
-    def _set_bitfield(self, available):
-        self.available = available
-        self.bitfield.set_result(None)
-
     def _read_messages(self):
         while len(self._buffer) >= 4:
             n = int.from_bytes(self._buffer[:4], "big")
@@ -80,7 +66,7 @@ class Protocol(asyncio.Protocol):
                 break
             message = bytes(self._buffer[4 : 4 + n])
             del self._buffer[: 4 + n]
-            self._feed(*parse(message, self._pieces))
+            self._feed(*self._parser(message))
 
     ### asyncio.Protocol implementation
 
@@ -92,7 +78,7 @@ class Protocol(asyncio.Protocol):
     def connection_lost(self, exc):
         if self._exc is None:
             self._exc = exc
-        self._state = Protocol
+        self._state = Closed
         self._closed.set()
 
     def data_received(self, data):
@@ -126,7 +112,7 @@ class Protocol(asyncio.Protocol):
         await self._closed.wait()
 
 
-class Open(Protocol):
+class Open(Closed):
     def _read(self):
         if len(self._buffer) < 68:
             return
@@ -139,6 +125,30 @@ class Open(Protocol):
         del self._buffer[:68]
         # There might be more messages in the buffer, so we consume them.
         self._read_messages()
+
+
+class Protocol(Closed):
+    def __init__(self, info_hash, peer_id, pieces):
+        super().__init__(info_hash, peer_id)
+
+        self._parser = functools.partial(parse, pieces)
+
+        self.bitfield = asyncio.get_event_loop().create_future()
+        self.available = set()
+
+        self._transition = {
+            (Established, Message.BITFIELD): (self._bitfield, Choked),
+            (Choked, Message.UNCHOKE): (None, Unchoked),
+            (Choked, Message.HAVE): (self.available.add, Choked),
+            (Choked, Message.BLOCK): (self._block_data.put_nowait, Choked),
+            (Unchoked, Message.CHOKE): (None, Choked),
+            (Unchoked, Message.HAVE): (self.available.add, Unchoked),
+            (Unchoked, Message.BLOCK): (self._block_data.put_nowait, Unchoked),
+        }
+
+    def _bitfield(self, available):
+        self.available = available
+        self.bitfield.set_result(None)
 
 
 class Established(Protocol):

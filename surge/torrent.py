@@ -32,8 +32,8 @@ class Download(actor.Supervisor):
         self._outstanding = outstanding
         self._borrowers = collections.defaultdict(set)
 
-        self._printer = None
-        self._peer_queue = None
+        self._peer_queue = peer_queue.PeerQueue(metainfo.announce_list, tracker_params)
+        self._printer = Printer(len(metainfo.pieces), len(outstanding))
 
         self._done = asyncio.get_event_loop().create_future()
 
@@ -75,12 +75,7 @@ class Download(actor.Supervisor):
         self._done.set_result(None)
 
     async def _main(self):
-        self._peer_queue = peer_queue.PeerQueue(
-            self._metainfo.announce_list, self._tracker_params
-        )
         await self.spawn_child(self._peer_queue)
-
-        self._printer = Printer(len(self._metainfo.pieces), len(self._outstanding))
         await self.spawn_child(self._printer)
 
         await asyncio.gather(self._spawn_peer_connections(), self._write_pieces())
@@ -181,9 +176,7 @@ class PeerConnection(actor.Actor):
 
         self._metainfo = metainfo
         self._tracker_params = tracker_params
-
         self._peer = peer
-
         self._protocol = None
         self._slots = asyncio.Semaphore(max_requests)
         self._timer = {}
@@ -258,12 +251,6 @@ class PeerConnection(actor.Actor):
             await self._protocol.request(block)
             self._timer[block] = asyncio.create_task(self._timeout())
 
-    async def _disconnect(self):
-        if self._protocol is None:
-            return
-        self._protocol.close()
-        await self._protocol.wait_closed()
-
     async def _main(self):
         loop = asyncio.get_running_loop()
         _, self._protocol = await loop.create_connection(
@@ -285,7 +272,10 @@ class PeerConnection(actor.Actor):
         await asyncio.gather(self._receive_blocks(), self._request_blocks())
 
     async def _on_stop(self):
-        await self._disconnect()
+        if self._protocol is None:
+            return
+        self._protocol.close()
+        await self._protocol.wait_closed()
 
     ### Messages from Download
 

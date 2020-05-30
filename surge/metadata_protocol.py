@@ -18,8 +18,8 @@ def parse_message(message: bytes) -> Tuple[Message, bytes]:
     return (d, message[i:])
 
 
-def request(i: int, ut_metadata) -> bytes:
-    payload = bencoding.encode({b"msg_type": Message.REQUEST.value, b"piece": i})
+def request(index: int, ut_metadata: int) -> bytes:
+    payload = bencoding.encode({b"msg_type": Message.REQUEST.value, b"piece": index})
     return struct.pack(
         f">LBB{len(payload)}s", 1 + 1 + len(payload), 20, ut_metadata, payload,
     )

@@ -129,7 +129,7 @@ class UDPTrackerConnection(_BaseTrackerConnection):
                 try:
                     resp = await self._request()
                 except Exception as e:
-                    logging.warning("%r failed with %r", self._url, e)
+                    logging.warning("%r failed with %r", self._url.geturl(), e)
                     tries += 1
                 else:
                     break

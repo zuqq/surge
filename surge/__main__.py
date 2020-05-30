@@ -45,7 +45,7 @@ def main():
         print("Getting metainfo file from peers...", end="")
         info_hash, announce_list = magnet.parse(args.magnet)
         tracker_params = tracker.Parameters(info_hash)
-        info = runners.run(mex.Download(announce_list, tracker_params))
+        info = runners.run(mex.Download(tracker_params, announce_list))
         # Peers only send us the raw value associated with the `b"info"` key,
         # so we still need to build the metainfo dictionary.
         raw_metainfo = b"".join(
