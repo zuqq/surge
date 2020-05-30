@@ -43,7 +43,7 @@ class Actor:
             await asyncio.gather(*self._tasks)
         # Note that this *does not* catch `asyncio.CancelledError`, because the
         # latter is only a `BaseException`. Instead, cancelling any element of
-        #  `self._tasks` will also cancel this coroutine.
+        # `self._tasks` will also cancel this coroutine.
         except Exception as e:
             self._crash(e)
 

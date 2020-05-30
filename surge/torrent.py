@@ -40,6 +40,16 @@ class Download(actor.Supervisor):
         self._piece_data = asyncio.Queue()
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
 
+    def __repr__(self):
+        cls = self.__class__.__name__
+        info = [
+            f"info_hash={self._tracker_params.info_hash}",
+            f"peer_id={self._tracker_params.peer_id}",
+        ]
+        return f"<{cls} object at {hex(id(self))} with {', '.join(info)}>"
+
+    ### Actor implementation
+
     async def _spawn_peer_connections(self):
         while True:
             await self._peer_connection_slots.acquire()
@@ -63,11 +73,6 @@ class Download(actor.Supervisor):
             self._outstanding.remove(piece)
             self._printer.advance()
         self._done.set_result(None)
-
-    async def wait_done(self):
-        return await self._done
-
-    ### Actor implementation
 
     async def _main_coro(self):
         self._peer_queue = peer_queue.PeerQueue(
@@ -111,6 +116,11 @@ class Download(actor.Supervisor):
             borrower.cancel_piece(piece)
         self._piece_data.put_nowait((piece, data))
 
+    ### Interface
+
+    async def wait_done(self):
+        return await self._done
+
 
 class Printer(actor.Actor):
     def __init__(self, pieces: int, outstanding: int):
@@ -119,6 +129,12 @@ class Printer(actor.Actor):
         self._pieces = pieces
         self._outstanding = outstanding
         self._event = asyncio.Event()
+
+    def __repr__(self):
+        cls = self.__class__.__name__
+        return f"<{cls} object at {hex(id(self))}>"
+
+    ### Actor implementation
 
     async def _main_coro(self):
         while True:
@@ -144,6 +160,8 @@ class Printer(actor.Actor):
                 # Left-align the filled-up cells.
                 bar = f"[{done * '#' : <{parts}}]"
                 print("\r\x1b[K" + progress + " " + bar + " ", end="")
+
+    ### Interface
 
     def advance(self):
         self._outstanding -= 1
@@ -180,6 +198,13 @@ class PeerConnection(actor.Actor):
         self._stack = []
         self._outstanding = {}
         self._data = {}
+
+    def __repr__(self):
+        cls = self.__class__.__name__
+        peer = f"peer={self._peer}"
+        return f"<{cls} object at {hex(id(self))} with {peer}>"
+
+    ### Actor implementation
 
     def _pop(self, piece):
         # If `piece` is the newest piece, discard the stack.
@@ -238,8 +263,6 @@ class PeerConnection(actor.Actor):
             return
         self._protocol.close()
         await self._protocol.wait_closed()
-
-    ### Actor implementation
 
     async def _main_coro(self):
         loop = asyncio.get_running_loop()

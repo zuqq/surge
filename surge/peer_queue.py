@@ -22,6 +22,10 @@ class PeerQueue(actor.Supervisor):
         self._peers = asyncio.Queue()
         self._seen_peers = set()
 
+    def __repr__(self):
+        cls = self.__class__.__name__
+        return f"<{cls} object at {hex(id(self))}>"
+
     ### Actor implementation
 
     async def _main_coro(self):
@@ -64,6 +68,11 @@ class TrackerConnection(actor.Actor):
 
         self._tracker_params = tracker_params
         self._max_tries = max_tries
+
+    def __repr__(self):
+        cls = self.__class__.__name__
+        info = [f"announce={self.announce}"]
+        return f"<{cls} object at {hex(id(self))} with {', '.join(info)}>"
 
     async def _main_coro(self):
         while True:
