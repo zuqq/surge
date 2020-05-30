@@ -43,8 +43,8 @@ class Download(actor.Supervisor):
     def __repr__(self):
         cls = self.__class__.__name__
         info = [
-            f"info_hash={self._tracker_params.info_hash}",
-            f"peer_id={self._tracker_params.peer_id}",
+            f"info_hash={repr(self._tracker_params.info_hash)}",
+            f"peer_id={repr(self._tracker_params.peer_id)}",
         ]
         return f"<{cls} object at {hex(id(self))} with {', '.join(info)}>"
 
