@@ -74,7 +74,7 @@ class Download(actor.Supervisor):
             self._printer.advance()
         self._done.set_result(None)
 
-    async def _main_coro(self):
+    async def _main(self):
         self._peer_queue = peer_queue.PeerQueue(
             self._metainfo.announce_list, self._tracker_params
         )
@@ -136,7 +136,7 @@ class Printer(actor.Actor):
 
     ### Actor implementation
 
-    async def _main_coro(self):
+    async def _main(self):
         while True:
             await self._event.wait()
             self._event.clear()
@@ -264,7 +264,7 @@ class PeerConnection(actor.Actor):
         self._protocol.close()
         await self._protocol.wait_closed()
 
-    async def _main_coro(self):
+    async def _main(self):
         loop = asyncio.get_running_loop()
         _, self._protocol = await loop.create_connection(
             functools.partial(

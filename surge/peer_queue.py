@@ -33,7 +33,7 @@ class PeerQueue(actor.Supervisor):
 
     ### Actor implementation
 
-    async def _main_coro(self):
+    async def _main(self):
         for announce in self._announce_list:
             url = urllib.parse.urlparse(announce)
             if url.scheme in ("http", "https"):
@@ -77,7 +77,7 @@ class _BaseTrackerConnection(actor.Actor):
 
 
 class HTTPTrackerConnection(_BaseTrackerConnection):
-    async def _main_coro(self):
+    async def _main(self):
         while True:
             params = urllib.parse.parse_qs(self._url.query)
             params.update(dataclasses.asdict(self._tracker_params))
@@ -122,7 +122,7 @@ class UDPTrackerConnection(_BaseTrackerConnection):
 
         return tracker.Response.from_bytes(self._url, interval, data[20:])
 
-    async def _main_coro(self):
+    async def _main(self):
         while True:
             tries = 0
             while tries < self._max_tries:

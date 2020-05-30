@@ -44,7 +44,7 @@ class Download(actor.Supervisor):
 
     ### Actor implementation
 
-    async def _main_coro(self):
+    async def _main(self):
         self._peer_queue = peer_queue.PeerQueue(
             self._announce_list, self._tracker_params
         )
@@ -195,7 +195,7 @@ class PeerConnection(actor.Actor):
 
     ### Actor implementation
 
-    async def _main_coro(self):
+    async def _main(self):
         await self._connect()
         # Integer division that rounds up.
         self._outstanding = (self._metadata_size + 2 ** 14 - 1) // 2 ** 14

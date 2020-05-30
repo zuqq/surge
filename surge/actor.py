@@ -11,11 +11,11 @@ class Actor:
     `Actor`s form a directed graph whose structure is stored in the attributes
     `parent` and `children`; acyclicity of this graph is not enforced.
 
-    The principal purpose of an `Actor` is to run the coroutine `_main_coro`.
+    The principal purpose of an `Actor` is to run the coroutine `_main`.
     In doing so, it may spawn children and pass messages to its parent and
     children. Messages are to be implemented as methods of the receiving class.
 
-    `Exception`s in `_main_coro` cause the `Actor` to crash; if it has a parent,
+    `Exception`s in `_main` cause the `Actor` to crash; if it has a parent,
     the crash bubbles up. An ordinary `Actor` that receives a crash report from
     one of its children crashes itself. Instances of the subclass `Supervisor`
     can handle crash reports gracefully instead.
@@ -31,13 +31,13 @@ class Actor:
         self.running = False
         self.crashed = False
 
-        self._coros: Set[Awaitable] = {self._main_coro()}
+        self._coros: Set[Awaitable] = {self._main()}
         self._tasks: Set[asyncio.Task] = set()
         # Task that runs the elements of `self._coros` and reports any
         # `Exception` they throw.
         self._runner: Optional[asyncio.Task] = None
 
-    async def _run_coros(self):
+    async def _run(self):
         self._tasks = {asyncio.create_task(coro) for coro in self._coros}
         try:
             await asyncio.gather(*self._tasks)
@@ -55,7 +55,7 @@ class Actor:
             return
         self.running = True
 
-        self._runner = asyncio.create_task(self._run_coros())
+        self._runner = asyncio.create_task(self._run())
         logging.debug("%r started", self)
 
     async def spawn_child(self, child: Actor):
@@ -109,7 +109,7 @@ class Actor:
 
     ### User logic
 
-    async def _main_coro(self):
+    async def _main(self):
         pass
 
     async def _on_stop(self):
