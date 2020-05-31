@@ -106,15 +106,14 @@ class Bitfield(Message):
     value = 5
 
     def __init__(self, payload):
-        self.length = len(payload) + 1
+        self.length = 1 + len(payload)
         self.payload = payload
 
         self.format = f"LB{self.length}s"
 
     @classmethod
     def from_bytes(cls, data):
-        n = len(data) - 4 - 1  # Subtract length of prefix and identifier.
-        _, _, payload = struct.unpack(f">LB{n}s", data)
+        _, _, payload = struct.unpack(f">LB{len(data) - 4 - 1}s", data)
         return cls(payload)
 
     def available(self, pieces):
@@ -157,8 +156,9 @@ class Block(Message):
 
     @classmethod
     def from_bytes(cls, data):
-        n = len(data) - 4 - 1 - 4 - 4
-        _, _, index, offset, data = struct.unpack(f">LBLL{n}s", data)
+        _, _, index, offset, data = struct.unpack(
+            f">LBLL{len(data) - 4 - 1 - 4 - 4}s", data
+        )
         return cls(index, offset, data)
 
     def block(self, pieces):
