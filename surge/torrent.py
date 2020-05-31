@@ -265,7 +265,7 @@ class PeerConnection(actor.Actor):
         )
 
         # TODO: Validate the peer's handshake.
-        _, _, _ = await self._protocol.handshake
+        _ = await self._protocol.handshake
 
         await self._protocol.bitfield
 

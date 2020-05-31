@@ -11,84 +11,61 @@ from . import metadata
 from . import metadata_protocol
 from . import peer_protocol
 from . import peer_queue
-from . import protocol
 from . import tracker
+from .protocol import Closed, Established
 
 
-def parse(message):
-    """Return the pair (type, content) for the given message."""
-    mt = peer_protocol.message_type(message)
-    if mt == peer_protocol.Message.EXTENSION_PROTOCOL:
-        payload = message[1:]
-        emt = extension_protocol.message_type(payload)
-        if emt == extension_protocol.Message.HANDSHAKE:
-            d = bencoding.decode(payload[1:])
-            return (emt, (d[b"m"][b"ut_metadata"], d[b"metadata_size"]))
-        elif emt == extension_protocol.Message.UT_METADATA:
-            d, payload = metadata_protocol.parse_message(payload[1:])
-            mmt = metadata_protocol.Message(d[b"msg_type"])
-            if mmt == metadata_protocol.Message.DATA:
-                return (mmt, (d[b"piece"], payload))
-            else:
-                return (mmt, None)
-    return (mt, None)
-
-
-class Protocol(protocol.Closed):
+class Protocol(Closed):
     def __init__(self, info_hash, peer_id):
         super().__init__(info_hash, peer_id)
 
-        self._parser = parse
-
+        self._ut_metadata = None
         self.metadata_size = asyncio.get_event_loop().create_future()
 
-        self._ut_metadata = None
+        def handshake_cb(message):
+            self._ut_metadata = message.ut_metadata
+            self.metadata_size.set_result(message.metadata_size)
+
+        def data_cb(message):
+            self._data.put_nowait((message.index, message.data))
 
         self._transition = {
-            (protocol.Established, extension_protocol.Message.HANDSHAKE): (
-                self._extension_handshake,
-                Choked,
-            ),
-            (Choked, peer_protocol.Message.UNCHOKE): (None, Unchoked),
-            (Choked, metadata_protocol.Message.DATA): (
-                self._block_data.put_nowait,
-                Choked,
-            ),
-            (Unchoked, peer_protocol.Message.CHOKE): (None, Choked),
-            (Unchoked, metadata_protocol.Message.DATA): (
-                self._block_data.put_nowait,
-                Unchoked,
-            ),
+            (Established, extension_protocol.Handshake): (handshake_cb, Choked),
+            (Choked, peer_protocol.Unchoke): (None, Unchoked),
+            (Choked, metadata_protocol.Data): (data_cb, Choked),
+            (Unchoked, peer_protocol.Choke): (None, Choked),
+            (Unchoked, metadata_protocol.Data): (data_cb, Unchoked),
         }
 
-    def _extension_handshake(self, payload):
-        ut_metadata, metadata_size = payload
-        self._ut_metadata = ut_metadata
-        self.metadata_size.set_result(metadata_size)
 
-    def connection_made(self, transport):
-        self._state = protocol.Open
-        self._transport = transport
-        self._write(peer_protocol.handshake(self._info_hash, self._peer_id))
-        self._write(extension_protocol.handshake())
-
-
-class Choked(protocol.Established):
+class Choked(Established):
     async def request(self, index):
         if self._exc is not None:
             raise self._exc
         waiter = asyncio.get_running_loop().create_future()
         self._waiters[Unchoked].add(waiter)
-        self._write(peer_protocol.interested())
+        self._write(peer_protocol.Interested())
         await waiter
-        self._write(metadata_protocol.request(index, self._ut_metadata))
+        self._write(
+            peer_protocol.ExtensionProtocol(
+                extension_protocol.Metadata(
+                    metadata_protocol.Request(index), self._ut_metadata
+                )
+            )
+        )
 
 
-class Unchoked(protocol.Established):
+class Unchoked(Established):
     async def request(self, index):
         if self._exc is not None:
             raise self._exc
-        self._write(metadata_protocol.request(index, self._ut_metadata))
+        self._write(
+            peer_protocol.ExtensionProtocol(
+                extension_protocol.Metadata(
+                    metadata_protocol.Request(index), self._ut_metadata
+                )
+            )
+        )
 
 
 class Download(actor.Supervisor):
@@ -157,7 +134,7 @@ class PeerConnection(actor.Actor):
         )
 
         # TODO: Validate the peer's handshake.
-        _, _, _ = await self._protocol.handshake
+        _ = await self._protocol.handshake
 
         metadata_size = await self._protocol.metadata_size
 
