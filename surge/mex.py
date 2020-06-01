@@ -15,7 +15,7 @@ class Download(actor.Supervisor):
             params: tracker.Parameters,
             announce_list: List[str],
             *,
-            max_peers: int = 100,
+            max_peers: int = 10,
         ):
         super().__init__()
 

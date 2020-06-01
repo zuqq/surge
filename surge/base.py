@@ -94,7 +94,7 @@ class Download(actor.Supervisor):
     def get_piece(
             self,
             peer_connection: PeerConnection,
-            available: Set[metadata.Piece]
+            available: Set[metadata.Piece],
         ):
         borrowed = set(self._borrowers)
         pool = self._outstanding - borrowed or borrowed
@@ -111,7 +111,7 @@ class Download(actor.Supervisor):
             self,
             peer_connection: PeerConnection,
             piece: metadata.Piece,
-            data: bytes
+            data: bytes,
         ):
         if piece not in self._borrowers:
             return

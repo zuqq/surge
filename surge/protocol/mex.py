@@ -39,7 +39,10 @@ class Choked(base.Established):
         await waiter
         self._write(
             _peer.ExtensionProtocol(
-                _extension.Metadata(_metadata.Request(index), self._ut_metadata)
+                _extension.Metadata(
+                    _metadata.Request(index),
+                    self._ut_metadata,
+                )
             )
         )
 
@@ -50,6 +53,9 @@ class Unchoked(base.Established):
             raise self._exc
         self._write(
             _peer.ExtensionProtocol(
-                _extension.Metadata(_metadata.Request(index), self._ut_metadata)
+                _extension.Metadata(
+                    _metadata.Request(index),
+                    self._ut_metadata,
+                )
             )
         )
