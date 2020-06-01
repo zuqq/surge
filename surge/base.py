@@ -1,4 +1,5 @@
-from typing import Dict, List, Set
+from __future__ import annotations
+from typing import DefaultDict, Dict, List, Set
 
 import asyncio
 import collections
@@ -7,7 +8,7 @@ import hashlib
 import os
 import random
 
-import aiofiles
+import aiofiles  # type: ignore
 
 from . import actor
 from . import metadata
@@ -29,13 +30,14 @@ class Download(actor.Supervisor):
         self._meta = meta
         self._params = params
         self._outstanding = outstanding
+        self._borrowers: DefaultDict[metadata.Piece, Set[PeerConnection]]
         self._borrowers = collections.defaultdict(set)
 
         self._peer_queue = tracker.PeerQueue(meta.announce_list, params)
         self._printer = Printer(len(meta.pieces), len(outstanding))
 
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
-        self._piece_data = asyncio.Queue()
+        self._piece_data = asyncio.Queue()  # type: ignore
 
         self._done = asyncio.get_event_loop().create_future()
 
@@ -89,7 +91,9 @@ class Download(actor.Supervisor):
 
     ### Messages from PeerConnection
 
-    def get_piece(self, peer_connection, available):
+    def get_piece(
+        self, peer_connection: PeerConnection, available: Set[metadata.Piece]
+    ):
         borrowed = set(self._borrowers)
         pool = self._outstanding - borrowed or borrowed
         if not pool:
@@ -101,7 +105,9 @@ class Download(actor.Supervisor):
         self._borrowers[piece].add(peer_connection)
         return piece
 
-    def piece_done(self, peer_connection, piece, data):
+    def piece_done(
+        self, peer_connection: PeerConnection, piece: metadata.Piece, data: bytes
+    ):
         if piece not in self._borrowers:
             return
         for borrower in self._borrowers.pop(piece) - {peer_connection}:
@@ -171,14 +177,11 @@ class PeerConnection(actor.Actor):
         self._protocol = None
 
         self._slots = asyncio.Semaphore(max_requests)
-        self._timer = {}
+        self._timer: Dict[metadata.Block, asyncio.Task] = {}
 
-        self._stack: List[metadata.Block]
-        self._stack = []
-        self._outstanding = Dict[metadata.Piece, Set[metadata.Block]]
-        self._outstanding = {}
-        self._data: Dict[metadata.Piece, Dict[metadata.Block, bytes]]
-        self._data = {}
+        self._stack: List[metadata.Block] = []
+        self._outstanding: Dict[metadata.Piece, Set[metadata.Block]] = {}
+        self._data: Dict[metadata.Piece, Dict[metadata.Block, bytes]] = {}
 
     def __repr__(self):
         cls = self.__class__.__name__

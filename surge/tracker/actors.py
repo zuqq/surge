@@ -1,4 +1,4 @@
-from typing import Iterable
+from typing import List, Set
 
 import asyncio
 import dataclasses
@@ -16,16 +16,14 @@ from .. import bencoding
 
 
 class PeerQueue(actor.Supervisor):
-    def __init__(
-        self, announce_list: Iterable[str], params: metadata.Parameters,
-    ):
+    def __init__(self, announce_list: List[str], params: metadata.Parameters):
         super().__init__()
 
         self._announce_list = announce_list
         self._params = params
 
-        self._peers = asyncio.Queue()
-        self._seen_peers = set()
+        self._peers = asyncio.Queue()  # type: ignore
+        self._seen_peers = set()  # type: Set[metadata.Peer]
 
     def __repr__(self):
         cls = self.__class__.__name__

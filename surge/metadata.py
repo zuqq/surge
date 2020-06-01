@@ -1,4 +1,5 @@
-from typing import List
+from __future__ import annotations
+from typing import Any, Dict, List
 
 import dataclasses
 import os
@@ -31,9 +32,9 @@ class Chunk:
     length: int
 
 
-def chunks(pieces, files):
+def chunks(pieces: List[Piece], files: List[File]) -> Dict[Piece, List[Chunk]]:
     """Return a dictionary mapping each piece to a list of its chunks."""
-    result = {piece: [] for piece in pieces}
+    result: Dict[Piece, List[Chunk]] = {piece: [] for piece in pieces}
     file_index = 0
     file = files[file_index]
     file_offset = 0
@@ -58,7 +59,7 @@ class Block:
     length: int
 
 
-def blocks(piece, block_length=2 ** 14):
+def blocks(piece: Piece, block_length: int = 2 ** 14) -> List[Block]:
     """Return a list of `piece`'s blocks."""
     result = []
     for piece_offset in range(0, piece.length, block_length):
@@ -101,11 +102,11 @@ class Metadata:
     files: List[File]
 
     @classmethod
-    def from_bytes(cls, raw_meta):
+    def from_bytes(cls, raw_meta: bytes) -> Metadata:
         return cls.from_dict(bencoding.decode(raw_meta))
 
     @classmethod
-    def from_dict(cls, decoded):
+    def from_dict(cls, decoded: Dict[bytes, Any]) -> Metadata:
         announce_list = []
         if b"announce" in decoded:
             announce_list.append(decoded[b"announce"].decode())

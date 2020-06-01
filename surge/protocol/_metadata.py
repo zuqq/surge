@@ -1,32 +1,44 @@
+from __future__ import annotations
+
 from .. import bencoding
 
 
-class Request:
+class Message:
+    def to_bytes(self) -> bytes:
+        raise NotImplementedError
+
+    @classmethod
+    def from_bytes(cls, _: bytes) -> Message:
+        # TODO: Check if the message is well-formed.
+        return cls()
+
+
+class Request(Message):
     value = 0
 
-    def __init__(self, index):
+    def __init__(self, index: int):
         self.index = index
 
-    def to_bytes(self):
+    def to_bytes(self) -> bytes:
         return bencoding.encode({b"msg_type": self.value, b"piece": self.index})
 
 
-class Data:
+class Data(Message):
     value = 1
 
-    def __init__(self, index, data):
+    def __init__(self, index: int, data: bytes):
         self.index = index
         self.data = data
 
 
-class Reject:
+class Reject(Message):
     value = 2
 
-    def __init__(self, index):
+    def __init__(self, index: int):
         self.index = index
 
 
-def parse(data):
+def parse(data: bytes) -> Message:
     i, d = bencoding.decode_from(data, 0)
     value = d[b"msg_type"]
     index = d[b"piece"]
