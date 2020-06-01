@@ -17,12 +17,12 @@ from .. import bencoding
 
 class PeerQueue(actor.Supervisor):
     def __init__(
-        self, announce_list: Iterable[str], tracker_params: metadata.Parameters,
+        self, announce_list: Iterable[str], params: metadata.Parameters,
     ):
         super().__init__()
 
         self._announce_list = announce_list
-        self._tracker_params = tracker_params
+        self._params = params
 
         self._peers = asyncio.Queue()
         self._seen_peers = set()
@@ -37,9 +37,9 @@ class PeerQueue(actor.Supervisor):
         for announce in self._announce_list:
             url = urllib.parse.urlparse(announce)
             if url.scheme in ("http", "https"):
-                await self.spawn_child(HTTPTrackerConnection(url, self._tracker_params))
+                await self.spawn_child(HTTPTrackerConnection(url, self._params))
             elif url.scheme == "udp":
-                await self.spawn_child(UDPTrackerConnection(url, self._tracker_params))
+                await self.spawn_child(UDPTrackerConnection(url, self._params))
             else:
                 logging.warning("%r is invalid", announce)
 
@@ -60,14 +60,14 @@ class _BaseTrackerConnection(actor.Actor):
     def __init__(
         self,
         url: urllib.parse.ParseResult,
-        tracker_params: metadata.Parameters,
+        params: metadata.Parameters,
         *,
         max_tries: int = 5,
     ):
         super().__init__()
 
         self._url = url
-        self._tracker_params = tracker_params
+        self._params = params
         self._max_tries = max_tries
 
     def __repr__(self):
@@ -80,7 +80,7 @@ class HTTPTrackerConnection(_BaseTrackerConnection):
     async def _main(self):
         while True:
             params = urllib.parse.parse_qs(self._url.query)
-            params.update(dataclasses.asdict(self._tracker_params))
+            params.update(dataclasses.asdict(self._params))
             req_url = self._url._replace(query=urllib.parse.urlencode(params))
             async with aiohttp.ClientSession() as session:
                 async with session.get(req_url.geturl()) as req:
@@ -109,7 +109,7 @@ class UDPTrackerConnection(_BaseTrackerConnection):
         data = await asyncio.wait_for(protocol.recv(), timeout=5)
         _, _, conn_id = protocol.parse_connect(data)
 
-        protocol.send(protocol.announce(trans_id, conn_id, self._tracker_params))
+        protocol.send(protocol.announce(trans_id, conn_id, self._params))
         await protocol.drain()
 
         data = await asyncio.wait_for(protocol.recv(), timeout=5)

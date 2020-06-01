@@ -92,7 +92,7 @@ def _parse_hashes(hashes, length, piece_length):
 
 
 @dataclasses.dataclass
-class Metainfo:
+class Metadata:
     announce_list: List[str]  # See BEP 12.
     length: int
     piece_length: int
@@ -101,8 +101,8 @@ class Metainfo:
     files: List[File]
 
     @classmethod
-    def from_bytes(cls, raw_metainfo):
-        return cls.from_dict(bencoding.decode(raw_metainfo))
+    def from_bytes(cls, raw_meta):
+        return cls.from_dict(bencoding.decode(raw_meta))
 
     @classmethod
     def from_dict(cls, decoded):

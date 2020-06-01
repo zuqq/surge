@@ -66,44 +66,43 @@ def main():
         logging.disable(logging.CRITICAL)
 
     if args.file:
-        print(f"Using metainfo file {args.file}.")
+        print(f"Using metadata file {args.file}.")
         with open(args.file, "rb") as f:
-            raw_metainfo = f.read()
-        tracker_params = tracker.Parameters.from_bytes(raw_metainfo)
+            raw_meta = f.read()
+        meta = metadata.Metadata.from_bytes(raw_meta)
+        params = tracker.Parameters.from_bytes(raw_meta)
 
     if args.magnet:
-        print("Getting metainfo file from peers...", end="")
+        print("Getting metadata file from peers...", end="")
         info_hash, announce_list = magnet.parse(args.magnet)
-        tracker_params = tracker.Parameters(info_hash)
-        raw_info = runners.run(mex.Download(tracker_params, announce_list))
+        params = tracker.Parameters(info_hash)
+        raw_info = runners.run(mex.Download(params, announce_list))
         # Peers only send us the raw value associated with the `b"info"` key,
-        # so we still need to build the metainfo dictionary.
-        metainfo = metadata.Metainfo.from_dict(
+        # so we still need to build the metadata dictionary.
+        meta = metadata.Metadata.from_dict(
             {
                 b"announce-list": [[url.encode() for url in announce_list]],
                 b"info": bencoding.decode(raw_info),
             }
         )
         print("Done.")
-    else:
-        metainfo = metadata.Metainfo.from_bytes(raw_metainfo)
 
-    touch(metainfo.folder, metainfo.files)
+    print("Building the file tree...", end="")
+    touch(meta.folder, meta.files)
+    print("Done.")
 
     if args.folder:
-        metainfo.folder = os.path.join(args.folder, metainfo.folder)
-        print(f"Downloading to {metainfo.folder}.")
+        meta.folder = os.path.join(args.folder, meta.folder)
+        print(f"Downloading to {meta.folder}.")
 
-    outstanding = set(metainfo.pieces)
+    outstanding = set(meta.pieces)
 
     if args.resume:
         print("Checking for available pieces...", end="")
-        outstanding -= available(metainfo.pieces, metainfo.files, metainfo.folder)
+        outstanding -= available(meta.pieces, meta.files, meta.folder)
         print("Done.")
 
-    runners.run(
-        base.Download(metainfo, tracker_params, outstanding, max_peers=args.peers)
-    )
+    runners.run(base.Download(meta, params, outstanding, max_peers=args.peers))
 
 
 if __name__ == "__main__":

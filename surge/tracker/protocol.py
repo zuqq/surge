@@ -12,17 +12,17 @@ def connect(trans_id):
     return struct.pack(">ql4s", 0x41727101980, Message.CONNECT.value, trans_id)
 
 
-def announce(trans_id, conn_id, tracker_params):
+def announce(trans_id, conn_id, params):
     return struct.pack(
         ">8sl4s20s20sqqqlL4slH",
         conn_id,
         Message.ANNOUNCE.value,
         trans_id,
-        tracker_params.info_hash,
-        tracker_params.peer_id,
-        tracker_params.downloaded,
-        tracker_params.left,
-        tracker_params.uploaded,
+        params.info_hash,
+        params.peer_id,
+        params.downloaded,
+        params.left,
+        params.uploaded,
         0,
         0,
         secrets.token_bytes(4),

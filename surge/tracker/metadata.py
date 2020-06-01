@@ -20,8 +20,8 @@ class Parameters:
     compact: int = 1  # See BEP 23.
 
     @classmethod
-    def from_bytes(cls, raw_metainfo):
-        raw_info = bencoding.raw_val(raw_metainfo, b"info")
+    def from_bytes(cls, raw_meta):
+        raw_info = bencoding.raw_val(raw_meta, b"info")
         info_hash = hashlib.sha1(raw_info).digest()
         return cls(info_hash)
 

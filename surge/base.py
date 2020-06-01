@@ -18,21 +18,21 @@ from . import tracker
 class Download(actor.Supervisor):
     def __init__(
         self,
-        metainfo: metadata.Metainfo,
-        tracker_params: tracker.Parameters,
+        meta: metadata.Metadata,
+        params: tracker.Parameters,
         outstanding: Set[metadata.Piece],
         *,
         max_peers: int = 50,
     ):
         super().__init__()
 
-        self._metainfo = metainfo
-        self._tracker_params = tracker_params
+        self._meta = meta
+        self._params = params
         self._outstanding = outstanding
         self._borrowers = collections.defaultdict(set)
 
-        self._peer_queue = tracker.PeerQueue(metainfo.announce_list, tracker_params)
-        self._printer = Printer(len(metainfo.pieces), len(outstanding))
+        self._peer_queue = tracker.PeerQueue(meta.announce_list, params)
+        self._printer = Printer(len(meta.pieces), len(outstanding))
 
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
         self._piece_data = asyncio.Queue()
@@ -42,8 +42,8 @@ class Download(actor.Supervisor):
     def __repr__(self):
         cls = self.__class__.__name__
         info = [
-            f"info_hash={repr(self._tracker_params.info_hash)}",
-            f"peer_id={repr(self._tracker_params.peer_id)}",
+            f"info_hash={repr(self._params.info_hash)}",
+            f"peer_id={repr(self._params.peer_id)}",
         ]
         return f"<{cls} object at {hex(id(self))} with {', '.join(info)}>"
 
@@ -53,17 +53,17 @@ class Download(actor.Supervisor):
         while True:
             await self._peer_connection_slots.acquire()
             peer = await self._peer_queue.get()
-            connection = PeerConnection(self._metainfo, self._tracker_params, peer)
+            connection = PeerConnection(self._meta, self._params, peer)
             await self.spawn_child(connection)
 
     async def _write_pieces(self):
-        chunks = metadata.chunks(self._metainfo.pieces, self._metainfo.files)
+        chunks = metadata.chunks(self._meta.pieces, self._meta.files)
         while self._outstanding:
             piece, data = await self._piece_data.get()
             if piece not in self._outstanding:
                 continue
             for c in chunks[piece]:
-                file_path = os.path.join(self._metainfo.folder, c.file.path)
+                file_path = os.path.join(self._meta.folder, c.file.path)
                 async with aiofiles.open(file_path, "rb+") as f:
                     await f.seek(c.file_offset)
                     await f.write(data[c.piece_offset : c.piece_offset + c.length])
@@ -156,16 +156,16 @@ class Printer(actor.Actor):
 class PeerConnection(actor.Actor):
     def __init__(
         self,
-        metainfo: metadata.Metainfo,
-        tracker_params: tracker.Parameters,
+        meta: metadata.Metadata,
+        params: tracker.Parameters,
         peer: tracker.Peer,
         *,
         max_requests: int = 10,
     ):
         super().__init__()
 
-        self._metainfo = metainfo
-        self._tracker_params = tracker_params
+        self._meta = meta
+        self._params = params
         self._peer = peer
 
         self._protocol = None
@@ -244,9 +244,9 @@ class PeerConnection(actor.Actor):
         _, self._protocol = await loop.create_connection(
             functools.partial(
                 protocol.BaseProtocol,
-                self._tracker_params.info_hash,
-                self._tracker_params.peer_id,
-                self._metainfo.pieces,
+                self._params.info_hash,
+                self._params.peer_id,
+                self._meta.pieces,
             ),
             self._peer.address,
             self._peer.port,
