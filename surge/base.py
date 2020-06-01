@@ -1,4 +1,4 @@
-from typing import Set
+from typing import Dict, List, Set
 
 import asyncio
 import collections
@@ -9,8 +9,8 @@ import random
 
 import aiofiles
 
-from . import metadata
 from . import actor
+from . import metadata
 from . import protocol
 from . import tracker
 
@@ -34,10 +34,11 @@ class Download(actor.Supervisor):
         self._peer_queue = tracker.PeerQueue(metainfo.announce_list, tracker_params)
         self._printer = Printer(len(metainfo.pieces), len(outstanding))
 
+        self._peer_connection_slots = asyncio.Semaphore(max_peers)
+        self._piece_data = asyncio.Queue()
+
         self._done = asyncio.get_event_loop().create_future()
 
-        self._piece_data = asyncio.Queue()
-        self._peer_connection_slots = asyncio.Semaphore(max_peers)
 
     def __repr__(self):
         cls = self.__class__.__name__
@@ -134,24 +135,17 @@ class Printer(actor.Actor):
         while True:
             await self._event.wait()
             self._event.clear()
-            # Print a counter and progress bar.
+
             n = self._pieces
             i = n - self._outstanding
             digits = len(str(n))
-            # Right-align the number of downloaded pieces in a cell of width
-            # `digits`, so that the components never move.
             progress = f"Download progress: {i : >{digits}}/{n} pieces."
             width, _ = os.get_terminal_size()
-            # Number of parts that the progress bar is split up into. Reserve one
-            # character for each of the left and right delimiters, and one space on
-            # each side.
             parts = width - len(progress) - 4
             if parts < 10:
                 print("\r\x1b[K" + progress, end="")
             else:
-                # The number of cells of the progress bar to fill up.
                 done = parts * i // n
-                # Left-align the filled-up cells.
                 bar = f"[{done * '#' : <{parts}}]"
                 print("\r\x1b[K" + progress + " " + bar + " ", end="")
 
@@ -176,19 +170,17 @@ class PeerConnection(actor.Actor):
         self._metainfo = metainfo
         self._tracker_params = tracker_params
         self._peer = peer
+
         self._protocol = None
+
         self._slots = asyncio.Semaphore(max_requests)
         self._timer = {}
 
-        # Bookkeeping:
-        # - `self._stack` is a list of the newest piece's blocks that have not
-        # been requested yet;
-        # - `self._outstanding[piece]` is the set of blocks of `piece` that
-        # still need to be downloaded;
-        # - `self._data[block.piece][block]` is the data that was received
-        # for `block`.
+        self._stack: List[metadata.Block]
         self._stack = []
+        self._outstanding = Dict[metadata.Piece, Set[metadata.Block]]
         self._outstanding = {}
+        self._data: Dict[metadata.Piece, Dict[metadata.Block, bytes]]
         self._data = {}
 
     def __repr__(self):

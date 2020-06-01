@@ -37,3 +37,4 @@ def parse(data):
         return Data(index, data[i:])
     if value == Reject.value:
         return Reject(index)
+    raise ValueError(data)

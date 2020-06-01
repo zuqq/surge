@@ -201,7 +201,8 @@ def parse(data):
     if cls is not ExtensionProtocol:
         return message
     extension_message = message.extension_message
-    if type(extension_message) is _extension.Handshake:
+    if isinstance(extension_message, _extension.Handshake):
         return extension_message
-    elif type(extension_message) is _extension.Metadata:
+    if isinstance(extension_message, _extension.Metadata):
         return extension_message.metadata_message
+    raise ValueError(data)

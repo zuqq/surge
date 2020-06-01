@@ -1,4 +1,3 @@
-import enum
 import struct
 
 from . import _metadata
@@ -45,3 +44,4 @@ def parse(payload):
         return Handshake.from_bytes(payload)
     if payload[0] == Metadata.value:
         return Metadata.from_bytes(payload)
+    raise ValueError(payload)
