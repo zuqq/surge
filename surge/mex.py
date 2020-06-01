@@ -41,9 +41,9 @@ class Download(actor.Supervisor):
 
     ### Messages from PeerConnection
 
-    def done(self, raw_metainfo: bytes):
+    def done(self, raw_info: bytes):
         """Signal that `raw_metainfo` has been received and verified."""
-        self._done.set_result(raw_metainfo)
+        self._done.set_result(raw_info)
 
     ### Interface
 
@@ -87,10 +87,10 @@ class PeerConnection(actor.Actor):
             index, payload = await self._protocol.receive()
             if index == i:
                 data.append(payload)
-        info = b"".join(data)
-        if hashlib.sha1(info).digest() != self._tracker_params.info_hash:
+        raw_info = b"".join(data)
+        if hashlib.sha1(raw_info).digest() != self._tracker_params.info_hash:
             raise ConnectionError("Peer sent invalid data.")
-        self.parent.done(info)
+        self.parent.done(raw_info)
 
     async def _on_stop(self):
         if self._protocol is None:

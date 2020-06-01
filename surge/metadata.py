@@ -1,7 +1,6 @@
 from typing import List
 
 import dataclasses
-import hashlib
 import os
 
 from . import bencoding
@@ -12,16 +11,6 @@ class File:
     index: int
     length: int
     path: str
-
-
-def ensure_files_exist(folder, files):
-    for file in files:
-        full_path = os.path.join(folder, file.path)
-        tail, _ = os.path.split(full_path)
-        if tail:
-            os.makedirs(tail, exist_ok=True)
-        with open(full_path, "a+b") as f:
-            f.truncate(file.length)
 
 
 @dataclasses.dataclass(eq=True, frozen=True)
@@ -42,7 +31,7 @@ class Chunk:
     length: int
 
 
-def piece_to_chunks(pieces, files):
+def chunks(pieces, files):
     """Return a dictionary mapping each piece to a list of its chunks."""
     result = {piece: [] for piece in pieces}
     file_index = 0
@@ -59,25 +48,6 @@ def piece_to_chunks(pieces, files):
                 file_index += 1
                 file = files[file_index]
                 file_offset = 0
-    return result
-
-
-def available_pieces(pieces, files, folder):
-    """Return the set of pieces that are present in `folder`."""
-    result = set()
-    chunks = piece_to_chunks(pieces, files)
-    for piece in pieces:
-        chunk_data = []
-        for chunk in chunks[piece]:
-            file_path = os.path.join(folder, chunk.file.path)
-            try:
-                with open(file_path, "rb") as f:
-                    f.seek(chunk.file_offset)
-                    chunk_data.append(f.read(chunk.length))
-            except FileNotFoundError:
-                continue
-        if hashlib.sha1(b"".join(chunk_data)).digest() == piece.hash:
-            result.add(piece)
     return result
 
 
@@ -132,7 +102,10 @@ class Metainfo:
 
     @classmethod
     def from_bytes(cls, raw_metainfo):
-        decoded = bencoding.decode(raw_metainfo)
+        return cls.from_dict(bencoding.decode(raw_metainfo))
+
+    @classmethod
+    def from_dict(cls, decoded):
         announce_list = []
         if b"announce" in decoded:
             announce_list.append(decoded[b"announce"].decode())

@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import logging
 import os
 
@@ -10,6 +11,34 @@ from . import metadata
 from . import mex
 from . import runners
 from . import tracker
+
+
+def touch(folder, files):
+    for file in files:
+        full_path = os.path.join(folder, file.path)
+        tail, _ = os.path.split(full_path)
+        if tail:
+            os.makedirs(tail, exist_ok=True)
+        with open(full_path, "a+b") as f:
+            f.truncate(file.length)
+
+
+def available(pieces, files, folder):
+    result = set()
+    chunks = metadata.chunks(pieces, files)
+    for piece in pieces:
+        data = []
+        for c in chunks[piece]:
+            file_path = os.path.join(folder, c.file.path)
+            try:
+                with open(file_path, "rb") as f:
+                    f.seek(c.file_offset)
+                    data.append(f.read(c.length))
+            except FileNotFoundError:
+                continue
+        if hashlib.sha1(b"".join(data)).digest() == piece.hash:
+            result.add(piece)
+    return result
 
 
 def main():
@@ -46,22 +75,20 @@ def main():
         print("Getting metainfo file from peers...", end="")
         info_hash, announce_list = magnet.parse(args.magnet)
         tracker_params = tracker.Parameters(info_hash)
-        info = runners.run(mex.Download(tracker_params, announce_list))
+        raw_info = runners.run(mex.Download(tracker_params, announce_list))
         # Peers only send us the raw value associated with the `b"info"` key,
         # so we still need to build the metainfo dictionary.
-        raw_metainfo = b"".join(
-            [
-                b"d13:announce-list",
-                bencoding.encode([[url.encode() for url in announce_list]]),
-                b"4:info",
-                info,
-                b"e",
-            ]
+        metainfo = metadata.Metainfo.from_dict(
+            {
+                b"announce-list": [[url.encode() for url in announce_list]],
+                b"info": bencoding.decode(raw_info),
+            }
         )
         print("Done.")
+    else:
+        metainfo = metadata.Metainfo.from_bytes(raw_metainfo)
 
-    metainfo = metadata.Metainfo.from_bytes(raw_metainfo)
-    metadata.ensure_files_exist(metainfo.folder, metainfo.files)
+    touch(metainfo.folder, metainfo.files)
 
     if args.folder:
         metainfo.folder = os.path.join(args.folder, metainfo.folder)
@@ -71,9 +98,7 @@ def main():
 
     if args.resume:
         print("Checking for available pieces...", end="")
-        outstanding -= metadata.available_pieces(
-            metainfo.pieces, metainfo.files, metainfo.folder
-        )
+        outstanding -= available(metainfo.pieces, metainfo.files, metainfo.folder)
         print("Done.")
 
     runners.run(

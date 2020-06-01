@@ -39,7 +39,6 @@ class Download(actor.Supervisor):
 
         self._done = asyncio.get_event_loop().create_future()
 
-
     def __repr__(self):
         cls = self.__class__.__name__
         info = [
@@ -58,14 +57,12 @@ class Download(actor.Supervisor):
             await self.spawn_child(connection)
 
     async def _write_pieces(self):
-        piece_to_chunks = metadata.piece_to_chunks(
-            self._metainfo.pieces, self._metainfo.files
-        )
+        chunks = metadata.chunks(self._metainfo.pieces, self._metainfo.files)
         while self._outstanding:
             piece, data = await self._piece_data.get()
             if piece not in self._outstanding:
                 continue
-            for c in piece_to_chunks[piece]:
+            for c in chunks[piece]:
                 file_path = os.path.join(self._metainfo.folder, c.file.path)
                 async with aiofiles.open(file_path, "rb+") as f:
                     await f.seek(c.file_offset)
