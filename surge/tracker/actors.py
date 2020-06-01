@@ -95,26 +95,26 @@ class HTTPTrackerConnection(_BaseTrackerConnection):
 class UDPTrackerConnection(_BaseTrackerConnection):
     async def _request(self):
         loop = asyncio.get_running_loop()
-        _, protocol = await loop.create_datagram_endpoint(
+        _, stream = await loop.create_datagram_endpoint(
             udp.DatagramStream, remote_addr=(self._url.hostname, self._url.port)
         )
 
         trans_id = secrets.token_bytes(4)
 
-        protocol.send(protocol.connect(trans_id))
-        await protocol.drain()
+        stream.send(protocol.connect(trans_id))
+        await stream.drain()
 
-        data = await asyncio.wait_for(protocol.recv(), timeout=5)
+        data = await asyncio.wait_for(stream.recv(), timeout=5)
         _, _, conn_id = protocol.parse_connect(data)
 
-        protocol.send(protocol.announce(trans_id, conn_id, self._params))
-        await protocol.drain()
+        stream.send(protocol.announce(trans_id, conn_id, self._params))
+        await stream.drain()
 
-        data = await asyncio.wait_for(protocol.recv(), timeout=5)
+        data = await asyncio.wait_for(stream.recv(), timeout=5)
         _, _, interval, _, _ = protocol.parse_announce(data[:20])
 
-        protocol.close()
-        await protocol.wait_closed()
+        stream.close()
+        await stream.wait_closed()
 
         return metadata.Response.from_bytes(self._url, interval, data[20:])
 
