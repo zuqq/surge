@@ -56,12 +56,12 @@ class PeerQueue(actor.Supervisor):
 
 class _BaseTrackerConnection(actor.Actor):
     def __init__(
-        self,
-        url: urllib.parse.ParseResult,
-        params: metadata.Parameters,
-        *,
-        max_tries: int = 5,
-    ):
+            self,
+            url: urllib.parse.ParseResult,
+            params: metadata.Parameters,
+            *,
+            max_tries: int = 5,
+        ):
         super().__init__()
 
         self._url = url

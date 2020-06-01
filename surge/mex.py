@@ -11,12 +11,12 @@ from . import tracker
 
 class Download(actor.Supervisor):
     def __init__(
-        self,
-        params: tracker.Parameters,
-        announce_list: List[str],
-        *,
-        max_peers: int = 10,
-    ):
+            self,
+            params: tracker.Parameters,
+            announce_list: List[str],
+            *,
+            max_peers: int = 100,
+        ):
         super().__init__()
 
         self._params = params
@@ -51,9 +51,7 @@ class Download(actor.Supervisor):
 
 
 class PeerConnection(actor.Actor):
-    def __init__(
-        self, params: tracker.Parameters, peer: tracker.Peer,
-    ):
+    def __init__(self, params: tracker.Parameters, peer: tracker.Peer):
         super().__init__()
 
         self._params = params
@@ -66,7 +64,9 @@ class PeerConnection(actor.Actor):
         loop = asyncio.get_running_loop()
         _, self._protocol = await loop.create_connection(
             functools.partial(
-                protocol.MetadataProtocol, self._params.info_hash, self._params.peer_id,
+                protocol.MetadataProtocol,
+                self._params.info_hash,
+                self._params.peer_id,
             ),
             self._peer.address,
             self._peer.port,

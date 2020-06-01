@@ -18,13 +18,13 @@ from . import tracker
 
 class Download(actor.Supervisor):
     def __init__(
-        self,
-        meta: metadata.Metadata,
-        params: tracker.Parameters,
-        outstanding: Set[metadata.Piece],
-        *,
-        max_peers: int = 50,
-    ):
+            self,
+            meta: metadata.Metadata,
+            params: tracker.Parameters,
+            outstanding: Set[metadata.Piece],
+            *,
+            max_peers: int = 50,
+        ):
         super().__init__()
 
         self._meta = meta
@@ -92,8 +92,10 @@ class Download(actor.Supervisor):
     ### Messages from PeerConnection
 
     def get_piece(
-        self, peer_connection: PeerConnection, available: Set[metadata.Piece]
-    ):
+            self,
+            peer_connection: PeerConnection,
+            available: Set[metadata.Piece]
+        ):
         borrowed = set(self._borrowers)
         pool = self._outstanding - borrowed or borrowed
         if not pool:
@@ -106,8 +108,11 @@ class Download(actor.Supervisor):
         return piece
 
     def piece_done(
-        self, peer_connection: PeerConnection, piece: metadata.Piece, data: bytes
-    ):
+            self,
+            peer_connection: PeerConnection,
+            piece: metadata.Piece,
+            data: bytes
+        ):
         if piece not in self._borrowers:
             return
         for borrower in self._borrowers.pop(piece) - {peer_connection}:
@@ -161,13 +166,13 @@ class Printer(actor.Actor):
 
 class PeerConnection(actor.Actor):
     def __init__(
-        self,
-        meta: metadata.Metadata,
-        params: tracker.Parameters,
-        peer: tracker.Peer,
-        *,
-        max_requests: int = 10,
-    ):
+            self,
+            meta: metadata.Metadata,
+            params: tracker.Parameters,
+            peer: tracker.Peer,
+            *,
+            max_requests: int = 10,
+        ):
         super().__init__()
 
         self._meta = meta
@@ -210,13 +215,11 @@ class PeerConnection(actor.Actor):
                 continue
             self._data[piece][block] = data
             if not self._outstanding[piece]:
-                block_to_data = self._pop(piece)
-                data = b"".join(block_to_data[block] for block in sorted(block_to_data))
-                if (
-                    len(data) == piece.length
-                    and hashlib.sha1(data).digest() == piece.hash
-                ):
-                    self.parent.piece_done(self, piece, data)
+                data = self._pop(piece)
+                piece_data = b"".join(data[block] for block in sorted(data))
+                if (len(piece_data) == piece.length
+                        and hashlib.sha1(piece_data).digest() == piece.hash):
+                    self.parent.piece_done(self, piece, piece_data)
                 else:
                     raise ValueError("Peer sent invalid data.")
             self._slots.release()

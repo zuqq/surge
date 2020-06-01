@@ -15,7 +15,6 @@ def run(download):
         for sig in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, functools.partial(handler, sig))
     except NotImplementedError:
-        # Windows doesn't have Unix signals.
         pass
 
     loop.run_until_complete(download.start())
