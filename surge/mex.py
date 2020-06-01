@@ -5,67 +5,8 @@ import functools
 import hashlib
 
 from . import actor
-from . import bencoding
-from . import extension_protocol
-from . import metadata
-from . import metadata_protocol
-from . import peer_protocol
-from . import peer_queue
+from . import protocol
 from . import tracker
-from .protocol import Closed, Established
-
-
-class Protocol(Closed):
-    def __init__(self, info_hash, peer_id):
-        super().__init__(info_hash, peer_id)
-
-        self._ut_metadata = None
-        self.metadata_size = asyncio.get_event_loop().create_future()
-
-        def handshake_cb(message):
-            self._ut_metadata = message.ut_metadata
-            self.metadata_size.set_result(message.metadata_size)
-
-        def data_cb(message):
-            self._data.put_nowait((message.index, message.data))
-
-        self._transition = {
-            (Established, extension_protocol.Handshake): (handshake_cb, Choked),
-            (Choked, peer_protocol.Unchoke): (None, Unchoked),
-            (Choked, metadata_protocol.Data): (data_cb, Choked),
-            (Unchoked, peer_protocol.Choke): (None, Choked),
-            (Unchoked, metadata_protocol.Data): (data_cb, Unchoked),
-        }
-
-
-class Choked(Established):
-    async def request(self, index):
-        if self._exc is not None:
-            raise self._exc
-        waiter = asyncio.get_running_loop().create_future()
-        self._waiters[Unchoked].add(waiter)
-        self._write(peer_protocol.Interested())
-        await waiter
-        self._write(
-            peer_protocol.ExtensionProtocol(
-                extension_protocol.Metadata(
-                    metadata_protocol.Request(index), self._ut_metadata
-                )
-            )
-        )
-
-
-class Unchoked(Established):
-    async def request(self, index):
-        if self._exc is not None:
-            raise self._exc
-        self._write(
-            peer_protocol.ExtensionProtocol(
-                extension_protocol.Metadata(
-                    metadata_protocol.Request(index), self._ut_metadata
-                )
-            )
-        )
 
 
 class Download(actor.Supervisor):
@@ -79,7 +20,7 @@ class Download(actor.Supervisor):
         super().__init__()
 
         self._tracker_params = tracker_params
-        self._peer_queue = peer_queue.PeerQueue(announce_list, tracker_params)
+        self._peer_queue = tracker.PeerQueue(announce_list, tracker_params)
         self._done = asyncio.get_event_loop().create_future()
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
 
@@ -127,7 +68,9 @@ class PeerConnection(actor.Actor):
         loop = asyncio.get_running_loop()
         _, self._protocol = await loop.create_connection(
             functools.partial(
-                Protocol, self._tracker_params.info_hash, self._tracker_params.peer_id,
+                protocol.MetadataProtocol,
+                self._tracker_params.info_hash,
+                self._tracker_params.peer_id,
             ),
             self._peer.address,
             self._peer.port,

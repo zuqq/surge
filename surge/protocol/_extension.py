@@ -1,8 +1,8 @@
 import enum
 import struct
 
-from . import bencoding
-from . import metadata_protocol
+from . import _metadata
+from .. import bencoding
 
 
 class Handshake:
@@ -37,7 +37,7 @@ class Metadata:
 
     @classmethod
     def from_bytes(cls, payload):
-        return cls(metadata_protocol.parse(payload[1:]))
+        return cls(_metadata.parse(payload[1:]))
 
 
 def parse(payload):

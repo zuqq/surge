@@ -9,9 +9,8 @@ import random
 
 import aiofiles
 
-from . import actor
 from . import metadata
-from . import peer_queue
+from . import actor
 from . import protocol
 from . import tracker
 
@@ -32,7 +31,7 @@ class Download(actor.Supervisor):
         self._outstanding = outstanding
         self._borrowers = collections.defaultdict(set)
 
-        self._peer_queue = peer_queue.PeerQueue(metainfo.announce_list, tracker_params)
+        self._peer_queue = tracker.PeerQueue(metainfo.announce_list, tracker_params)
         self._printer = Printer(len(metainfo.pieces), len(outstanding))
 
         self._done = asyncio.get_event_loop().create_future()
@@ -255,7 +254,7 @@ class PeerConnection(actor.Actor):
         loop = asyncio.get_running_loop()
         _, self._protocol = await loop.create_connection(
             functools.partial(
-                protocol.Protocol,
+                protocol.BaseProtocol,
                 self._tracker_params.info_hash,
                 self._tracker_params.peer_id,
                 self._metainfo.pieces,

@@ -5,7 +5,7 @@ import hashlib
 import secrets
 import urllib.parse
 
-from . import bencoding
+from .. import bencoding
 
 
 @dataclasses.dataclass

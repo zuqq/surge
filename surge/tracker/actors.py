@@ -8,16 +8,16 @@ import urllib.parse
 
 import aiohttp
 
-from . import actor
-from . import bencoding
-from . import tracker
-from . import tracker_protocol
+from . import metadata
+from . import protocol
 from . import udp
+from .. import actor
+from .. import bencoding
 
 
 class PeerQueue(actor.Supervisor):
     def __init__(
-        self, announce_list: Iterable[str], tracker_params: tracker.Parameters,
+        self, announce_list: Iterable[str], tracker_params: metadata.Parameters,
     ):
         super().__init__()
 
@@ -45,11 +45,11 @@ class PeerQueue(actor.Supervisor):
 
     ### Queue interface
 
-    async def get(self) -> tracker.Peer:
+    async def get(self) -> metadata.Peer:
         """Return a fresh peer."""
         return await self._peers.get()
 
-    def put_nowait(self, peer: tracker.Peer):
+    def put_nowait(self, peer: metadata.Peer):
         if peer in self._seen_peers:
             return
         self._seen_peers.add(peer)
@@ -60,7 +60,7 @@ class _BaseTrackerConnection(actor.Actor):
     def __init__(
         self,
         url: urllib.parse.ParseResult,
-        tracker_params: tracker.Parameters,
+        tracker_params: metadata.Parameters,
         *,
         max_tries: int = 5,
     ):
@@ -88,7 +88,7 @@ class HTTPTrackerConnection(_BaseTrackerConnection):
             d = bencoding.decode(raw_resp)
             if b"failure reason" in d:
                 raise ConnectionError(d[b"failure reason"].decode())
-            resp = tracker.Response.from_dict(self._url, d)
+            resp = metadata.Response.from_dict(self._url, d)
             for peer in resp.peers:
                 self.parent.put_nowait(peer)
             await asyncio.sleep(resp.interval)
@@ -103,24 +103,22 @@ class UDPTrackerConnection(_BaseTrackerConnection):
 
         trans_id = secrets.token_bytes(4)
 
-        protocol.send(tracker_protocol.connect(trans_id))
+        protocol.send(protocol.connect(trans_id))
         await protocol.drain()
 
         data = await asyncio.wait_for(protocol.recv(), timeout=5)
-        _, _, conn_id = tracker_protocol.parse_connect(data)
+        _, _, conn_id = protocol.parse_connect(data)
 
-        protocol.send(
-            tracker_protocol.announce(trans_id, conn_id, self._tracker_params)
-        )
+        protocol.send(protocol.announce(trans_id, conn_id, self._tracker_params))
         await protocol.drain()
 
         data = await asyncio.wait_for(protocol.recv(), timeout=5)
-        _, _, interval, _, _ = tracker_protocol.parse_announce(data[:20])
+        _, _, interval, _, _ = protocol.parse_announce(data[:20])
 
         protocol.close()
         await protocol.wait_closed()
 
-        return tracker.Response.from_bytes(self._url, interval, data[20:])
+        return metadata.Response.from_bytes(self._url, interval, data[20:])
 
     async def _main(self):
         while True:

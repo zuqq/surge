@@ -1,4 +1,4 @@
-from . import bencoding
+from .. import bencoding
 
 
 class Request:

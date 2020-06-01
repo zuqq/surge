@@ -1,7 +1,7 @@
 import struct
 
-from . import extension_protocol
-from . import metadata
+from . import _extension
+from .. import metadata
 
 
 _registry = {}
@@ -189,7 +189,7 @@ class ExtensionProtocol(Message):
 
     @classmethod
     def from_bytes(cls, data):
-        return cls(extension_protocol.parse(data[5:]))
+        return cls(_extension.parse(data[5:]))
 
 
 def parse(data):
@@ -201,7 +201,7 @@ def parse(data):
     if cls is not ExtensionProtocol:
         return message
     extension_message = message.extension_message
-    if type(extension_message) is extension_protocol.Handshake:
+    if type(extension_message) is _extension.Handshake:
         return extension_message
-    elif type(extension_message) is extension_protocol.Metadata:
+    elif type(extension_message) is _extension.Metadata:
         return extension_message.metadata_message

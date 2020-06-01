@@ -2,12 +2,13 @@ import argparse
 import logging
 import os
 
+
+from . import base
 from . import bencoding
 from . import magnet
 from . import metadata
 from . import mex
 from . import runners
-from . import torrent
 from . import tracker
 
 
@@ -76,7 +77,7 @@ def main():
         print("Done.")
 
     runners.run(
-        torrent.Download(metainfo, tracker_params, outstanding, max_peers=args.peers)
+        base.Download(metainfo, tracker_params, outstanding, max_peers=args.peers)
     )
 
 
