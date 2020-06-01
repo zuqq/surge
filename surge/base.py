@@ -224,7 +224,7 @@ class PeerConnection(actor.Actor):
                     raise ValueError("Peer sent invalid data.")
             self._slots.release()
 
-    async def _timeout(self, *, timeout=10):
+    async def _timeout(self, *, timeout=5):
         await asyncio.sleep(timeout)
         self._crash(TimeoutError("Request timed out."))
 

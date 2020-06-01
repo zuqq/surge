@@ -3,7 +3,6 @@ from typing import List, Optional
 import dataclasses
 import hashlib
 import secrets
-import urllib.parse
 
 from .. import bencoding
 
@@ -50,20 +49,19 @@ def _parse_peers(raw_peers):
 
 @dataclasses.dataclass
 class Response:
-    url: urllib.parse.ParseResult
     interval: int
     peers: List[Peer]
 
     @classmethod
-    def from_bytes(cls, url, interval, raw_peers):
-        return cls(url, interval, _parse_peers(raw_peers))
+    def from_bytes(cls, interval, raw_peers):
+        return cls(interval, _parse_peers(raw_peers))
 
     @classmethod
-    def from_dict(cls, url, resp):
+    def from_dict(cls, resp):
         if isinstance(resp[b"peers"], list):
             # Dictionary model, as defined in BEP 3.
             peers = [Peer.from_dict(d) for d in resp[b"peers"]]
         else:
             # Binary model ("compact format") from BEP 23.
             peers = _parse_peers(resp[b"peers"])
-        return cls(url, resp[b"interval"], peers)
+        return cls(resp[b"interval"], peers)

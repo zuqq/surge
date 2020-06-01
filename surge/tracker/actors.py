@@ -2,15 +2,14 @@ from typing import List, Set
 
 import asyncio
 import dataclasses
+import functools
 import logging
-import secrets
 import urllib.parse
 
 import aiohttp
 
+from . import _udp
 from . import metadata
-from . import protocol
-from . import udp
 from .. import actor
 from .. import bencoding
 
@@ -86,44 +85,25 @@ class HTTPTrackerConnection(_BaseTrackerConnection):
             d = bencoding.decode(raw_resp)
             if b"failure reason" in d:
                 raise ConnectionError(d[b"failure reason"].decode())
-            resp = metadata.Response.from_dict(self._url, d)
+            resp = metadata.Response.from_dict(d)
             for peer in resp.peers:
                 self.parent.put_nowait(peer)
             await asyncio.sleep(resp.interval)
 
 
 class UDPTrackerConnection(_BaseTrackerConnection):
-    async def _request(self):
-        loop = asyncio.get_running_loop()
-        _, stream = await loop.create_datagram_endpoint(
-            udp.DatagramStream, remote_addr=(self._url.hostname, self._url.port)
-        )
-
-        trans_id = secrets.token_bytes(4)
-
-        stream.send(protocol.connect(trans_id))
-        await stream.drain()
-
-        data = await asyncio.wait_for(stream.recv(), timeout=5)
-        _, _, conn_id = protocol.parse_connect(data)
-
-        stream.send(protocol.announce(trans_id, conn_id, self._params))
-        await stream.drain()
-
-        data = await asyncio.wait_for(stream.recv(), timeout=5)
-        _, _, interval, _, _ = protocol.parse_announce(data[:20])
-
-        stream.close()
-        await stream.wait_closed()
-
-        return metadata.Response.from_bytes(self._url, interval, data[20:])
-
     async def _main(self):
         while True:
             tries = 0
             while tries < self._max_tries:
                 try:
-                    resp = await self._request()
+                    loop = asyncio.get_running_loop()
+                    _, protocol = await loop.create_datagram_endpoint(
+                        functools.partial(_udp.Protocol, self._params),
+                        remote_addr=(self._url.hostname, self._url.port),
+                    )
+
+                    resp = await asyncio.wait_for(protocol.resp, timeout=5)
                 except Exception as e:
                     logging.warning("%r failed with %r", self._url.geturl(), e)
                     tries += 1
