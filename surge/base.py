@@ -37,8 +37,6 @@ class Download(actor.Supervisor):
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
         self._piece_data = asyncio.Queue()  # type: ignore
 
-        self._done = asyncio.get_event_loop().create_future()
-
     def __repr__(self):
         cls = self.__class__.__name__
         info = [
@@ -69,7 +67,7 @@ class Download(actor.Supervisor):
                     await f.write(data[c.piece_offset : c.piece_offset + c.length])
             self._outstanding.remove(piece)
             self._printer.advance()
-        self._done.set_result(None)
+        self.result.set_result(None)
 
     async def _main(self):
         await self.spawn_child(self._peer_queue)
@@ -112,11 +110,6 @@ class Download(actor.Supervisor):
         for borrower in self._borrowers.pop(piece) - {peer_connection}:
             borrower.cancel_piece(piece)
         self._piece_data.put_nowait((piece, data))
-
-    ### Interface
-
-    async def wait_done(self):
-        return await self._done
 
 
 class Printer(actor.Actor):

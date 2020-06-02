@@ -19,7 +19,6 @@ class Download(actor.Supervisor):
 
         self._params = params
         self._peer_queue = tracker.PeerQueue(announce_list, params)
-        self._done = asyncio.get_event_loop().create_future()
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
 
     ### Actor implementation
@@ -36,16 +35,6 @@ class Download(actor.Supervisor):
             self._peer_connection_slots.release()
         else:
             self._crash(RuntimeError(f"Irreplaceable actor {repr(child)} crashed."))
-
-    ### Messages from PeerConnection
-
-    def done(self, raw_info: bytes):
-        self._done.set_result(raw_info)
-
-    ### Interface
-
-    async def wait_done(self) -> bytes:
-        return await self._done
 
 
 class PeerConnection(actor.Actor):
@@ -84,7 +73,10 @@ class PeerConnection(actor.Actor):
         raw_info = b"".join(data)
         if hashlib.sha1(raw_info).digest() != self._params.info_hash:
             raise ConnectionError("Peer sent invalid data.")
-        self.parent.done(raw_info)
+        try:
+            self.parent.result.set_result(raw_info)
+        except asyncio.InvalidStateError:  # If we didn't come in first.
+            pass
 
     async def _on_stop(self):
         if self._protocol is not None:

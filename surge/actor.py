@@ -31,6 +31,8 @@ class Actor:
         self.running = False
         self.crashed = False
 
+        self.result = asyncio.get_event_loop().create_future()
+
         self._coros: Set[Awaitable] = {self._main()}
         self._tasks: Set[asyncio.Task] = set()
         # Task that runs the elements of `self._coros` and reports any
