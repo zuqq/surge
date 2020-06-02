@@ -31,31 +31,25 @@ class Protocol(base.Closed):
 
 class Choked(base.Established):
     async def request(self, index):
-        if self._exc is not None:
-            raise self._exc
+        if self._exception is not None:
+            raise self._exception
         waiter = asyncio.get_running_loop().create_future()
         self._waiters[Unchoked].add(waiter)
         self._write(_peer.Interested())
         await waiter
         self._write(
             _peer.ExtensionProtocol(
-                _extension.Metadata(
-                    _metadata.Request(index),
-                    self._ut_metadata,
-                )
+                _extension.Metadata(_metadata.Request(index), self._ut_metadata)
             )
         )
 
 
 class Unchoked(base.Established):
     async def request(self, index):
-        if self._exc is not None:
-            raise self._exc
+        if self._exception is not None:
+            raise self._exception
         self._write(
             _peer.ExtensionProtocol(
-                _extension.Metadata(
-                    _metadata.Request(index),
-                    self._ut_metadata,
-                )
+                _extension.Metadata(_metadata.Request(index), self._ut_metadata)
             )
         )

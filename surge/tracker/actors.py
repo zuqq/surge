@@ -100,7 +100,7 @@ class UDPTrackerConnection(_BaseTrackerConnection):
                         functools.partial(_udp.Protocol, self._params),
                         remote_addr=(self._url.hostname, self._url.port),
                     )
-                    resp = await asyncio.wait_for(protocol.resp, timeout=5)
+                    resp = await asyncio.wait_for(protocol.response, timeout=5)
                 except Exception as e:
                     logging.warning("%r failed with %r", self._url.geturl(), e)
                     tries += 1

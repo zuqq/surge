@@ -87,7 +87,5 @@ class PeerConnection(actor.Actor):
         self.parent.done(raw_info)
 
     async def _on_stop(self):
-        if self._protocol is None:
-            return
-        self._protocol.close()
-        await self._protocol.wait_closed()
+        if self._protocol is not None:
+            await self._protocol.close()

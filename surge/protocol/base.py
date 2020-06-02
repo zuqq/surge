@@ -13,8 +13,8 @@ class Closed(state.StateMachineMixin, asyncio.Protocol):
         self._peer_id = peer_id
 
         self._transport = None
-        self._exc = None
-        self._closed = asyncio.Event()
+        self._exception = None
+        self._closed = None
         self._buffer = bytearray()
 
         self.handshake = asyncio.get_event_loop().create_future()
@@ -35,14 +35,17 @@ class Closed(state.StateMachineMixin, asyncio.Protocol):
     def connection_made(self, transport):
         self._state = Open
         self._transport = transport
+        self._closed = asyncio.get_event_loop().create_future()
         self._write(_peer.Handshake(self._info_hash, self._peer_id))
         self._write(_peer.ExtensionProtocol(_extension.Handshake()))
 
-    def connection_lost(self, exc):
-        if self._exc is None:
-            self._exc = exc
+    def connection_lost(self, exception):
+        if self._exception is None:
+            self._exception = exception
         self._state = Closed
-        self._closed.set()
+        self._transport = None
+        if self._closed is not None:
+            self._closed.set_result(None)
 
     def data_received(self, data):
         self._buffer.extend(data)
@@ -62,17 +65,15 @@ class Closed(state.StateMachineMixin, asyncio.Protocol):
         raise ConnectionError("Requesting on closed connection.")
 
     async def receive(self):
-        if self._exc is not None:
-            raise self._exc
+        if self._exception is not None:
+            raise self._exception
         return await self._data.get()
 
-    def close(self):
+    async def close(self):
         if self._transport is not None:
             self._transport.close()
-
-    async def wait_closed(self):
-        # Don't raise here, because we're closing the connection anyway.
-        await self._closed.wait()
+        if self._closed is not None:
+            await self._closed
 
 
 class Open(Closed):
@@ -120,8 +121,8 @@ class Established(Protocol):
 
 class Choked(Established):
     async def request(self, block):
-        if self._exc is not None:
-            raise self._exc
+        if self._exception is not None:
+            raise self._exception
         # Register with Unchoked so that we are woken up if the unchoke happens.
         waiter = asyncio.get_running_loop().create_future()
         self._waiters[Unchoked].add(waiter)
@@ -133,6 +134,6 @@ class Choked(Established):
 
 class Unchoked(Established):
     async def request(self, block):
-        if self._exc is not None:
-            raise self._exc
+        if self._exception is not None:
+            raise self._exception
         self._write(_peer.Request(block))

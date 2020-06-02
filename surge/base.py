@@ -258,10 +258,8 @@ class PeerConnection(actor.Actor):
         await asyncio.gather(self._receive_blocks(), self._request_blocks())
 
     async def _on_stop(self):
-        if self._protocol is None:
-            return
-        self._protocol.close()
-        await self._protocol.wait_closed()
+        if self._protocol is not None:
+            await self._protocol.close()
 
     ### Messages from Download
 
