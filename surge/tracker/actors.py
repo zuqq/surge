@@ -54,13 +54,11 @@ class PeerQueue(actor.Supervisor):
 
 
 class _BaseTrackerConnection(actor.Actor):
-    def __init__(
-            self,
-            url: urllib.parse.ParseResult,
-            params: metadata.Parameters,
-            *,
-            max_tries: int = 5,
-        ):
+    def __init__(self,
+                 url: urllib.parse.ParseResult,
+                 params: metadata.Parameters,
+                 *,
+                 max_tries: int = 5):
         super().__init__()
 
         self._url = url
@@ -102,7 +100,6 @@ class UDPTrackerConnection(_BaseTrackerConnection):
                         functools.partial(_udp.Protocol, self._params),
                         remote_addr=(self._url.hostname, self._url.port),
                     )
-
                     resp = await asyncio.wait_for(protocol.resp, timeout=5)
                 except Exception as e:
                     logging.warning("%r failed with %r", self._url.geturl(), e)

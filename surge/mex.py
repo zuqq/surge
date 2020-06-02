@@ -10,13 +10,11 @@ from . import tracker
 
 
 class Download(actor.Supervisor):
-    def __init__(
-            self,
-            params: tracker.Parameters,
-            announce_list: List[str],
-            *,
-            max_peers: int = 10,
-        ):
+    def __init__(self,
+                 params: tracker.Parameters,
+                 announce_list: List[str],
+                 *,
+                 max_peers: int = 10):
         super().__init__()
 
         self._params = params

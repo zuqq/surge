@@ -17,14 +17,12 @@ from . import tracker
 
 
 class Download(actor.Supervisor):
-    def __init__(
-            self,
-            meta: metadata.Metadata,
-            params: tracker.Parameters,
-            outstanding: Set[metadata.Piece],
-            *,
-            max_peers: int = 50,
-        ):
+    def __init__(self,
+                 meta: metadata.Metadata,
+                 params: tracker.Parameters,
+                 outstanding: Set[metadata.Piece],
+                 *,
+                 max_peers: int = 50):
         super().__init__()
 
         self._meta = meta
@@ -91,11 +89,9 @@ class Download(actor.Supervisor):
 
     ### Messages from PeerConnection
 
-    def get_piece(
-            self,
-            peer_connection: PeerConnection,
-            available: Set[metadata.Piece],
-        ):
+    def get_piece(self,
+                  peer_connection: PeerConnection,
+                  available: Set[metadata.Piece]):
         borrowed = set(self._borrowers)
         pool = self._outstanding - borrowed or borrowed
         if not pool:
@@ -107,12 +103,10 @@ class Download(actor.Supervisor):
         self._borrowers[piece].add(peer_connection)
         return piece
 
-    def piece_done(
-            self,
-            peer_connection: PeerConnection,
-            piece: metadata.Piece,
-            data: bytes,
-        ):
+    def piece_done(self,
+                   peer_connection: PeerConnection,
+                   piece: metadata.Piece,
+                   data: bytes):
         if piece not in self._borrowers:
             return
         for borrower in self._borrowers.pop(piece) - {peer_connection}:
@@ -165,14 +159,12 @@ class Printer(actor.Actor):
 
 
 class PeerConnection(actor.Actor):
-    def __init__(
-            self,
-            meta: metadata.Metadata,
-            params: tracker.Parameters,
-            peer: tracker.Peer,
-            *,
-            max_requests: int = 10,
-        ):
+    def __init__(self,
+                 meta: metadata.Metadata,
+                 params: tracker.Parameters,
+                 peer: tracker.Peer,
+                 *,
+                 max_requests: int = 10):
         super().__init__()
 
         self._meta = meta
