@@ -72,7 +72,6 @@ class Download(actor.Supervisor):
     async def _main(self):
         await self.spawn_child(self._peer_queue)
         await self.spawn_child(self._printer)
-
         await asyncio.gather(self._spawn_peer_connections(), self._write_pieces())
 
     async def _on_child_crash(self, child):
@@ -242,12 +241,9 @@ class PeerConnection(actor.Actor):
             self._peer.address,
             self._peer.port,
         )
-
         # TODO: Validate the peer's handshake.
-        _ = await self._protocol.handshake
-
+        await self._protocol.handshake
         await self._protocol.bitfield
-
         await asyncio.gather(self._receive_blocks(), self._request_blocks())
 
     async def _on_stop(self):

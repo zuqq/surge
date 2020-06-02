@@ -58,10 +58,8 @@ class PeerConnection(actor.Actor):
             self._peer.address,
             self._peer.port,
         )
-
         # TODO: Validate the peer's handshake.
-        _ = await self._protocol.handshake
-
+        await self._protocol.handshake
         metadata_size = await self._protocol.metadata_size
 
         data = []
