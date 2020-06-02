@@ -39,6 +39,18 @@ class Actor:
         # `Exception` they throw.
         self._runner: Optional[asyncio.Task] = None
 
+    def _crash(self, reason: Optional[Exception] = None):
+        if self.crashed or not self.running:
+            return
+        self.crashed = True
+
+        if reason is not None:
+            logging.warning("%r crashed with %r", self, reason)
+
+        if self.parent is None:
+            raise SystemExit(f"Unsupervised actor {repr(self)} crashed.")
+        self.parent.report_crash(self)
+
     async def _run(self):
         self._tasks = {asyncio.create_task(coro) for coro in self._coros}
         try:
@@ -48,6 +60,16 @@ class Actor:
         # `self._tasks` will also cancel this coroutine.
         except Exception as e:
             self._crash(e)
+
+    ### Overridable methods
+
+    async def _main(self):
+        pass
+
+    async def _on_stop(self):
+        pass
+
+    ### Interface
 
     async def start(self, parent: Optional[Actor] = None):
         """Start `self` and set its parent to `parent`."""
@@ -64,18 +86,6 @@ class Actor:
         """Start `child` and add it to `self`'s children."""
         await child.start(self)
         self.children.add(child)
-
-    def _crash(self, reason: Optional[Exception] = None):
-        if self.crashed or not self.running:
-            return
-        self.crashed = True
-
-        if reason is not None:
-            logging.warning("%r crashed with %r", self, reason)
-
-        if self.parent is None:
-            raise SystemExit(f"Unsupervised actor {repr(self)} crashed.")
-        self.parent.report_crash(self)
 
     def report_crash(self, reporter: Actor):
         """Signal that `reporter` crashed, which crashes `self`.
@@ -109,14 +119,6 @@ class Actor:
         await self._on_stop()
         logging.debug("%r stopped", self)
 
-    ### User logic
-
-    async def _main(self):
-        pass
-
-    async def _on_stop(self):
-        pass
-
 
 class Supervisor(Actor):
     """Supervisor base class.
@@ -139,12 +141,14 @@ class Supervisor(Actor):
             self.children.remove(child)
             await self._on_child_crash(child)
 
+    ### Overridable methods
+
+    async def _on_child_crash(self, child: Actor):
+        pass
+
+    ### Interface
+
     def report_crash(self, reporter: Actor):
         """Signal that `reporter` crashed."""
         if reporter in self.children:
             self._crashed_children.put_nowait(reporter)
-
-    ### User logic
-
-    async def _on_child_crash(self, child: Actor):
-        pass
