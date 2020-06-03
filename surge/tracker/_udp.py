@@ -96,31 +96,26 @@ class Protocol(state.StateMachineMixin, asyncio.DatagramProtocol):
     def __init__(self, params):
         super().__init__()
 
-        self._params = params
-
         self._transport = None
         self._exception = None
         self._closed = None
 
         self._transaction_id = None
-
         self.response = asyncio.get_event_loop().create_future()
 
-        def connect_cb(message):
+        def on_connect(message):
             # TODO: Check the returned `transaction_id`.
             self._write(
-                AnnounceRequest(
-                    self._transaction_id, message.connection_id, self._params
-                )
+                AnnounceRequest(self._transaction_id, message.connection_id, params)
             )
 
-        def announce_cb(message):
+        def on_announce(message):
             # TODO: Check the returned `connection_id`.
             self.response.set_result(message.response)
 
         self._transition = {
-            (Open, ConnectResponse): (connect_cb, Established),
-            (Established, AnnounceResponse): (announce_cb, Established),
+            (Open, ConnectResponse): (on_connect, Established),
+            (Established, AnnounceResponse): (on_announce, Established),
         }
 
     ### asyncio.BaseProtocol
@@ -132,10 +127,10 @@ class Protocol(state.StateMachineMixin, asyncio.DatagramProtocol):
         self._transaction_id = secrets.token_bytes(4)
         self._write(ConnectRequest(self._transaction_id))
 
-    def connection_lost(self, exception):
+    def connection_lost(self, exc):
         if self._exception is None:
-            self._exception = exception
-        self._state = Closed
+            self._exception = exc
+        self._state = Protocol
         self._transport = None
         if self._closed is not None:
             self._closed.set_result(None)
@@ -145,14 +140,16 @@ class Protocol(state.StateMachineMixin, asyncio.DatagramProtocol):
     def datagram_received(self, data, addr):
         self._feed(parse(data))
 
-    def error_received(self, exception):
+    def error_received(self, exc):
         if self._exception is None:
-            self._exception = exception
+            self._exception = exc
 
-    ### Interface
+    ### Stream
 
     def _write(self, message):
-        self._transport.sendto(message.to_bytes())
+        raise ConnectionError("Writing to closed connection.")
+
+    ### Interface
 
     async def close(self):
         if self._transport is not None:
@@ -162,7 +159,8 @@ class Protocol(state.StateMachineMixin, asyncio.DatagramProtocol):
 
 
 class Open(Protocol):
-    pass
+    def _write(self, message):
+        self._transport.sendto(message.to_bytes())
 
 
 class Established(Open):

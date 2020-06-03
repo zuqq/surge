@@ -17,18 +17,8 @@ class Closed(state.StateMachineMixin, asyncio.Protocol):
         self._closed = None
         self._buffer = bytearray()
 
-        self.handshake = asyncio.get_event_loop().create_future()
-
         self._data = asyncio.Queue()
-
-    def _read_messages(self):
-        while len(self._buffer) >= 4:
-            n = int.from_bytes(self._buffer[:4], "big")
-            if len(self._buffer) < 4 + n:
-                break
-            message = bytes(self._buffer[: 4 + n])
-            del self._buffer[: 4 + n]
-            self._feed(_peer.parse(message))
+        self.handshake = asyncio.get_event_loop().create_future()
 
     ### asyncio.Protocol
 
@@ -39,9 +29,9 @@ class Closed(state.StateMachineMixin, asyncio.Protocol):
         self._write(_peer.Handshake(self._info_hash, self._peer_id))
         self._write(_peer.ExtensionProtocol(_extension.Handshake()))
 
-    def connection_lost(self, exception):
+    def connection_lost(self, exc):
         if self._exception is None:
-            self._exception = exception
+            self._exception = exc
         self._state = Closed
         self._transport = None
         if self._closed is not None:
@@ -57,7 +47,7 @@ class Closed(state.StateMachineMixin, asyncio.Protocol):
         raise ConnectionError("Reading from closed connection.")
 
     def _write(self, message):
-        self._transport.write(message.to_bytes())
+        raise ConnectionError("Writing to closed connection.")
 
     ### Interface
 
@@ -83,40 +73,21 @@ class Open(Closed):
         self._state = Established
         self.handshake.set_result(_peer.Handshake.from_bytes(self._buffer[:68]))
         del self._buffer[:68]
-        self._read_messages()
+        self._read()
+
+    def _write(self, message):
+        self._transport.write(message.to_bytes())
 
 
-class Protocol(Closed):
-    def __init__(self, info_hash, peer_id, pieces):
-        super().__init__(info_hash, peer_id)
-
-        self.available = set()
-        self.bitfield = asyncio.get_event_loop().create_future()
-
-        def bitfield_cb(message):
-            self.available = message.available(pieces)
-            self.bitfield.set_result(None)
-
-        def have_cb(message):
-            self.available.add(message.piece(pieces))
-
-        def block_cb(message):
-            self._data.put_nowait((message.block(pieces), message.data))
-
-        self._transition = {
-            (Established, _peer.Bitfield): (bitfield_cb, Choked),
-            (Choked, _peer.Unchoke): (None, Unchoked),
-            (Choked, _peer.Have): (have_cb, Choked),
-            (Choked, _peer.Block): (block_cb, Choked),
-            (Unchoked, _peer.Choke): (None, Choked),
-            (Unchoked, _peer.Have): (have_cb, Unchoked),
-            (Unchoked, _peer.Block): (block_cb, Unchoked),
-        }
-
-
-class Established(Protocol):
+class Established(Open):
     def _read(self):
-        self._read_messages()
+        while len(self._buffer) >= 4:
+            n = int.from_bytes(self._buffer[:4], "big")
+            if len(self._buffer) < 4 + n:
+                break
+            data = bytes(self._buffer[: 4 + n])
+            del self._buffer[: 4 + n]
+            self._feed(_peer.parse(data))
 
 
 class Choked(Established):
@@ -137,3 +108,31 @@ class Unchoked(Established):
         if self._exception is not None:
             raise self._exception
         self._write(_peer.Request(block))
+
+
+class Protocol(Closed):
+    def __init__(self, info_hash, peer_id, pieces):
+        super().__init__(info_hash, peer_id)
+
+        self.available = set()
+        self.bitfield = asyncio.get_event_loop().create_future()
+
+        def on_bitfield(message):
+            self.available = message.available(pieces)
+            self.bitfield.set_result(None)
+
+        def on_have(message):
+            self.available.add(message.piece(pieces))
+
+        def on_block(message):
+            self._data.put_nowait((message.block(pieces), message.data))
+
+        self._transition = {
+            (Established, _peer.Bitfield): (on_bitfield, Choked),
+            (Choked, _peer.Unchoke): (None, Unchoked),
+            (Choked, _peer.Have): (on_have, Choked),
+            (Choked, _peer.Block): (on_block, Choked),
+            (Unchoked, _peer.Choke): (None, Choked),
+            (Unchoked, _peer.Have): (on_have, Unchoked),
+            (Unchoked, _peer.Block): (on_block, Unchoked),
+        }
