@@ -32,7 +32,7 @@ class Download(actor.Supervisor):
         self._borrowers = collections.defaultdict(set)
 
         self._peer_queue = tracker.PeerQueue(meta.announce_list, params)
-        self._printer = Printer(len(meta.pieces), len(outstanding))
+        self._printer = Printer(len(meta.pieces), len(outstanding), max_peers)
 
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
         self._piece_data = asyncio.Queue()  # type: ignore
@@ -53,6 +53,7 @@ class Download(actor.Supervisor):
             peer = await self._peer_queue.get()
             connection = PeerConnection(self._meta, self._params, peer)
             await self.spawn_child(connection)
+            self._printer.connected()
 
     async def _write_pieces(self):
         chunks = metadata.chunks(self._meta.pieces, self._meta.files)
@@ -81,6 +82,7 @@ class Download(actor.Supervisor):
                 if not borrowers:
                     self._borrowers.pop(piece)
             self._peer_connection_slots.release()
+            self._printer.disconnected()
         else:
             self._crash(RuntimeError(f"Irreplaceable actor {repr(child)} crashed."))
 
@@ -112,11 +114,13 @@ class Download(actor.Supervisor):
 
 
 class Printer(actor.Actor):
-    def __init__(self, pieces: int, outstanding: int):
+    def __init__(self, pieces: int, outstanding: int, max_peers: int):
         super().__init__()
 
         self._pieces = pieces
         self._outstanding = outstanding
+        self._max_peers = max_peers
+        self._peers = 0
         self._event = asyncio.Event()
 
     def __repr__(self):
@@ -132,8 +136,13 @@ class Printer(actor.Actor):
 
             n = self._pieces
             i = n - self._outstanding
-            digits = len(str(n))
-            progress = f"Download progress: {i : >{digits}}/{n} pieces."
+            progress = " ".join(
+                [
+                    "Downloading from",
+                    f"{self._peers : >{len(str(self._max_peers))}} peers:"
+                    f"{i : >{len(str(n))}}/{n} pieces"
+                ]
+            )
             width, _ = os.get_terminal_size()
             parts = width - len(progress) - 4
             if parts < 10:
@@ -147,6 +156,14 @@ class Printer(actor.Actor):
 
     def advance(self):
         self._outstanding -= 1
+        self._event.set()
+
+    def connected(self):
+        self._peers += 1
+        self._event.set()
+
+    def disconnected(self):
+        self._peers -= 1
         self._event.set()
 
 
