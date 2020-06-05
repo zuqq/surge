@@ -16,7 +16,7 @@ from . import protocol
 from . import tracker
 
 
-class Download(actor.Supervisor):
+class Download(actor.Actor):
     def __init__(self,
                  meta: metadata.Metadata,
                  params: tracker.Parameters,
@@ -84,7 +84,7 @@ class Download(actor.Supervisor):
             self._peer_connection_slots.release()
             self._printer.disconnected()
         else:
-            self._crash(RuntimeError(f"Irreplaceable actor {repr(child)} crashed."))
+            raise actor.UncaughtCrash(child)
 
     ### Messages from PeerConnection
 

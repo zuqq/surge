@@ -14,7 +14,7 @@ from .. import actor
 from .. import bencoding
 
 
-class PeerQueue(actor.Supervisor):
+class PeerQueue(actor.Actor):
     def __init__(self, announce_list: List[str], params: metadata.Parameters):
         super().__init__()
 
@@ -39,6 +39,9 @@ class PeerQueue(actor.Supervisor):
                 await self.spawn_child(UDPTrackerConnection(url, self._params))
             else:
                 logging.warning("%r is invalid", announce)
+
+    async def _on_child_crash(self, child):
+        pass
 
     ### Queue interface
 

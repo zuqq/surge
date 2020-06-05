@@ -5,150 +5,121 @@ import asyncio
 import logging
 
 
+class UncaughtCrash(Exception):
+    pass
+
+
+class InvalidState(Exception):
+    pass
+
+
 class Actor:
     """Actor base class.
-
-    `Actor`s form a directed graph whose structure is stored in the attributes
-    `parent` and `children`; acyclicity of this graph is not enforced.
 
     The principal purpose of an `Actor` is to run the coroutine `_main`.
     In doing so, it may spawn children and pass messages to its parent and
     children. Messages are to be implemented as methods of the receiving class.
 
-    `Exception`s in `_main` cause the `Actor` to crash; if it has a parent,
-    the crash bubbles up. An ordinary `Actor` that receives a crash report from
-    one of its children crashes itself. Instances of the subclass `Supervisor`
-    can handle crash reports gracefully instead.
-
-    `Actor`s are controlled via the methods `start` and `stop`; stopping an
-    `Actor` also stops all of its children.
+    Raising an `Exception` in `_main` causes the `Actor` to crash. If it has a
+    parent, the crash bubbles up. By default, an `Actor` that receives a crash
+    report from one of its children crashes itself. Overriding `_on_child_crash`
+    changes this behavior.
     """
 
     def __init__(self):
         self.parent: Optional[Actor] = None
         self.children: Set[Actor] = set()
 
-        self.running = False
-        self.crashed = False
+        self._running = False
+        self._crashed = False
 
         self.result = asyncio.get_event_loop().create_future()
-
-        self._coros: Set[Awaitable] = {self._main()}
         self._tasks: Set[asyncio.Task] = set()
-        # Task that runs the elements of `self._coros` and reports any
-        # `Exception` they throw.
         self._runner: Optional[asyncio.Task] = None
 
-    def _crash(self, reason: Optional[Exception] = None):
-        if self.crashed or not self.running:
+        self._crashed_children = asyncio.Queue()
+
+    @property
+    def running(self):
+        return self._running
+
+    @property
+    def crashed(self):
+        return self._crashed
+
+    def _crash(self, reason: Exception):
+        if self._crashed or not self._running:
             return
-        self.crashed = True
+        self._crashed = True
+        logging.warning("%r crashed with %r", self, reason)
 
-        if reason is not None:
-            logging.warning("%r crashed with %r", self, reason)
-
-        if self.parent is None:
-            raise SystemExit(f"Unsupervised actor {repr(self)} crashed.")
-        self.parent.report_crash(self)
+        if not self.result.done():
+            self.result.set_exception(reason)
+        if self.parent is not None:
+            self.parent.report_crash(self)
 
     async def _run(self):
-        self._tasks = {asyncio.create_task(coro) for coro in self._coros}
+        for coro in (self._main(), self._supervisor()):
+            self._tasks.add(asyncio.create_task(coro))
         try:
             await asyncio.gather(*self._tasks)
-        # Note that this *does not* catch `asyncio.CancelledError`, because the
-        # latter is only a `BaseException`. Instead, cancelling any element of
-        # `self._tasks` will also cancel this coroutine.
         except Exception as e:
             self._crash(e)
+
+    async def _supervisor(self):
+        while True:
+            child = await self._crashed_children.get()
+            await child.stop()
+            _ = child.result.exception()
+            self.children.remove(child)
+            await self._on_child_crash(child)
 
     ### Overridable methods
 
     async def _main(self):
         pass
 
+    async def _on_child_crash(self, child: Actor):
+        raise UncaughtCrash(child)
+
     async def _on_stop(self):
         pass
 
     ### Interface
 
-    async def start(self, parent: Optional[Actor] = None):
-        """Start `self` and set its parent to `parent`."""
-        self.parent = parent
-
-        if self.running:
+    async def start(self):
+        if self._running:
             return
-        self.running = True
-
+        self._running = True
         self._runner = asyncio.create_task(self._run())
         logging.debug("%r started", self)
 
     async def spawn_child(self, child: Actor):
         """Start `child` and add it to `self`'s children."""
-        await child.start(self)
+        if not self._running:
+            raise InvalidState("Calling 'spawn_child' on stopped actor.")
+        child.parent = self
         self.children.add(child)
+        await child.start()
 
     def report_crash(self, reporter: Actor):
-        """Signal that `reporter` crashed, which crashes `self`.
-
-        If `self` has no parent, `SystemExit` is raised.
-        """
         if reporter in self.children:
-            self._crash()
+            self._crashed_children.put_nowait(reporter)
 
     async def stop(self):
         """First stop `self`, then all of its children."""
-        if not self.running:
+        if not self._running:
             return
-        self.running = False
-
+        self._running = False
+        self._runner.cancel()
+        try:
+            await self._runner
+        except asyncio.CancelledError:
+            pass
         for task in self._tasks:
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
-
-        if self._runner is not None:
-            # Cancel `self._runner`, because `self._coros` may be empty.
-            self._runner.cancel()
-            try:
-                await self._runner
-            except asyncio.CancelledError:
-                pass
-
         for child in self.children:
             await child.stop()
-
         await self._on_stop()
         logging.debug("%r stopped", self)
-
-
-class Supervisor(Actor):
-    """Supervisor base class.
-
-    `Supervisor`s are `Actor`s that supervise their children. By default this
-    amounts to shutting down any crashed children and discarding them; more
-    complex behavior needs to be implemented by the user.
-    """
-
-    def __init__(self):
-        super().__init__()
-
-        self._crashed_children = asyncio.Queue()
-        self._coros.add(self._monitor_children())
-
-    async def _monitor_children(self):
-        while True:
-            child = await self._crashed_children.get()
-            await child.stop()
-            self.children.remove(child)
-            await self._on_child_crash(child)
-
-    ### Overridable methods
-
-    async def _on_child_crash(self, child: Actor):
-        pass
-
-    ### Interface
-
-    def report_crash(self, reporter: Actor):
-        """Signal that `reporter` crashed."""
-        if reporter in self.children:
-            self._crashed_children.put_nowait(reporter)

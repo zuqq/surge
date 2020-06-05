@@ -16,7 +16,7 @@ class Message:
         return struct.pack(self.format, *(getattr(self, f) for f in self.fields))
 
     @classmethod
-    def from_bytes(cls, _: bytes) -> Message:
+    def from_bytes(cls, data: bytes) -> Message:
         # TODO: Check if the message is well-formed.
         return cls()
 
