@@ -7,7 +7,7 @@ from surge import actor
 
 
 @pytest.mark.asyncio
-async def test_start():
+async def test_start_stop():
     a = actor.Actor()
 
     assert not a.running
@@ -16,16 +16,6 @@ async def test_start():
 
     assert a.running
 
-    await a.stop()
-
-
-@pytest.mark.asyncio
-async def test_start_stop():
-    a = actor.Actor()
-
-    assert not a.running
-
-    await a.start()
     await a.stop()
 
     assert not a.running
@@ -54,6 +44,7 @@ async def test_spawn_child():
 async def test_spawn_while_stopped():
     parent = actor.Actor()
     child = actor.Actor()
+
     with pytest.raises(actor.InvalidState):
         await parent.spawn_child(child)
 
@@ -83,8 +74,8 @@ class CrashingActor(actor.Actor):
 @pytest.mark.asyncio
 async def test_exception_raised():
     child = CrashingActor()
-    await child.start()
 
+    await child.start()
     with pytest.raises(PlannedException):
         await child.result
     assert child.crashed
@@ -96,6 +87,7 @@ async def test_exception_raised():
 async def test_crash_is_reported():
     parent = unittest.mock.Mock(spec_set=ActorSpec)
     child = CrashingActor()
+
     child.parent = parent
     await child.start()
     try:
@@ -112,6 +104,7 @@ async def test_crash_is_reported():
 async def test_uncaught_crash():
     parent = actor.Actor()
     child = CrashingActor()
+
     await parent.start()
     await parent.spawn_child(child)
     try:
