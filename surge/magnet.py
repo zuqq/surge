@@ -8,6 +8,10 @@ def parse(magnet: str) -> Tuple[bytes, List[str]]:
     url = urllib.parse.urlparse(magnet)
     qs = urllib.parse.parse_qs(url.query)
 
+    if url.scheme != "magnet":
+        raise ValueError("Invalid scheme.")
+    if "xt" not in qs:
+        raise ValueError("Missing key 'xt'.")
     (xt,) = qs["xt"]
     if not xt.startswith("urn:btih:"):
         raise ValueError("Invalid value for 'xt'.")
