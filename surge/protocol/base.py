@@ -23,7 +23,7 @@ class Closed(state.StateMachineMixin, asyncio.Protocol):
     ### asyncio.Protocol
 
     def connection_made(self, transport):
-        self._state = Open
+        self._set_state(Open)
         self._transport = transport
         self._closed = asyncio.get_event_loop().create_future()
         self._write(_peer.Handshake(self._info_hash, self._peer_id))
@@ -32,7 +32,7 @@ class Closed(state.StateMachineMixin, asyncio.Protocol):
     def connection_lost(self, exc):
         if self._exception is None:
             self._exception = exc
-        self._state = Closed
+        self._set_state(Closed)
         self._transport = None
         if self._closed is not None:
             self._closed.set_result(None)
@@ -70,7 +70,7 @@ class Open(Closed):
     def _read(self):
         if len(self._buffer) < 68:
             return
-        self._state = Established
+        self._set_state(Established)
         self.handshake.set_result(_peer.Handshake.from_bytes(self._buffer[:68]))
         del self._buffer[:68]
         self._read()
@@ -87,7 +87,7 @@ class Established(Open):
                 break
             data = bytes(self._buffer[: 4 + n])
             del self._buffer[: 4 + n]
-            self._feed(_peer.parse(data))
+            self.feed(_peer.parse(data))
 
 
 class Choked(Established):

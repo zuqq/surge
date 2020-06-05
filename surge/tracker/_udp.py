@@ -121,7 +121,7 @@ class Protocol(state.StateMachineMixin, asyncio.DatagramProtocol):
     ### asyncio.BaseProtocol
 
     def connection_made(self, transport):
-        self._state = Open
+        self._set_state(Open)
         self._transport = transport
         self._closed = asyncio.get_event_loop().create_future()
         self._transaction_id = secrets.token_bytes(4)
@@ -130,7 +130,7 @@ class Protocol(state.StateMachineMixin, asyncio.DatagramProtocol):
     def connection_lost(self, exc):
         if self._exception is None:
             self._exception = exc
-        self._state = Protocol
+        self._set_state(Protocol)
         self._transport = None
         if self._closed is not None:
             self._closed.set_result(None)
@@ -138,7 +138,7 @@ class Protocol(state.StateMachineMixin, asyncio.DatagramProtocol):
     ### asyncio.DatagramProtocol
 
     def datagram_received(self, data, addr):
-        self._feed(parse(data))
+        self.feed(parse(data))
 
     def error_received(self, exc):
         if self._exception is None:

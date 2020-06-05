@@ -13,19 +13,18 @@ class StateMachineMixin:
         self._transition = {}
 
     @property
-    def _state(self):
+    def state(self):
         return self.__class__
 
-    @_state.setter
-    def _state(self, state):
-        self.__class__ = state
+    def _set_state(self, new_state):
+        self.__class__ = new_state
 
-    def _feed(self, message):
-        start_state = self._state
+    def feed(self, message):
+        start_state = self.state
         (side_effect, end_state) = self._transition.get(
             (start_state, type(message)), (None, start_state)
         )
-        self._state = end_state
+        self._set_state(end_state)
         if side_effect is not None:
             side_effect(message)
         if end_state in self._waiters:
