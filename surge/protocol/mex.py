@@ -53,3 +53,5 @@ class Protocol(base.Closed):
             (Unchoked, _peer.Choke): (None, Choked),
             (Unchoked, _metadata.Data): (on_data, Unchoked),
         }
+
+        self._set_state(base.Closed)

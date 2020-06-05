@@ -92,7 +92,7 @@ def parse(data: bytes) -> Response:
     raise ValueError(data)
 
 
-class Protocol(state.StateMachineMixin, asyncio.DatagramProtocol):
+class Closed(state.StateMachineMixin, asyncio.DatagramProtocol):
     def __init__(self, params):
         super().__init__()
 
@@ -158,10 +158,17 @@ class Protocol(state.StateMachineMixin, asyncio.DatagramProtocol):
             await self._closed
 
 
-class Open(Protocol):
+class Open(Closed):
     def _write(self, message):
         self._transport.sendto(message.to_bytes())
 
 
 class Established(Open):
     pass
+
+
+class Protocol(Closed):
+    def __init__(self, params):
+        super().__init__(params)
+
+        self._set_state(Closed)

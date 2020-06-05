@@ -136,3 +136,5 @@ class Protocol(Closed):
             (Unchoked, _peer.Have): (on_have, Unchoked),
             (Unchoked, _peer.Block): (on_block, Unchoked),
         }
+
+        self._set_state(Closed)
