@@ -139,7 +139,7 @@ class Printer(actor.Actor):
             progress = " ".join(
                 [
                     "Downloading from",
-                    f"{self._peers : >{len(str(self._max_peers))}} peers:"
+                    f"{self._peers : >{len(str(self._max_peers))}} peers:",
                     f"{i : >{len(str(n))}}/{n} pieces"
                 ]
             )
