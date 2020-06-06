@@ -66,7 +66,7 @@ def chunks(pieces: List[Piece], files: List[File]) -> Dict[Piece, List[Chunk]]:
 @dataclasses.dataclass(eq=True, frozen=True, order=True)
 class Block:
     piece: Piece
-    piece_offset: int
+    begin: int
     length: int
 
 
@@ -77,9 +77,9 @@ def blocks(piece: Piece, block_length: int = 2 ** 14) -> List[Block]:
     immediate access to all blocks.
     """
     result = []
-    for piece_offset in range(0, piece.length, block_length):
-        length = min(block_length, piece.length - piece_offset)
-        result.append(Block(piece, piece_offset, length))
+    for begin in range(0, piece.length, block_length):
+        length = min(block_length, piece.length - begin)
+        result.append(Block(piece, begin, length))
     return result
 
 

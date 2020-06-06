@@ -186,7 +186,7 @@ class PeerConnection(actor.Actor):
 
         self._stack: List[metadata.Block] = []
         self._outstanding: Dict[metadata.Piece, Set[metadata.Block]] = {}
-        self._data: Dict[metadata.Piece, Dict[metadata.Block, bytes]] = {}
+        self._data: Dict[metadata.Piece, bytearray] = {}
 
     def __repr__(self):
         cls = self.__class__.__name__
@@ -213,10 +213,9 @@ class PeerConnection(actor.Actor):
                 self._outstanding[piece].remove(block)
             except KeyError:
                 continue
-            self._data[piece][block] = data
+            self._data[piece][block.begin : block.begin + block.length] = data
             if not self._outstanding[piece]:
-                data = self._pop(piece)
-                piece_data = b"".join(data[block] for block in sorted(data))
+                piece_data = bytes(self._pop(piece))
                 if metadata.valid(piece, piece_data):
                     self.parent.piece_done(self, piece, piece_data)
                 else:
@@ -237,7 +236,7 @@ class PeerConnection(actor.Actor):
                 blocks = metadata.blocks(piece)
                 self._stack = blocks[::-1]
                 self._outstanding[piece] = set(blocks)
-                self._data[piece] = {}
+                self._data[piece] = bytearray(piece.length)
             block = self._stack.pop()
             await self._protocol.request(block)
             self._timer[block] = asyncio.create_task(self._timeout())

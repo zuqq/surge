@@ -136,37 +136,37 @@ class Bitfield(Message):
 @register
 class Request(Message):
     format = ">LBLLL"
-    fields = ["length", "value", "index", "offset", "data_length"]
+    fields = ["length", "value", "index", "begin", "length"]
     length = 13
     value = 6
 
     def __init__(self, block: metadata.Block):
         self.index = block.piece.index
-        self.offset = block.piece_offset
-        self.data_length = block.length
+        self.begin = block.begin
+        self.length = block.length
 
 
 @register
 class Block(Message):
-    fields = ["length", "value", "index", "offset", "data"]
+    fields = ["length", "value", "index", "begin", "data"]
     value = 7
 
-    def __init__(self, index: int, offset: int, data: bytes):
+    def __init__(self, index: int, begin: int, data: bytes):
         self.index = index
-        self.offset = offset
+        self.begin = begin
         self.data = data
 
         self.format = f">LBLL{len(self.data)}s"
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Block:
-        _, _, index, offset, data = struct.unpack(
+        _, _, index, begin, data = struct.unpack(
             f">LBLL{len(data) - 4 - 1 - 4 - 4}s", data
         )
-        return cls(index, offset, data)
+        return cls(index, begin, data)
 
     def block(self, pieces: List[metadata.Piece]) -> metadata.Block:
-        return metadata.Block(pieces[self.index], self.offset, len(self.data))
+        return metadata.Block(pieces[self.index], self.begin, len(self.data))
 
 
 @register
