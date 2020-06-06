@@ -52,7 +52,6 @@ class Actor:
             return
         self._crashed = True
         logging.warning("%r crashed with %r", self, reason)
-
         if not self.result.done():
             self.result.set_exception(reason)
         if self.parent is not None:

@@ -84,7 +84,7 @@ async def test_exception_raised():
 
 
 @pytest.mark.asyncio
-async def test_crash_is_reported():
+async def test_crash_reported():
     parent = unittest.mock.Mock(spec_set=ActorSpec)
     child = CrashingActor()
 
