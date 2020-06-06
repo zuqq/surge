@@ -4,7 +4,6 @@ from typing import DefaultDict, Dict, List, Set
 import asyncio
 import collections
 import functools
-import hashlib
 import os
 import random
 
@@ -218,8 +217,7 @@ class PeerConnection(actor.Actor):
             if not self._outstanding[piece]:
                 data = self._pop(piece)
                 piece_data = b"".join(data[block] for block in sorted(data))
-                if (len(piece_data) == piece.length
-                        and hashlib.sha1(piece_data).digest() == piece.hash):
+                if metadata.valid(piece, piece_data):
                     self.parent.piece_done(self, piece, piece_data)
                 else:
                     raise ValueError("Peer sent invalid data.")
@@ -235,14 +233,12 @@ class PeerConnection(actor.Actor):
             if not self._stack:
                 piece = self.parent.get_piece(self, self._protocol.available)
                 if piece is None:
-                    return None
+                    break
                 blocks = metadata.blocks(piece)
                 self._stack = blocks[::-1]
                 self._outstanding[piece] = set(blocks)
                 self._data[piece] = {}
             block = self._stack.pop()
-            if block is None:
-                break
             await self._protocol.request(block)
             self._timer[block] = asyncio.create_task(self._timeout())
 

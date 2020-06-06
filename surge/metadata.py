@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 import dataclasses
+import hashlib
 import os
 
 from . import bencoding
@@ -24,7 +25,11 @@ class File:
 class Piece:
     index: int
     length: int
-    hash: bytes
+    hash: bytes  # SHA-1 digest of the piece's data.
+
+
+def valid(piece: Piece, data: bytes) -> Bool:
+    return len(data) == piece.length and hashlib.sha1(data).digest() == piece.hash
 
 
 @dataclasses.dataclass(eq=True, frozen=True)
@@ -66,7 +71,11 @@ class Block:
 
 
 def blocks(piece: Piece, block_length: int = 2 ** 14) -> List[Block]:
-    """Return a list of `piece`'s blocks."""
+    """Return a sorted list of `piece`'s blocks.
+
+    This is not a generator function because the caller typically also needs
+    immediate access to all blocks.
+    """
     result = []
     for piece_offset in range(0, piece.length, block_length):
         length = min(block_length, piece.length - piece_offset)

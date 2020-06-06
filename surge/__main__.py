@@ -1,5 +1,4 @@
 import argparse
-import hashlib
 import logging
 import os
 
@@ -36,7 +35,7 @@ def available(pieces, files, folder):
                     data.append(f.read(c.length))
             except FileNotFoundError:
                 continue
-        if hashlib.sha1(b"".join(data)).digest() == piece.hash:
+        if metadata.valid(piece, b"".join(data)):
             result.add(piece)
     return result
 
