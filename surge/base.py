@@ -130,7 +130,7 @@ class Printer(actor.Actor):
     ### Actor implementation
 
     async def _main(self):
-        while True:
+        while self._outstanding:
             await self._event.wait()
             self._event.clear()
 
