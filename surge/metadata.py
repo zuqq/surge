@@ -13,6 +13,12 @@ class File:
     length: int
     path: str
 
+    @classmethod
+    def from_dict(cls, index, d):
+        length = d[b"length"]
+        path = os.path.join(*(part.decode() for part in d[b"path"]))
+        return cls(index, length, path)
+
 
 @dataclasses.dataclass(eq=True, frozen=True)
 class Piece:
@@ -68,30 +74,6 @@ def blocks(piece: Piece, block_length: int = 2 ** 14) -> List[Block]:
     return result
 
 
-def _parse_file_list(file_list):
-    files = []
-    for index, file_dict in enumerate(file_list):
-        length = file_dict[b"length"]
-        path_parts = [part.decode() for part in file_dict[b"path"]]
-        path = os.path.join(*path_parts)
-        files.append(File(index, length, path))
-    return files
-
-
-def _parse_hashes(hashes, length, piece_length):
-    pieces = []
-    for offset in range(0, len(hashes), 20):
-        index = offset // 20
-        pieces.append(
-            Piece(
-                index,
-                min(piece_length, length - index * piece_length),
-                hashes[offset : offset + 20],
-            )
-        )
-    return pieces
-
-
 @dataclasses.dataclass
 class Metadata:
     announce_list: List[str]  # See BEP 12.
@@ -121,9 +103,19 @@ class Metadata:
             folder = ""
         else:
             # Multiple file mode.
-            files = _parse_file_list(info[b"files"])
+            files = [File.from_dict(i, d) for (i, d) in enumerate(info[b"files"])]
             folder = info[b"name"].decode()
         length = sum(file.length for file in files)
         piece_length = info[b"piece length"]
-        pieces = _parse_hashes(info[b"pieces"], length, piece_length)
+        hashes = info[b"pieces"]
+        pieces = []
+        for offset in range(0, len(hashes), 20):
+            index = offset // 20
+            pieces.append(
+                Piece(
+                    index,
+                    min(piece_length, length - index * piece_length),
+                    hashes[offset : offset + 20],
+                )
+            )
         return cls(announce_list, length, piece_length, pieces, folder, files)
