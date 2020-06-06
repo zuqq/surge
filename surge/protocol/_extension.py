@@ -13,8 +13,7 @@ class Message:
 
     @classmethod
     def from_bytes(cls, _: bytes) -> Message:
-        # TODO: Check if the message is well-formed.
-        return cls()
+        raise NotImplementedError
 
 
 class Handshake(Message):
@@ -57,4 +56,4 @@ def parse(payload: bytes) -> Message:
         return Handshake.from_bytes(payload)
     if payload[0] == Metadata.value:
         return Metadata.from_bytes(payload)
-    raise ValueError(payload)
+    raise ValueError("Unknown extension protocol identifier.")

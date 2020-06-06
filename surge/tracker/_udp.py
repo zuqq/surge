@@ -84,12 +84,14 @@ class AnnounceResponse(Response):
 
 
 def parse(data: bytes) -> Response:
+    if len(data) < 4:
+        raise ValueError("Not enough bytes.")
     value = int.from_bytes(data[:4], "big")
     if value == ConnectResponse.value:
         return ConnectResponse.from_bytes(data)
     if value == AnnounceResponse.value:
         return AnnounceResponse.from_bytes(data)
-    raise ValueError(data)
+    raise ValueError("Unkown message identifier.")
 
 
 class Closed(state.StateMachineMixin, asyncio.DatagramProtocol):

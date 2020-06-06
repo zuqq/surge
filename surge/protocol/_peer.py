@@ -17,7 +17,7 @@ class Message:
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Message:
-        # TODO: Check if the message is well-formed.
+        # Default implementation for messages that are ignored.
         return cls()
 
 
@@ -197,16 +197,25 @@ class ExtensionProtocol(Message):
 
 
 def parse(data: bytes) -> Union[Message, _extension.Message, _metadata.Message]:
+    n = int.from_bytes(data[:4], "big")
+    if len(data) != 4 + n:
+        raise ValueError("Incorrect length prefix.")
+
     try:
         cls = _registry[data[4]]
     except IndexError:
         return Keepalive()
+    except KeyError:
+        raise ValueError("Unknown message identifier.")
+
     message = cls.from_bytes(data)
     if cls is not ExtensionProtocol:
         return message
+
+    # The extension protocol contains nested messages. We unpack them because
+    # that makes implementing the protocol state machine more convenient.
     extension_message = message.extension_message  # type: ignore
     if isinstance(extension_message, _extension.Handshake):
         return extension_message
     if isinstance(extension_message, _extension.Metadata):
         return extension_message.metadata_message
-    raise ValueError(data)
