@@ -45,7 +45,7 @@ async def test_spawn_while_stopped():
     parent = actor.Actor()
     child = actor.Actor()
 
-    with pytest.raises(actor.InvalidState):
+    with pytest.raises(RuntimeError):
         await parent.spawn_child(child)
 
 
@@ -112,7 +112,7 @@ async def test_uncaught_crash():
     except PlannedException:
         pass
 
-    with pytest.raises(actor.UncaughtCrash):
+    with pytest.raises(RuntimeError):
         await parent.result
 
     await parent.stop()
@@ -133,7 +133,7 @@ async def test_crash_propagates():
         pass
     try:
         await child.result
-    except actor.UncaughtCrash:
+    except RuntimeError:
         pass
 
     parent.report_crash.assert_called_with(child)

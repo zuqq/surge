@@ -5,14 +5,6 @@ import asyncio
 import logging
 
 
-class UncaughtCrash(Exception):
-    pass
-
-
-class InvalidState(Exception):
-    pass
-
-
 class Actor:
     """Actor base class.
 
@@ -79,7 +71,7 @@ class Actor:
         pass
 
     async def _on_child_crash(self, child: Actor):
-        raise UncaughtCrash(child)
+        raise RuntimeError(f"Uncaught crash: {child}")
 
     async def _on_stop(self):
         pass
@@ -96,7 +88,7 @@ class Actor:
     async def spawn_child(self, child: Actor):
         """Start `child` and add it to `self`'s children."""
         if not self._running:
-            raise InvalidState("Calling 'spawn_child' on stopped actor.")
+            raise RuntimeError("Calling 'spawn_child' on stopped actor.")
         child.parent = self
         self.children.add(child)
         await child.start()
