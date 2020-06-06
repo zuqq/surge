@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Awaitable, Optional, Set
+from typing import Awaitable, Callable, Optional, Set
 
 import asyncio
 import logging
@@ -26,10 +26,10 @@ class Actor:
         self._crashed = False
 
         self.result = asyncio.get_event_loop().create_future()
+
+        self._coros: Set[Callable[[], Awaitable]] = {self._main}
         self._tasks: Set[asyncio.Task] = set()
         self._runner: Optional[asyncio.Task] = None
-
-        self._crashed_children = asyncio.Queue()
 
     @property
     def running(self):
@@ -50,31 +50,24 @@ class Actor:
             self.parent.report_crash(self)
 
     async def _run(self):
-        for coro in (self._main(), self._supervisor()):
-            self._tasks.add(asyncio.create_task(coro))
+        for coro in self._coros:
+            self._tasks.add(asyncio.create_task(coro()))
         try:
             await asyncio.gather(*self._tasks)
         except Exception as e:
             self._crash(e)
-
-    async def _supervisor(self):
-        while True:
-            child = await self._crashed_children.get()
-            await child.stop()
-            _ = child.result.exception()
-            self.children.remove(child)
-            await self._on_child_crash(child)
 
     ### Overridable methods
 
     async def _main(self):
         pass
 
-    async def _on_child_crash(self, child: Actor):
-        raise RuntimeError(f"Uncaught crash: {child}")
-
     async def _on_stop(self):
         pass
+
+    def report_crash(self, reporter: Actor):
+        if reporter in self.children:
+            self._crash(RuntimeError(f"Uncaught crash: {reporter}"))
 
     ### Interface
 
@@ -93,10 +86,6 @@ class Actor:
         self.children.add(child)
         await child.start()
 
-    def report_crash(self, reporter: Actor):
-        if reporter in self.children:
-            self._crashed_children.put_nowait(reporter)
-
     async def stop(self):
         """First stop `self`, then all of its children."""
         if not self._running:
@@ -114,3 +103,29 @@ class Actor:
             await child.stop()
         await self._on_stop()
         logging.debug("%r stopped", self)
+
+
+class Supervisor(Actor):
+    def __init__(self):
+        super().__init__()
+
+        self._coros.add(self._supervise)
+
+        self._crashed_children = asyncio.Queue()
+
+    async def _supervise(self):
+        while True:
+            child = await self._crashed_children.get()
+            await child.stop()
+            _ = child.result.exception()
+            self.children.remove(child)
+            await self._on_child_crash(child)
+
+    def report_crash(self, reporter: Actor):
+        if reporter in self.children:
+            self._crashed_children.put_nowait(reporter)
+
+    ### Overridable methods
+
+    async def _on_child_crash(self, child: Actor):
+        raise RuntimeError(f"Uncaught crash: {child}")

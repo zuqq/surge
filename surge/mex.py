@@ -9,7 +9,7 @@ from . import protocol
 from . import tracker
 
 
-class Download(actor.Actor):
+class Download(actor.Supervisor):
     def __init__(self,
                  params: tracker.Parameters,
                  announce_list: List[str],
@@ -34,7 +34,7 @@ class Download(actor.Actor):
         if isinstance(child, PeerConnection):
             self._peer_connection_slots.release()
         else:
-            raise actor.UncaughtCrash(child)
+            raise RuntimeError(f"Uncaught crash in {child}.")
 
 
 class PeerConnection(actor.Actor):

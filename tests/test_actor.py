@@ -22,8 +22,10 @@ async def test_start_stop():
 
 
 class ActorSpec(actor.Actor):
+    # Public attributes that are set in `actor.Actor.__init__`.
     parent = None
-    children = set()
+    children = None
+    result = None
 
 
 @pytest.mark.asyncio
@@ -139,3 +141,21 @@ async def test_crash_propagates():
     parent.report_crash.assert_called_with(child)
 
     await child.stop()
+
+
+@pytest.mark.asyncio
+async def test_supervisor():
+    parent = actor.Supervisor()
+    child = unittest.mock.Mock(spec_set=ActorSpec)
+
+    await parent.start()
+    await parent.spawn_child(child)
+    parent.report_crash(child)
+    try:
+        await parent.result
+    except RuntimeError:
+        pass
+
+    child.stop.assert_awaited()
+
+    await parent.stop()

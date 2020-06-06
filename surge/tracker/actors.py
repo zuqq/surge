@@ -14,7 +14,7 @@ from .. import actor
 from .. import bencoding
 
 
-class PeerQueue(actor.Actor):
+class PeerQueue(actor.Supervisor):
     def __init__(self, announce_list: List[str], params: metadata.Parameters):
         super().__init__()
 
