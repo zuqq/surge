@@ -16,11 +16,11 @@ from . import tracker
 
 def touch(folder: str, files: Iterable[metadata.File]):
     for file in files:
-        full_path = os.path.join(folder, file.path)
-        tail, _ = os.path.split(full_path)
+        path = os.path.join(folder, file.path)
+        tail, _ = os.path.split(path)
         if tail:
             os.makedirs(tail, exist_ok=True)
-        with open(full_path, "a+b") as f:
+        with open(path, "a+b") as f:
             f.truncate(file.length)
 
 

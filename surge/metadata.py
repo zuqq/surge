@@ -18,7 +18,7 @@ class File:
     def from_dict(cls, begin, d):
         length = d[b"length"]
         path = os.path.join(*(part.decode() for part in d[b"path"]))
-        return cls(length, path)
+        return cls(begin, length, path)
 
 
 @dataclasses.dataclass(eq=True, frozen=True)
@@ -100,8 +100,8 @@ class Metadata:
             # Multiple file mode.
             length = 0
             files = []
-            for d in info[b"files"]:
-                file = File.from_dict(length, d)
+            for f in info[b"files"]:
+                file = File.from_dict(length, f)
                 files.append(file)
                 length += file.length
             folder = info[b"name"].decode()
