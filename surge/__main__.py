@@ -1,3 +1,5 @@
+from typing import Generator, Iterable
+
 import argparse
 import logging
 import os
@@ -12,7 +14,7 @@ from . import runners
 from . import tracker
 
 
-def touch(folder, files):
+def touch(folder: str, files: Iterable[metadata.File]):
     for file in files:
         full_path = os.path.join(folder, file.path)
         tail, _ = os.path.split(full_path)
@@ -22,22 +24,21 @@ def touch(folder, files):
             f.truncate(file.length)
 
 
-def available(pieces, files, folder):
-    result = set()
-    chunks = metadata.chunks(pieces, files)
+def available(pieces: Iterable[metadata.Piece],
+              files: Iterable[metadata.File],
+              folder: str) -> Generator[metadata.Piece, None, None]:
     for piece in pieces:
         data = []
-        for c in chunks[piece]:
-            file_path = os.path.join(folder, c.file.path)
+        for chunk in metadata.chunks(files, piece):
+            path = os.path.join(folder, chunk.file.path)
             try:
-                with open(file_path, "rb") as f:
-                    f.seek(c.file_offset)
-                    data.append(f.read(c.length))
+                with open(path, "rb") as f:
+                    f.seek(chunk.begin - chunk.file.begin)
+                    data.append(f.read(chunk.length))
             except FileNotFoundError:
                 continue
         if metadata.valid(piece, b"".join(data)):
-            result.add(piece)
-    return result
+            yield piece
 
 
 def main():
@@ -98,7 +99,8 @@ def main():
 
     if args.resume:
         print("Checking for available pieces...", end="")
-        outstanding -= available(meta.pieces, meta.files, meta.folder)
+        for piece in available(meta.pieces, meta.files, meta.folder):
+            outstanding.remove(piece)
         print("Done.")
 
     runners.run(base.Download(meta, params, outstanding, max_peers=args.peers))

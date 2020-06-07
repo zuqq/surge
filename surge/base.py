@@ -55,16 +55,16 @@ class Download(actor.Supervisor):
             self._printer.connected()
 
     async def _write_pieces(self):
-        chunks = metadata.chunks(self._meta.pieces, self._meta.files)
         while self._outstanding:
             piece, data = await self._piece_data.get()
             if piece not in self._outstanding:
                 continue
-            for c in chunks[piece]:
-                file_path = os.path.join(self._meta.folder, c.file.path)
-                async with aiofiles.open(file_path, "rb+") as f:
-                    await f.seek(c.file_offset)
-                    await f.write(data[c.piece_offset : c.piece_offset + c.length])
+            for chunk in metadata.chunks(self._meta.files, piece):
+                path = os.path.join(self._meta.folder, chunk.file.path)
+                async with aiofiles.open(path, "rb+") as f:
+                    await f.seek(chunk.begin - chunk.file.begin)
+                    begin = chunk.begin - piece.begin
+                    await f.write(data[begin : begin + chunk.length])
             self._outstanding.remove(piece)
             self._printer.advance()
         self.result.set_result(None)
@@ -233,7 +233,7 @@ class PeerConnection(actor.Actor):
                 piece = self.parent.get_piece(self, self._protocol.available)
                 if piece is None:
                     break
-                blocks = metadata.blocks(piece)
+                blocks = list(metadata.blocks(piece))
                 self._stack = blocks[::-1]
                 self._outstanding[piece] = set(blocks)
                 self._data[piece] = bytearray(piece.length)
