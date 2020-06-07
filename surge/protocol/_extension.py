@@ -12,7 +12,7 @@ class Message:
         raise NotImplementedError
 
     @classmethod
-    def from_bytes(cls, _: bytes) -> Message:
+    def from_bytes(cls, payload: bytes) -> Message:
         raise NotImplementedError
 
 

@@ -49,47 +49,47 @@ class Handshake(Message):
 
 class Keepalive(Message):
     format = ">L"
-    fields = ["length"]
-    length = 0
+    fields = ["prefix"]
+    prefix = 0
 
 
 @register
 class Choke(Message):
     format = ">LB"
-    fields = ["length", "value"]
-    length = 1
+    fields = ["prefix", "value"]
+    prefix = 1
     value = 0
 
 
 @register
 class Unchoke(Message):
     format = ">LB"
-    fields = ["length", "value"]
-    length = 1
+    fields = ["prefix", "value"]
+    prefix = 1
     value = 1
 
 
 @register
 class Interested(Message):
     format = ">LB"
-    fields = ["length", "value"]
-    length = 1
+    fields = ["prefix", "value"]
+    prefix = 1
     value = 2
 
 
 @register
 class NotInterested(Message):
     format = ">LB"
-    fields = ["length", "value"]
-    length = 1
+    fields = ["prefix", "value"]
+    prefix = 1
     value = 3
 
 
 @register
 class Have(Message):
     format = ">LBL"
-    fields = ["length", "value", "index"]
-    length = 5
+    fields = ["prefix", "value", "index"]
+    prefix = 5
     value = 4
 
     def __init__(self, index: int):
@@ -106,14 +106,14 @@ class Have(Message):
 
 @register
 class Bitfield(Message):
-    fields = ["length", "value", "payload"]
+    fields = ["prefix", "value", "payload"]
     value = 5
 
     def __init__(self, payload: bytes):
-        self.length = 1 + len(payload)
+        self.prefix = 1 + len(payload)
         self.payload = payload
 
-        self.format = f"LB{self.length}s"
+        self.format = f"LB{len(payload)}s"
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Bitfield:
@@ -136,8 +136,8 @@ class Bitfield(Message):
 @register
 class Request(Message):
     format = ">LBLLL"
-    fields = ["length", "value", "index", "begin", "length"]
-    length = 13
+    fields = ["prefix", "value", "index", "begin", "length"]
+    prefix = 13
     value = 6
 
     def __init__(self, block: metadata.Block):
@@ -148,7 +148,7 @@ class Request(Message):
 
 @register
 class Block(Message):
-    fields = ["length", "value", "index", "begin", "data"]
+    fields = ["prefix", "value", "index", "begin", "data"]
     value = 7
 
     def __init__(self, index: int, begin: int, data: bytes):
@@ -200,15 +200,14 @@ def parse(data: bytes) -> Union[Message, _extension.Message, _metadata.Message]:
     n = int.from_bytes(data[:4], "big")
     if len(data) != 4 + n:
         raise ValueError("Incorrect length prefix.")
-
     try:
         cls = _registry[data[4]]
     except IndexError:
         return Keepalive()
     except KeyError:
         raise ValueError("Unknown message identifier.")
-
     message = cls.from_bytes(data)
+
     if cls is not ExtensionProtocol:
         return message
 

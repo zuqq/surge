@@ -36,14 +36,12 @@ class Reject(Message):
 
 def parse(data: bytes) -> Message:
     i, d = bencoding.decode_from(data, 0)
-
     if b"msg_type" not in d:
         raise ValueError("Missing key b'msg_type'.")
     value = d[b"msg_type"]
     if b"piece" not in d:
         raise ValueError("Missing key b'piece'.")
     index = d[b"piece"]
-
     if value == Request.value:
         return Request(index)
     if value == Data.value:

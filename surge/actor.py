@@ -21,12 +21,10 @@ class Actor:
     def __init__(self):
         self.parent: Optional[Actor] = None
         self.children: Set[Actor] = set()
+        self.result = asyncio.get_event_loop().create_future()
 
         self._running = False
         self._crashed = False
-
-        self.result = asyncio.get_event_loop().create_future()
-
         self._coros: Set[Callable[[], Awaitable]] = {self._main}
         self._tasks: Set[asyncio.Task] = set()
         self._runner: Optional[asyncio.Task] = None
@@ -109,9 +107,8 @@ class Supervisor(Actor):
     def __init__(self):
         super().__init__()
 
-        self._coros.add(self._supervise)
-
         self._crashed_children = asyncio.Queue()
+        self._coros.add(self._supervise)
 
     async def _supervise(self):
         while True:

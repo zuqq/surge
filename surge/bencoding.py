@@ -1,47 +1,47 @@
 """Recursive descent parser for bencoding."""
 
 
-def _int(bs, offset):
+def _int(bs, start):
     # Note that this doesn't follow the specification in BEP 3, because it
     # ignores leading zeros instead of raising an exception.
-    end = bs.index(b"e", offset)
-    return end + 1, int(bs[offset + 1 : end].decode("ascii"))
+    end = bs.index(b"e", start)
+    return end + 1, int(bs[start + 1 : end].decode("ascii"))
 
 
-def _list(bs, offset):
+def _list(bs, start):
     result = []
-    offset += 1
-    while bs[offset] != ord("e"):
-        offset, rval = decode_from(bs, offset)
+    start += 1
+    while bs[start] != ord("e"):
+        start, rval = decode_from(bs, start)
         result.append(rval)
-    return offset + 1, result
+    return start + 1, result
 
 
-def _dict(bs, offset):
+def _dict(bs, start):
     result = {}
-    offset += 1
-    while bs[offset] != ord("e"):
-        offset, key = _str(bs, offset)
-        offset, result[key] = decode_from(bs, offset)
-    return offset + 1, result
+    start += 1
+    while bs[start] != ord("e"):
+        start, key = _str(bs, start)
+        start, result[key] = decode_from(bs, start)
+    return start + 1, result
 
 
-def _str(bs, offset):
-    sep_index = bs.index(b":", offset)
-    end = sep_index + int(bs[offset:sep_index].decode("ascii")) + 1
+def _str(bs, start):
+    sep_index = bs.index(b":", start)
+    end = sep_index + int(bs[start:sep_index].decode("ascii")) + 1
     return end, bs[sep_index + 1 : end]
 
 
-def decode_from(bs, offset):
-    if bs[offset] == ord("i"):
-        return _int(bs, offset)
-    if bs[offset] == ord("l"):
-        return _list(bs, offset)
-    if bs[offset] == ord("d"):
-        return _dict(bs, offset)
-    if bs[offset] in (ord(str(i)) for i in range(10)):
-        return _str(bs, offset)
-    raise ValueError(bs[offset:])
+def decode_from(bs, start):
+    if bs[start] == ord("i"):
+        return _int(bs, start)
+    if bs[start] == ord("l"):
+        return _list(bs, start)
+    if bs[start] == ord("d"):
+        return _dict(bs, start)
+    if bs[start] in (ord(str(i)) for i in range(10)):
+        return _str(bs, start)
+    raise ValueError(bs[start:])
 
 
 def decode(bs):
@@ -49,8 +49,8 @@ def decode(bs):
 
     Raises `ValueError` if `bs` is not valid BEncoding.
     """
-    offset, rval = decode_from(bs, 0)
-    if offset == len(bs):
+    start, rval = decode_from(bs, 0)
+    if start == len(bs):
         return rval
     raise ValueError(bs)
 
@@ -61,13 +61,13 @@ def raw_val(bs, key):
 
     Raises `KeyError` if `key` is not a key of `bs`.
     """
-    offset = 1
-    while offset < len(bs) and bs[offset] != ord("e"):
-        offset, curr_key = _str(bs, offset)
-        next_offset, _ = decode_from(bs, offset)
+    start = 1
+    while start < len(bs) and bs[start] != ord("e"):
+        start, curr_key = _str(bs, start)
+        next_start, _ = decode_from(bs, start)
         if curr_key == key:
-            return bs[offset:next_offset]
-        offset = next_offset
+            return bs[start:next_start]
+        start = next_start
     raise KeyError(key)
 
 
