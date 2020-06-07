@@ -29,7 +29,6 @@ class Parameters:
 class Peer:
     address: str
     port: int
-    peer_id: Optional[bytes] = None
 
     @classmethod
     def from_bytes(cls, bs):
@@ -37,7 +36,7 @@ class Peer:
 
     @classmethod
     def from_dict(cls, d):
-        return cls(d[b"ip"].decode(), d[b"port"], d[b"peer id"])
+        return cls(d[b"ip"].decode(), d[b"port"])
 
 
 def _parse_peers(raw_peers):
