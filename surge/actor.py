@@ -8,14 +8,20 @@ import logging
 class Actor:
     """Actor base class.
 
+    `Actor`s form a directed graph whose structure is stored in the attributes
+    `parent` and `children`; acyclicity of this graph is not enforced.
+
     The principal purpose of an `Actor` is to run the coroutine `_main`.
     In doing so, it may spawn children and pass messages to its parent and
     children. Messages are to be implemented as methods of the receiving class.
 
-    Raising an `Exception` in `_main` causes the `Actor` to crash. If it has a
-    parent, the crash bubbles up. By default, an `Actor` that receives a crash
-    report from one of its children crashes itself. Overriding `_on_child_crash`
-    changes this behavior.
+    `Exception`s in `_main` cause the `Actor` to crash; if it has a parent,
+    the crash bubbles up. An ordinary `Actor` that receives a crash report from
+    one of its children crashes itself. Instances of the subclass `Supervisor`
+    can handle crash reports gracefully instead.
+
+    `Actor`s are controlled via the methods `start` and `stop`; stopping an
+    `Actor` also stops all of its children.
     """
 
     def __init__(self):
@@ -104,6 +110,13 @@ class Actor:
 
 
 class Supervisor(Actor):
+    """Supervisor base class.
+
+    `Supervisor`s are `Actor`s that supervise their children. By default this
+    amounts to shutting down any crashed children and discarding them; more
+    complex behavior needs to be implemented by the user.
+    """
+
     def __init__(self):
         super().__init__()
 
