@@ -35,25 +35,28 @@ appropriate environment it can be run as ``python -m surge``.
 .. code-block::
 
     $ python -m surge --file debian.torrent
-    Using file debian.torrent.
-    Download progress: 1340/1340 pieces. [########################################]
-    Done.
+    Using metadata file debian.torrent.
+    Building the file tree...Done.
+    Downloading from 34 peers: 1340/1340 pieces [#################################]
 
 **Help page:**
 
 .. code-block::
 
     $ python -m surge --help
-    usage: __main__.py [-h] (--file FILE | --magnet MAGNET) [--debug] [--resume]
+    usage: __main__.py [-h] [--resume] [--peers PEERS] [--folder FOLDER] [--log LOG]
+                       (--file FILE | --magnet MAGNET)
 
     Download files from the BitTorrent network.
 
     optional arguments:
       -h, --help       show this help message and exit
+      --resume         resume download
+      --peers PEERS    number of peers
+      --folder FOLDER  destination folder
+      --log LOG        log file
       --file FILE      torrent file
       --magnet MAGNET  magnet link
-      --debug          enable logging
-      --resume         resume download
 
 
 Architecture
@@ -94,8 +97,7 @@ Incremental writes:
     verifing them, keeping its memory usage low.
 
 Request queuing:
-    Surge keeps open multiple requests from each peer, improving network
-    throughput.
+    Surge uses request pipelining, improving network throughput.
 
 Actor model
 ~~~~~~~~~~~
