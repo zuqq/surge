@@ -70,8 +70,8 @@ class _BaseTrackerConnection(actor.Actor):
 
     def __repr__(self):
         cls = self.__class__.__name__
-        info = [f"url={repr(self._url.geturl())}"]
-        return f"<{cls} object at {hex(id(self))} with {', '.join(info)}>"
+        url = f"url={repr(self._url.geturl())}"
+        return f"<{cls} object at {hex(id(self))} with {url}>"
 
 
 class HTTPTrackerConnection(_BaseTrackerConnection):
