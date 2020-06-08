@@ -71,10 +71,8 @@ class PeerConnection(actor.Actor):
         raw_info = b"".join(data)
         if hashlib.sha1(raw_info).digest() != self._params.info_hash:
             raise ConnectionError("Peer sent invalid data.")
-        try:
+        if not self.parent.result.done():
             self.parent.result.set_result(raw_info)
-        except asyncio.InvalidStateError:  # If we didn't come in first.
-            pass
 
     async def _on_stop(self):
         if self._protocol is not None:

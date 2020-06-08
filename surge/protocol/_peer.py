@@ -10,7 +10,7 @@ from .. import metadata
 
 class Message:
     format = ""
-    fields: Tuple[str] = ()
+    fields: Tuple[str, ...] = ()
 
     def to_bytes(self) -> bytes:
         return struct.pack(self.format, *(getattr(self, f) for f in self.fields))
