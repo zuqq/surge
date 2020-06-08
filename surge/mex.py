@@ -1,4 +1,4 @@
-from typing import List
+from typing import Iterable
 
 import asyncio
 import functools
@@ -12,7 +12,7 @@ from . import tracker
 class Download(actor.Supervisor):
     def __init__(self,
                  params: tracker.Parameters,
-                 announce_list: List[str],
+                 announce_list: Iterable[str],
                  *,
                  max_peers: int = 10):
         super().__init__()

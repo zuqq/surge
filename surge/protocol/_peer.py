@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, List, Set, Type, Union
+from typing import Dict, List, Set, Tuple, Type, Union
 
 import struct
 
@@ -10,7 +10,7 @@ from .. import metadata
 
 class Message:
     format = ""
-    fields: List[str] = []
+    fields: Tuple[str] = ()
 
     def to_bytes(self) -> bytes:
         return struct.pack(self.format, *(getattr(self, f) for f in self.fields))
@@ -31,7 +31,7 @@ def register(cls: Type[Message]) -> Type[Message]:
 
 class Handshake(Message):
     format = ">B19sQ20s20s"
-    fields = ["pstrlen", "pstr", "reserved", "info_hash", "peer_id"]
+    fields = ("pstrlen", "pstr", "reserved", "info_hash", "peer_id")
 
     pstrlen = 19
     pstr = b"BitTorrent protocol"
@@ -49,14 +49,14 @@ class Handshake(Message):
 
 class Keepalive(Message):
     format = ">L"
-    fields = ["prefix"]
+    fields = ("prefix",)
     prefix = 0
 
 
 @register
 class Choke(Message):
     format = ">LB"
-    fields = ["prefix", "value"]
+    fields = ("prefix", "value")
     prefix = 1
     value = 0
 
@@ -64,7 +64,7 @@ class Choke(Message):
 @register
 class Unchoke(Message):
     format = ">LB"
-    fields = ["prefix", "value"]
+    fields = ("prefix", "value")
     prefix = 1
     value = 1
 
@@ -72,7 +72,7 @@ class Unchoke(Message):
 @register
 class Interested(Message):
     format = ">LB"
-    fields = ["prefix", "value"]
+    fields = ("prefix", "value")
     prefix = 1
     value = 2
 
@@ -80,7 +80,7 @@ class Interested(Message):
 @register
 class NotInterested(Message):
     format = ">LB"
-    fields = ["prefix", "value"]
+    fields = ("prefix", "value")
     prefix = 1
     value = 3
 
@@ -88,7 +88,7 @@ class NotInterested(Message):
 @register
 class Have(Message):
     format = ">LBL"
-    fields = ["prefix", "value", "index"]
+    fields = ("prefix", "value", "index")
     prefix = 5
     value = 4
 
@@ -106,7 +106,7 @@ class Have(Message):
 
 @register
 class Bitfield(Message):
-    fields = ["prefix", "value", "payload"]
+    fields = ("prefix", "value", "payload")
     value = 5
 
     def __init__(self, payload: bytes):
@@ -136,7 +136,7 @@ class Bitfield(Message):
 @register
 class Request(Message):
     format = ">LBLLL"
-    fields = ["prefix", "value", "index", "begin", "length"]
+    fields = ("prefix", "value", "index", "begin", "length")
     prefix = 13
     value = 6
 
@@ -148,7 +148,7 @@ class Request(Message):
 
 @register
 class Block(Message):
-    fields = ["prefix", "value", "index", "begin", "data"]
+    fields = ("prefix", "value", "index", "begin", "data")
     value = 7
 
     def __init__(self, index: int, begin: int, data: bytes):
