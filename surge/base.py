@@ -31,10 +31,12 @@ class Download(actor.Supervisor):
         self._borrowers = collections.defaultdict(set)
 
         self._peer_queue = tracker.PeerQueue(meta.announce_list, params)
-        self._printer = Printer(len(meta.pieces), len(outstanding), max_peers)
 
+        self._max_peers = max_peers
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
         self._piece_data = asyncio.Queue()  # type: ignore
+
+        self._print_event = asyncio.Event()
 
     def __repr__(self):
         cls = self.__class__.__name__
@@ -52,7 +54,7 @@ class Download(actor.Supervisor):
             peer = await self._peer_queue.get()
             connection = PeerConnection(self._meta, self._params, peer)
             await self.spawn_child(connection)
-            self._printer.connected()
+            self._print_event.set()
 
     async def _write_pieces(self):
         while self._outstanding:
@@ -66,13 +68,39 @@ class Download(actor.Supervisor):
                     begin = chunk.begin - piece.begin
                     await f.write(data[begin : begin + chunk.length])
             self._outstanding.remove(piece)
-            self._printer.advance()
+            self._print_event.set()
         self.result.set_result(None)
+
+    async def _print_progress(self):
+        peers_digits = len(str(self._max_peers))
+        pieces = len(self._meta.pieces)
+        pieces_digits = len(str(pieces))
+
+        while self._outstanding:
+            await self._print_event.wait()
+            self._print_event.clear()
+
+            outstanding = pieces - len(self._outstanding)
+            progress = (
+                "Downloading from"
+                f" {len(self.children) - 1 : >{peers_digits}} peers:"
+                f" {outstanding : >{pieces_digits}}/{pieces} pieces"
+            )
+            width, _ = os.get_terminal_size()
+            parts = width - len(progress) - 4
+            if parts < 10:
+                print("\r\x1b[K" + progress, end="")
+            else:
+                bar = f"[{(parts * outstanding // pieces) * '#' : <{parts}}]"
+                print("\r\x1b[K" + progress + " " + bar + " ", end="")
 
     async def _main(self):
         await self.spawn_child(self._peer_queue)
-        await self.spawn_child(self._printer)
-        await asyncio.gather(self._spawn_peer_connections(), self._write_pieces())
+        await asyncio.gather(
+            self._spawn_peer_connections(),
+            self._write_pieces(),
+            self._print_progress()
+        )
 
     async def _on_child_crash(self, child):
         if isinstance(child, PeerConnection):
@@ -81,7 +109,7 @@ class Download(actor.Supervisor):
                 if not borrowers:
                     self._borrowers.pop(piece)
             self._peer_connection_slots.release()
-            self._printer.disconnected()
+            self._print_event.set()
         else:
             raise RuntimeError(f"Uncaught crash in {child}.")
 
@@ -110,60 +138,6 @@ class Download(actor.Supervisor):
         for borrower in self._borrowers.pop(piece) - {peer_connection}:
             borrower.cancel_piece(piece)
         self._piece_data.put_nowait((piece, data))
-
-
-class Printer(actor.Actor):
-    def __init__(self, pieces: int, outstanding: int, max_peers: int):
-        super().__init__()
-
-        self._pieces = pieces
-        self._outstanding = outstanding
-        self._max_peers = max_peers
-        self._peers = 0
-        self._event = asyncio.Event()
-
-    def __repr__(self):
-        cls = self.__class__.__name__
-        return f"<{cls} object at {hex(id(self))}>"
-
-    ### Actor implementation
-
-    async def _main(self):
-        while self._outstanding:
-            await self._event.wait()
-            self._event.clear()
-
-            n = self._pieces
-            i = n - self._outstanding
-            progress = " ".join(
-                [
-                    "Downloading from",
-                    f"{self._peers : >{len(str(self._max_peers))}} peers:",
-                    f"{i : >{len(str(n))}}/{n} pieces"
-                ]
-            )
-            width, _ = os.get_terminal_size()
-            parts = width - len(progress) - 4
-            if parts < 10:
-                print("\r\x1b[K" + progress, end="")
-            else:
-                done = parts * i // n
-                bar = f"[{done * '#' : <{parts}}]"
-                print("\r\x1b[K" + progress + " " + bar + " ", end="")
-
-    ### Interface
-
-    def advance(self):
-        self._outstanding -= 1
-        self._event.set()
-
-    def connected(self):
-        self._peers += 1
-        self._event.set()
-
-    def disconnected(self):
-        self._peers -= 1
-        self._event.set()
 
 
 class PeerConnection(actor.Actor):
