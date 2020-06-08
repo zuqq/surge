@@ -14,33 +14,6 @@ from . import runners
 from . import tracker
 
 
-def touch(folder: str, files: Iterable[metadata.File]):
-    for file in files:
-        path = os.path.join(folder, file.path)
-        tail, _ = os.path.split(path)
-        if tail:
-            os.makedirs(tail, exist_ok=True)
-        with open(path, "a+b") as f:
-            f.truncate(file.length)
-
-
-def available(pieces: Iterable[metadata.Piece],
-              files: Iterable[metadata.File],
-              folder: str) -> Generator[metadata.Piece, None, None]:
-    for piece in pieces:
-        data = []
-        for chunk in metadata.chunks(files, piece):
-            path = os.path.join(folder, chunk.file.path)
-            try:
-                with open(path, "rb") as f:
-                    f.seek(chunk.begin - chunk.file.begin)
-                    data.append(f.read(chunk.length))
-            except FileNotFoundError:
-                continue
-        if metadata.valid(piece, b"".join(data)):
-            yield piece
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Download files from the BitTorrent network."
@@ -88,7 +61,7 @@ def main():
         print("Done.")
 
     print("Building the file tree...", end="")
-    touch(meta.folder, meta.files)
+    metadata.build_file_tree(meta.folder, meta.files)
     print("Done.")
 
     if args.folder:
@@ -99,7 +72,7 @@ def main():
 
     if args.resume:
         print("Checking for available pieces...", end="")
-        for piece in available(meta.pieces, meta.files, meta.folder):
+        for piece in metadata.available_pieces(meta.pieces, meta.files, meta.folder):
             outstanding.remove(piece)
         print("Done.")
 

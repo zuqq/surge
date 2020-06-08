@@ -21,6 +21,16 @@ class File:
         return cls(begin, length, path)
 
 
+def build_file_tree(folder: str, files: Iterable[File]):
+    for file in files:
+        path = os.path.join(folder, file.path)
+        tail, _ = os.path.split(path)
+        if tail:
+            os.makedirs(tail, exist_ok=True)
+        with open(path, "a+b") as f:
+            f.truncate(file.length)
+
+
 @dataclasses.dataclass(eq=True, frozen=True)
 class Piece:
     index: int
@@ -31,6 +41,23 @@ class Piece:
 
 def valid(piece: Piece, data: bytes) -> bool:
     return len(data) == piece.length and hashlib.sha1(data).digest() == piece.hash
+
+
+def available_pieces(pieces: Iterable[Piece],
+                     files: Iterable[File],
+                     folder: str) -> Generator[Piece, None, None]:
+    for piece in pieces:
+        data = []
+        for chunk in chunks(files, piece):
+            path = os.path.join(folder, chunk.file.path)
+            try:
+                with open(path, "rb") as f:
+                    f.seek(chunk.begin - chunk.file.begin)
+                    data.append(f.read(chunk.length))
+            except FileNotFoundError:
+                continue
+        if valid(piece, b"".join(data)):
+            yield piece
 
 
 @dataclasses.dataclass(eq=True, frozen=True)
