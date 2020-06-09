@@ -4,16 +4,16 @@ import logging
 import signal
 
 
-def handler(sig):
-    logging.critical("%r", sig)
-    raise SystemExit(sig.value)
-
-
 def run(actor):
+    def on_signal(s):
+        logging.critical("%r received", s)
+        if not actor.result.done():
+            actor.result.set_result(None)
+
     loop = asyncio.get_event_loop()
     try:
-        for sig in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, functools.partial(handler, sig))
+        for s in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(s, functools.partial(on_signal, s))
     except NotImplementedError:
         pass
     loop.run_until_complete(actor.start())

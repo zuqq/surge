@@ -47,11 +47,12 @@ class Actor:
         if self._crashed or not self._running:
             return
         self._crashed = True
-        logging.warning("%r crashed with %r", self, reason)
         if not self.result.done():
             self.result.set_exception(reason)
         if self.parent is not None:
             self.parent.report_crash(self)
+
+        logging.warning("%r crashed with %r", self, reason)
 
     async def _run(self):
         for coro in self._coros:
@@ -80,6 +81,7 @@ class Actor:
             return
         self._running = True
         self._runner = asyncio.create_task(self._run())
+
         logging.debug("%r started", self)
 
     async def spawn_child(self, child: Actor):
@@ -106,6 +108,9 @@ class Actor:
         for child in self.children:
             await child.stop()
         await self._on_stop()
+        if not self.result.done():
+            self.result.set_result(None)
+
         logging.debug("%r stopped", self)
 
 
