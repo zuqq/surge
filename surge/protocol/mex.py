@@ -36,8 +36,12 @@ class Protocol(base.Closed):
     def __init__(self, info_hash, peer_id):
         super().__init__(info_hash, peer_id)
 
+        loop = asyncio.get_event_loop()
+        self.handshake = loop.create_future()
+        self._waiters[_peer.Handshake].add(self.handshake)
+
         self._ut_metadata = None
-        self.metadata_size = asyncio.get_event_loop().create_future()
+        self.metadata_size = loop.create_future()
 
         def on_handshake(message):
             self._ut_metadata = message.ut_metadata
@@ -47,6 +51,7 @@ class Protocol(base.Closed):
             self._data.put_nowait((message.index, message.data))
 
         self._transition = {
+            (base.Open, _peer.Handshake): (None, base.Established),
             (base.Established, _extension.Handshake): (on_handshake, Choked),
             (Choked, _peer.Unchoke): (None, Unchoked),
             (Choked, _metadata.Data): (on_data, Choked),

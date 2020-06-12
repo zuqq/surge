@@ -29,11 +29,18 @@ def register(cls: Type[Message]) -> Type[Message]:
     return cls
 
 
+@register
 class Handshake(Message):
-    format = ">B19sQ20s20s"
-    fields = ("pstrlen", "pstr", "reserved", "info_hash", "peer_id")
+    # According to the specification, a handshake message has neither length
+    # prefix nor identifier byte. Here's how I make it fit in with the others:
+    # - Initialize the receive buffer with a length prefix for the handshake.
+    # - The first byte of a handshake message is always 19. No other message can
+    # have that as its first byte, so it serves as the identifier byte.
 
-    pstrlen = 19
+    format = ">B19sQ20s20s"
+    fields = ("value", "pstr", "reserved", "info_hash", "peer_id")
+
+    value = 19  # Called "pstrlen" in other places.
     pstr = b"BitTorrent protocol"
     reserved = 1 << 20
 
@@ -43,7 +50,7 @@ class Handshake(Message):
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Handshake:
-        _, _, _, info_hash, peer_id = struct.unpack(cls.format, data)
+        _, _, _, info_hash, peer_id = struct.unpack(cls.format, data[4:])
         return cls(info_hash, peer_id)
 
 

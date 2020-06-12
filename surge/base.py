@@ -231,7 +231,6 @@ class PeerConnection(actor.Actor):
             self._peer.address,
             self._peer.port,
         )
-        # TODO: Validate the peer's handshake.
         await self._protocol.handshake
         await self._protocol.bitfield
         await asyncio.gather(self._receive_blocks(), self._request_blocks())

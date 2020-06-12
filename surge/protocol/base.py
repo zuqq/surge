@@ -15,10 +15,9 @@ class Closed(state.StateMachineMixin, asyncio.Protocol):
         self._transport = None
         self._exception = None
         self._closed = None
-        self._buffer = bytearray()
+        self._buffer = bytearray(int.to_bytes(68, 4, "big"))
 
         self._data = asyncio.Queue()
-        self.handshake = asyncio.get_event_loop().create_future()
 
     ### asyncio.Protocol
 
@@ -68,19 +67,6 @@ class Closed(state.StateMachineMixin, asyncio.Protocol):
 
 class Open(Closed):
     def _read(self):
-        if len(self._buffer) < 68:
-            return
-        self.state = Established
-        self.handshake.set_result(_peer.Handshake.from_bytes(self._buffer[:68]))
-        del self._buffer[:68]
-        self._read()
-
-    def _write(self, message):
-        self._transport.write(message.to_bytes())
-
-
-class Established(Open):
-    def _read(self):
         while len(self._buffer) >= 4:
             n = int.from_bytes(self._buffer[:4], "big")
             if len(self._buffer) < 4 + n:
@@ -88,6 +74,13 @@ class Established(Open):
             data = bytes(self._buffer[: 4 + n])
             del self._buffer[: 4 + n]
             self.feed(_peer.parse(data))
+
+    def _write(self, message):
+        self._transport.write(message.to_bytes())
+
+
+class Established(Open):
+    pass
 
 
 class Choked(Established):
@@ -114,8 +107,12 @@ class Protocol(Closed):
     def __init__(self, info_hash, peer_id, pieces):
         super().__init__(info_hash, peer_id)
 
+        loop = asyncio.get_event_loop()
+        self.handshake = loop.create_future()
+        self._waiters[_peer.Handshake].add(self.handshake)
+
         self.available = set()
-        self.bitfield = asyncio.get_event_loop().create_future()
+        self.bitfield = loop.create_future()
 
         def on_bitfield(message):
             self.available = message.available(pieces)
@@ -128,6 +125,7 @@ class Protocol(Closed):
             self._data.put_nowait((message.block(pieces), message.data))
 
         self._transition = {
+            (Open, _peer.Handshake): (None, Established),
             (Established, _peer.Bitfield): (on_bitfield, Choked),
             (Choked, _peer.Unchoke): (None, Unchoked),
             (Choked, _peer.Have): (on_have, Choked),
