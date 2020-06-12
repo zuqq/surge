@@ -1,4 +1,7 @@
+import asyncio
 import unittest.mock
+
+import pytest
 
 from surge import state
 
@@ -13,13 +16,14 @@ def test_state():
     on_open = unittest.mock.Mock()
     on_close = unittest.mock.Mock()
 
-    waiter = unittest.mock.Mock()
+    waiter = asyncio.Future()
+    waiter.set_result = unittest.mock.Mock()
 
     class Closed(state.StateMachineMixin):
         def __init__(self):
             super().__init__()
 
-            self._waiters[Closed].add(waiter)
+            self._waiters[CloseCommand].add(waiter)
 
             self._transition = {
                 (Closed, OpenCommand): (on_open, Open),
@@ -38,7 +42,8 @@ def test_state():
     state_machine.feed(OpenCommand())
     assert state_machine.state is Open
 
-    state_machine.feed(CloseCommand())
+    cmd = CloseCommand()
+    state_machine.feed(cmd)
     assert state_machine.state is Closed
     on_close.assert_called()
-    waiter.set_result.assert_called_with(None)
+    waiter.set_result.assert_called_with(cmd)

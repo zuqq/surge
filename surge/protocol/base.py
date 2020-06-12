@@ -23,7 +23,7 @@ class Closed(state.StateMachineMixin, asyncio.Protocol):
     ### asyncio.Protocol
 
     def connection_made(self, transport):
-        self._set_state(Open)
+        self.state = Open
         self._transport = transport
         self._closed = asyncio.get_event_loop().create_future()
         self._write(_peer.Handshake(self._info_hash, self._peer_id))
@@ -32,7 +32,7 @@ class Closed(state.StateMachineMixin, asyncio.Protocol):
     def connection_lost(self, exc):
         if self._exception is None:
             self._exception = exc
-        self._set_state(Closed)
+        self.state = Closed
         self._transport = None
         if self._closed is not None:
             self._closed.set_result(None)
@@ -70,7 +70,7 @@ class Open(Closed):
     def _read(self):
         if len(self._buffer) < 68:
             return
-        self._set_state(Established)
+        self.state = Established
         self.handshake.set_result(_peer.Handshake.from_bytes(self._buffer[:68]))
         del self._buffer[:68]
         self._read()
@@ -96,7 +96,7 @@ class Choked(Established):
             raise self._exception
         # Register with Unchoked so that we are woken up if the unchoke happens.
         waiter = asyncio.get_running_loop().create_future()
-        self._waiters[Unchoked].add(waiter)
+        self._waiters[_peer.Unchoke].add(waiter)
         self._write(_peer.Interested())
         # Wait for the unchoke to happen.
         await waiter
@@ -137,4 +137,4 @@ class Protocol(Closed):
             (Unchoked, _peer.Block): (on_block, Unchoked),
         }
 
-        self._set_state(Closed)
+        self.state = Closed

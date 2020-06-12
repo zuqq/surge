@@ -11,7 +11,7 @@ class Choked(base.Established):
         if self._exception is not None:
             raise self._exception
         waiter = asyncio.get_running_loop().create_future()
-        self._waiters[Unchoked].add(waiter)
+        self._waiters[_peer.Unchoke].add(waiter)
         self._write(_peer.Interested())
         await waiter
         self._write(
@@ -54,4 +54,4 @@ class Protocol(base.Closed):
             (Unchoked, _metadata.Data): (on_data, Unchoked),
         }
 
-        self._set_state(base.Closed)
+        self.state = base.Closed

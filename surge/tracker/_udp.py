@@ -123,7 +123,7 @@ class Closed(state.StateMachineMixin, asyncio.DatagramProtocol):
     ### asyncio.BaseProtocol
 
     def connection_made(self, transport):
-        self._set_state(Open)
+        self.state = Open
         self._transport = transport
         self._closed = asyncio.get_event_loop().create_future()
         self._transaction_id = secrets.token_bytes(4)
@@ -132,7 +132,7 @@ class Closed(state.StateMachineMixin, asyncio.DatagramProtocol):
     def connection_lost(self, exc):
         if self._exception is None:
             self._exception = exc
-        self._set_state(Protocol)
+        self.state = Protocol
         self._transport = None
         if self._closed is not None:
             self._closed.set_result(None)
@@ -173,4 +173,4 @@ class Protocol(Closed):
     def __init__(self, params):
         super().__init__(params)
 
-        self._set_state(Closed)
+        self.state = Closed
