@@ -15,7 +15,7 @@ class Request:
 
 class Response:
     @classmethod
-    def from_bytes(cls, _: bytes) -> Response:
+    def from_bytes(cls, data: bytes) -> Response:
         raise NotImplementedError
 
 
@@ -98,12 +98,14 @@ class Closed(state.StateMachineMixin, asyncio.DatagramProtocol):
     def __init__(self, params):
         super().__init__()
 
+        loop = asyncio.get_event_loop()
+
         self._transport = None
         self._exception = None
-        self._closed = None
+        self._closed = loop.create_future()
 
+        self.response = loop.create_future()
         self._transaction_id = None
-        self.response = asyncio.get_event_loop().create_future()
 
         def on_connect(message):
             # TODO: Check the returned `transaction_id`.
@@ -113,7 +115,9 @@ class Closed(state.StateMachineMixin, asyncio.DatagramProtocol):
 
         def on_announce(message):
             # TODO: Check the returned `connection_id`.
-            self.response.set_result(message.response)
+            # TODO: Why does this happen?
+            if not self.response.done():
+                self.response.set_result(message.response)
 
         self._transition = {
             (Open, ConnectResponse): (on_connect, Established),
@@ -125,17 +129,16 @@ class Closed(state.StateMachineMixin, asyncio.DatagramProtocol):
     def connection_made(self, transport):
         self.state = Open
         self._transport = transport
-        self._closed = asyncio.get_event_loop().create_future()
         self._transaction_id = secrets.token_bytes(4)
         self._write(ConnectRequest(self._transaction_id))
 
     def connection_lost(self, exc):
-        if self._exception is None:
+        if exc is not None:
             self._exception = exc
-        self.state = Protocol
-        self._transport = None
-        if self._closed is not None:
+        self.state = Closed
+        if not self._closed.done():
             self._closed.set_result(None)
+        self._transport = None
 
     ### asyncio.DatagramProtocol
 
@@ -143,8 +146,7 @@ class Closed(state.StateMachineMixin, asyncio.DatagramProtocol):
         self.feed(parse(data))
 
     def error_received(self, exc):
-        if self._exception is None:
-            self._exception = exc
+        self._exception = exc
 
     ### Stream
 
@@ -156,8 +158,7 @@ class Closed(state.StateMachineMixin, asyncio.DatagramProtocol):
     async def close(self):
         if self._transport is not None:
             self._transport.close()
-        if self._closed is not None:
-            await self._closed
+        await self._closed
 
 
 class Open(Closed):

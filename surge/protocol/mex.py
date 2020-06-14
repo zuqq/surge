@@ -6,57 +6,76 @@ from . import _peer
 from . import base
 
 
-class Choked(base.Established):
+class Closed(base.Closed):
+    async def establish(self):
+        exc = self._exception
+        if exc is not None:
+            raise exc
+        await self.protocol.write(_peer.Handshake(self._info_hash, self._peer_id))
+        await self.protocol.write(_peer.ExtensionProtocol(_extension.Handshake()))
+        return await self._handshake
+
+    async def receive(self):
+        exc = self._exception
+        if exc is not None:
+            raise exc
+        if not self._queue:
+            waiter = asyncio.get_running_loop().create_future()
+            self._waiters[_metadata.Data].add(waiter)
+            await waiter
+        return self._queue.popleft()
+
+
+class Open(Closed):
+    pass
+
+
+class Choked(Closed):
     async def request(self, index):
-        if self._exception is not None:
-            raise self._exception
         waiter = asyncio.get_running_loop().create_future()
         self._waiters[_peer.Unchoke].add(waiter)
-        self._write(_peer.Interested())
+        await self.protocol.write(_peer.Interested())
         await waiter
-        self._write(
+        await self.protocol.write(
             _peer.ExtensionProtocol(
                 _extension.Metadata(_metadata.Request(index), self._ut_metadata)
             )
         )
 
 
-class Unchoked(base.Established):
+class Unchoked(Closed):
     async def request(self, index):
-        if self._exception is not None:
-            raise self._exception
-        self._write(
+        await self.protocol.write(
             _peer.ExtensionProtocol(
                 _extension.Metadata(_metadata.Request(index), self._ut_metadata)
             )
         )
 
 
-class Protocol(base.Closed):
+class Stream(Closed):
     def __init__(self, info_hash, peer_id):
         super().__init__(info_hash, peer_id)
 
-        loop = asyncio.get_event_loop()
-        self.handshake = loop.create_future()
-        self._waiters[_peer.Handshake].add(self.handshake)
+        self._info_hash = info_hash
+        self._peer_id = peer_id
 
+        self._handshake = asyncio.get_event_loop().create_future()
+        self._waiters[_extension.Handshake].add(self._handshake)
         self._ut_metadata = None
-        self.metadata_size = loop.create_future()
 
         def on_handshake(message):
             self._ut_metadata = message.ut_metadata
-            self.metadata_size.set_result(message.metadata_size)
 
         def on_data(message):
-            self._data.put_nowait((message.index, message.data))
+            self._queue.append((message.index, message.data))
 
         self._transition = {
-            (base.Open, _peer.Handshake): (None, base.Established),
-            (base.Established, _extension.Handshake): (on_handshake, Choked),
+            (Closed, _peer.Handshake): (None, Open),
+            (Open, _extension.Handshake): (on_handshake, Choked),
             (Choked, _peer.Unchoke): (None, Unchoked),
             (Choked, _metadata.Data): (on_data, Choked),
             (Unchoked, _peer.Choke): (None, Choked),
             (Unchoked, _metadata.Data): (on_data, Unchoked),
         }
 
-        self.state = base.Closed
+        self.state = Closed

@@ -43,28 +43,30 @@ class PeerConnection(actor.Actor):
 
         self._params = params
         self._peer = peer
-        self._protocol = None
+        self._stream = None
 
     ### Actor implementation
 
     async def _main(self):
         loop = asyncio.get_running_loop()
-        _, self._protocol = await loop.create_connection(
+        self._stream = protocol.MetadataStream(
+            self._params.info_hash,
+            self._params.peer_id,
+        )
+        _, _ = await loop.create_connection(
             functools.partial(
-                protocol.MetadataProtocol,
-                self._params.info_hash,
-                self._params.peer_id,
+                protocol.Protocol,
+                self._stream
             ),
             self._peer.address,
             self._peer.port,
         )
-        await self._protocol.handshake
-        metadata_size = await self._protocol.metadata_size
+        metadata_size = (await self._stream.establish()).metadata_size
 
         data = []
         for i in range((metadata_size + 2 ** 14 - 1) // 2 ** 14):
-            await self._protocol.request(i)
-            index, payload = await self._protocol.receive()
+            await self._stream.request(i)
+            index, payload = await self._stream.receive()
             if index == i:
                 data.append(payload)
         raw_info = b"".join(data)
@@ -74,5 +76,5 @@ class PeerConnection(actor.Actor):
             self.parent.result.set_result(raw_info)
 
     async def _on_stop(self):
-        if self._protocol is not None:
-            await self._protocol.close()
+        if self._stream is not None:
+            await self._stream.close()

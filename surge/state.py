@@ -24,7 +24,8 @@ class StateMachineMixin:
         )
         if side_effect is not None:
             side_effect(event)
-        for waiter in self._waiters[event_type]:
+        if event_type not in self._waiters:
+            return
+        for waiter in self._waiters.pop(event_type):
             if not waiter.done():
                 waiter.set_result(event)
-        self._waiters[event_type].clear()

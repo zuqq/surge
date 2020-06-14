@@ -157,7 +157,7 @@ class PeerConnection(actor.Actor):
         self._params = params
         self._peer = peer
 
-        self._protocol = None
+        self._stream = None
 
         self._slots = asyncio.Semaphore(max_requests)
         self._timer: Dict[metadata.Block, asyncio.Task] = {}
@@ -182,7 +182,7 @@ class PeerConnection(actor.Actor):
 
     async def _receive_blocks(self):
         while True:
-            block, data = await self._protocol.receive()
+            block, data = await self._stream.receive()
             if block not in self._timer:
                 continue
             self._timer.pop(block).cancel()
@@ -208,7 +208,7 @@ class PeerConnection(actor.Actor):
         while True:
             await self._slots.acquire()
             if not self._stack:
-                piece = self.parent.get_piece(self, self._protocol.available)
+                piece = self.parent.get_piece(self, self._stream.available)
                 if piece is None:
                     break
                 blocks = list(metadata.blocks(piece))
@@ -216,28 +216,30 @@ class PeerConnection(actor.Actor):
                 self._outstanding[piece] = set(blocks)
                 self._data[piece] = bytearray(piece.length)
             block = self._stack.pop()
-            await self._protocol.request(block)
+            await self._stream.request(block)
             self._timer[block] = asyncio.create_task(self._timeout())
 
     async def _main(self):
         loop = asyncio.get_running_loop()
-        _, self._protocol = await loop.create_connection(
+        self._stream = protocol.BaseStream(
+            self._params.info_hash,
+            self._params.peer_id,
+            self._meta.pieces
+        )
+        _, _ = await loop.create_connection(
             functools.partial(
-                protocol.BaseProtocol,
-                self._params.info_hash,
-                self._params.peer_id,
-                self._meta.pieces,
+                protocol.Protocol,
+                self._stream
             ),
             self._peer.address,
             self._peer.port,
         )
-        await self._protocol.handshake
-        await self._protocol.bitfield
+        await self._stream.establish()
         await asyncio.gather(self._receive_blocks(), self._request_blocks())
 
     async def _on_stop(self):
-        if self._protocol is not None:
-            await self._protocol.close()
+        if self._stream is not None:
+            await self._stream.close()
 
     ### Messages from Download
 
