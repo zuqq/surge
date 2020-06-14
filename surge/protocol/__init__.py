@@ -1,4 +1,4 @@
-__all__ = ["BaseStream", "MetadataStream", "Protocol"]
+__all__ = ("BaseStream", "MetadataStream", "Protocol")
 
 from .base import Protocol
 from .base import Stream as BaseStream
