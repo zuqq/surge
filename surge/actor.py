@@ -5,7 +5,32 @@ import asyncio
 import logging
 
 
-class Actor:
+class FutureMixin:
+    def __init__(self):
+        self._future = asyncio.get_event_loop().create_future()
+
+    def __await__(self):
+        return iter(self._future)
+
+    def set_result(self, result):
+        if not self._future.done():
+            self._future.set_result(result)
+
+    def set_exception(self, exception):
+        if not self._future.done():
+            self._future.set_exception(exception)
+
+    def done(self):
+        return self._future.done()
+
+    def result(self):
+        return self._future.result()
+
+    def exception(self):
+        return self._future.exception()
+
+
+class Actor(FutureMixin):
     """Actor base class.
 
     `Actor`s form a directed graph whose structure is stored in the attributes
@@ -25,10 +50,11 @@ class Actor:
     """
 
     def __init__(self):
+        super().__init__()
+
         self.parent: Optional[Actor] = None
         self.children: Set[Actor] = set()
 
-        self._future = asyncio.get_event_loop().create_future()
         self._running = False
         self._crashed = False
         self._coros: Set[Callable[[], Awaitable]] = {self._main}
@@ -110,28 +136,6 @@ class Actor:
         self.set_result(None)
 
         logging.debug("%r stopped", self)
-
-    ### Future-like interface
-
-    def __await__(self):
-        return iter(self._future)
-
-    def set_result(self, result):
-        if not self._future.done():
-            self._future.set_result(result)
-
-    def set_exception(self, exception):
-        if not self._future.done():
-            self._future.set_exception(exception)
-
-    def done(self):
-        return self._future.done()
-
-    def result(self):
-        return self._future.result()
-
-    def exception(self):
-        return self._future.exception()
 
 
 class Supervisor(Actor):
