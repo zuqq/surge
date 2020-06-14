@@ -27,8 +27,8 @@ class Actor:
     def __init__(self):
         self.parent: Optional[Actor] = None
         self.children: Set[Actor] = set()
-        self.result = asyncio.get_event_loop().create_future()
 
+        self._future = asyncio.get_event_loop().create_future()
         self._running = False
         self._crashed = False
         self._coros: Set[Callable[[], Awaitable]] = {self._main}
@@ -47,8 +47,7 @@ class Actor:
         if self._crashed or not self._running:
             return
         self._crashed = True
-        if not self.result.done():
-            self.result.set_exception(reason)
+        self.set_exception(reason)
         if self.parent is not None:
             self.parent.report_crash(self)
 
@@ -108,10 +107,31 @@ class Actor:
         for child in self.children:
             await child.stop()
         await self._on_stop()
-        if not self.result.done():
-            self.result.set_result(None)
+        self.set_result(None)
 
         logging.debug("%r stopped", self)
+
+    ### Future-like interface
+
+    def __await__(self):
+        return iter(self._future)
+
+    def set_result(self, result):
+        if not self._future.done():
+            self._future.set_result(result)
+
+    def set_exception(self, exception):
+        if not self._future.done():
+            self._future.set_exception(exception)
+
+    def done(self):
+        return self._future.done()
+
+    def result(self):
+        return self._future.result()
+
+    def exception(self):
+        return self._future.exception()
 
 
 class Supervisor(Actor):
@@ -132,7 +152,7 @@ class Supervisor(Actor):
         while True:
             child = await self._crashed_children.get()
             await child.stop()
-            _ = child.result.exception()
+            _ = child.exception()
             self.children.remove(child)
             await self._on_child_crash(child)
 

@@ -72,8 +72,7 @@ class PeerConnection(actor.Actor):
         raw_info = b"".join(data)
         if hashlib.sha1(raw_info).digest() != self._params.info_hash:
             raise ConnectionError("Peer sent invalid data.")
-        if not self.parent.result.done():
-            self.parent.result.set_result(raw_info)
+        self.parent.set_result(raw_info)
 
     async def _on_stop(self):
         if self._stream is not None:

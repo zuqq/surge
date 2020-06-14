@@ -7,8 +7,7 @@ import signal
 def run(actor):
     def on_signal(s):
         logging.critical("%r received", s)
-        if not actor.result.done():
-            actor.result.set_result(None)
+        actor.set_result(None)
 
     loop = asyncio.get_event_loop()
     try:
@@ -17,6 +16,6 @@ def run(actor):
     except NotImplementedError:
         pass
     loop.run_until_complete(actor.start())
-    result = loop.run_until_complete(actor.result)
+    result = loop.run_until_complete(actor)
     loop.run_until_complete(actor.stop())
     return result

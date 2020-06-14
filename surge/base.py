@@ -70,7 +70,7 @@ class Download(actor.Supervisor):
                     await f.write(data[begin : begin + chunk.length])
             self._outstanding.remove(piece)
             self._print_event.set()
-        self.result.set_result(None)
+        self.set_result(None)
 
     async def _print_progress(self):
         peers_digits = len(str(self._max_peers))

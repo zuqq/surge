@@ -79,7 +79,7 @@ async def test_exception_raised():
 
     await child.start()
     with pytest.raises(PlannedException):
-        await child.result
+        await child
     assert child.crashed
 
     await child.stop()
@@ -93,7 +93,7 @@ async def test_crash_reported():
     child.parent = parent
     await child.start()
     try:
-        await child.result
+        await child
     except PlannedException:
         pass
 
@@ -110,12 +110,12 @@ async def test_uncaught_crash():
     await parent.start()
     await parent.spawn_child(child)
     try:
-        await child.result
+        await child
     except PlannedException:
         pass
 
     with pytest.raises(RuntimeError):
-        await parent.result
+        await parent
 
     await parent.stop()
 
@@ -130,11 +130,11 @@ async def test_crash_propagates():
     await child.start()
     await child.spawn_child(grandchild)
     try:
-        await grandchild.result
+        await grandchild
     except PlannedException:
         pass
     try:
-        await child.result
+        await child
     except RuntimeError:
         pass
 
@@ -152,7 +152,7 @@ async def test_supervisor():
     await parent.spawn_child(child)
     parent.report_crash(child)
     try:
-        await parent.result
+        await parent
     except RuntimeError:
         pass
 
