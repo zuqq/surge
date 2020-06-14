@@ -50,8 +50,6 @@ def main():
         info_hash, announce_list = magnet.parse(args.magnet)
         params = tracker.Parameters(info_hash)
         raw_info = runners.run(mex.Download(params, announce_list))
-        if raw_info is None:
-            return
         # Peers only send us the raw value associated with the `b"info"` key,
         # so we still need to build the metadata dictionary.
         meta = metadata.Metadata.from_dict(

@@ -7,7 +7,7 @@ import signal
 def run(actor):
     def on_signal(s):
         logging.critical("%r received", s)
-        actor.set_result(None)
+        actor.set_exception(SystemExit(s.value))
 
     loop = asyncio.get_event_loop()
     try:
@@ -16,6 +16,7 @@ def run(actor):
     except NotImplementedError:
         pass
     loop.run_until_complete(actor.start())
-    result = loop.run_until_complete(actor)
-    loop.run_until_complete(actor.stop())
-    return result
+    try:
+        return loop.run_until_complete(actor)
+    finally:
+        loop.run_until_complete(actor.stop())
