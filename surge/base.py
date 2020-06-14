@@ -37,6 +37,7 @@ class Download(actor.Supervisor):
         self._piece_data = asyncio.Queue()  # type: ignore
 
         self._print_event = asyncio.Event()
+        self._print_event.set()
 
     def __repr__(self):
         cls = self.__class__.__name__
@@ -76,7 +77,10 @@ class Download(actor.Supervisor):
         pieces = len(self._meta.pieces)
         pieces_digits = len(str(pieces))
 
-        def on_event():
+        while self._outstanding:
+            await self._print_event.wait()
+            self._print_event.clear()
+
             outstanding = pieces - len(self._outstanding)
             progress = (
                 "Downloading from"
@@ -90,12 +94,6 @@ class Download(actor.Supervisor):
             else:
                 bar = f"[{(parts * outstanding // pieces) * '#' : <{parts}}]"
                 print("\r\x1b[K" + progress + " " + bar + " ", end="")
-
-        on_event()
-        while self._outstanding:
-            await self._print_event.wait()
-            self._print_event.clear()
-            on_event()
         print("\n", end="")
 
     async def _main(self):
