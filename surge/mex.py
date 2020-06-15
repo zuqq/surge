@@ -28,7 +28,7 @@ class Download(actor.Supervisor):
         super().__init__()
 
         self._params = params
-        self._peer_queue = tracker.PeerQueue(announce_list, params)
+        self._peer_queue = tracker.PeerQueue(self, announce_list, params)
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
 
     ### Actor implementation
@@ -38,7 +38,7 @@ class Download(actor.Supervisor):
         while True:
             await self._peer_connection_slots.acquire()
             peer = await self._peer_queue.get()
-            await self.spawn_child(PeerConnection(self._params, peer))
+            await self.spawn_child(PeerConnection(self, self._params, peer))
 
     async def _on_child_crash(self, child):
         if isinstance(child, PeerConnection):
@@ -48,8 +48,11 @@ class Download(actor.Supervisor):
 
 
 class PeerConnection(actor.Actor):
-    def __init__(self, params: tracker.Parameters, peer: tracker.Peer):
-        super().__init__()
+    def __init__(self,
+                 parent: Download,
+                 params: tracker.Parameters,
+                 peer: tracker.Peer):
+        super().__init__(parent)
 
         self._params = params
         self._peer = peer

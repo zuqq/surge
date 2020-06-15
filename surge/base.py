@@ -30,7 +30,7 @@ class Download(actor.Supervisor):
         self._borrowers: DefaultDict[metadata.Piece, Set[PeerConnection]]
         self._borrowers = collections.defaultdict(set)
 
-        self._peer_queue = tracker.PeerQueue(meta.announce_list, params)
+        self._peer_queue = tracker.PeerQueue(self, meta.announce_list, params)
 
         self._max_peers = max_peers
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
@@ -53,7 +53,7 @@ class Download(actor.Supervisor):
         while True:
             await self._peer_connection_slots.acquire()
             peer = await self._peer_queue.get()
-            connection = PeerConnection(self._meta, self._params, peer)
+            connection = PeerConnection(self, self._meta, self._params, peer)
             await self.spawn_child(connection)
             self._print_event.set()
 
@@ -143,12 +143,13 @@ class Download(actor.Supervisor):
 
 class PeerConnection(actor.Actor):
     def __init__(self,
+                 parent: Download,
                  meta: metadata.Metadata,
                  params: tracker.Parameters,
                  peer: tracker.Peer,
                  *,
                  max_requests: int = 10):
-        super().__init__()
+        super().__init__(parent)
 
         self._meta = meta
         self._params = params

@@ -49,10 +49,10 @@ class Actor(FutureMixin):
     `Actor` also stops all of its children.
     """
 
-    def __init__(self):
+    def __init__(self, parent: Optional[Actor] = None):
         super().__init__()
 
-        self.parent: Optional[Actor] = None
+        self.parent = parent
         self.children: Set[Actor] = set()
 
         self._running = False
@@ -110,10 +110,9 @@ class Actor(FutureMixin):
         logging.debug("%r started", self)
 
     async def spawn_child(self, child: Actor):
-        """Start `child` and add it to `self`'s children."""
+        """Add `child` to `self`'s children and start it."""
         if not self._running:
-            raise RuntimeError("Calling 'spawn_child' on stopped actor.")
-        child.parent = self
+            raise RuntimeError("Calling 'spawn_child' on a stopped actor.")
         self.children.add(child)
         await child.start()
 
@@ -146,10 +145,10 @@ class Supervisor(Actor):
     complex behavior needs to be implemented by the user.
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent: Optional[Actor] = None):
+        super().__init__(parent)
 
-        self._crashed_children = asyncio.Queue()
+        self._crashed_children = asyncio.Queue()  # type: ignore
         self._coros.add(self._supervise)
 
     async def _supervise(self):

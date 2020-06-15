@@ -15,8 +15,11 @@ from .. import bencoding
 
 
 class PeerQueue(actor.Supervisor):
-    def __init__(self, announce_list: Iterable[str], params: metadata.Parameters):
-        super().__init__()
+    def __init__(self,
+                 parent: actor.Actor,
+                 announce_list: Iterable[str],
+                 params: metadata.Parameters):
+        super().__init__(parent)
 
         self._announce_list = announce_list
         self._params = params
@@ -34,9 +37,9 @@ class PeerQueue(actor.Supervisor):
         for announce in self._announce_list:
             url = urllib.parse.urlparse(announce)
             if url.scheme in ("http", "https"):
-                await self.spawn_child(HTTPTrackerConnection(url, self._params))
+                await self.spawn_child(HTTPTrackerConnection(self, url, self._params))
             elif url.scheme == "udp":
-                await self.spawn_child(UDPTrackerConnection(url, self._params))
+                await self.spawn_child(UDPTrackerConnection(self, url, self._params))
             else:
                 logging.warning("%r is invalid", announce)
 
@@ -58,11 +61,12 @@ class PeerQueue(actor.Supervisor):
 
 class _BaseTrackerConnection(actor.Actor):
     def __init__(self,
+                 parent: PeerQueue,
                  url: urllib.parse.ParseResult,
                  params: metadata.Parameters,
                  *,
                  max_tries: int = 5):
-        super().__init__()
+        super().__init__(parent)
 
         self._url = url
         self._params = params
