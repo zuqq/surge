@@ -85,8 +85,9 @@ class Block:
 
 
 def blocks(piece: Piece) -> Generator[Block, None, None]:
-    for begin in range(0, piece.length, 2 ** 14):
-        yield Block(piece, begin, min(2 ** 14, piece.length - begin))
+    block_size = 2 ** 14
+    for begin in range(0, piece.length, block_size):
+        yield Block(piece, begin, min(block_size, piece.length - begin))
 
 
 @dataclasses.dataclass

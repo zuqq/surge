@@ -94,7 +94,6 @@ class Download(actor.Supervisor):
             else:
                 bar = f"[{(parts * outstanding // pieces) * '#' : <{parts}}]"
                 print("\r\x1b[K" + progress + " " + bar + " ", end="")
-        print("\n", end="")
 
     async def _main(self):
         await self.spawn_child(self._peer_queue)

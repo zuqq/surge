@@ -9,6 +9,16 @@ from . import protocol
 from . import tracker
 
 
+def pieces(metadata_size):
+    piece_size = 2 ** 14
+    return range((metadata_size + piece_size - 1) // piece_size)
+
+
+def valid(info_hash, metadata_size, raw_info):
+    return (len(raw_info) == metadata_size
+            and hashlib.sha1(raw_info).digest() == info_hash)
+
+
 class Download(actor.Supervisor):
     def __init__(self,
                  params: tracker.Parameters,
@@ -61,18 +71,18 @@ class PeerConnection(actor.Actor):
             self._peer.address,
             self._peer.port,
         )
-        metadata_size = (await self._stream.establish()).metadata_size
-
+        metadata_size = await self._stream.establish()
         data = []
-        for i in range((metadata_size + 2 ** 14 - 1) // 2 ** 14):
+        for i in pieces(metadata_size):
             await self._stream.request(i)
             index, payload = await self._stream.receive()
             if index == i:
                 data.append(payload)
         raw_info = b"".join(data)
-        if hashlib.sha1(raw_info).digest() != self._params.info_hash:
+        if valid(self._params.info_hash, metadata_size, raw_info):
+            self.parent.set_result(raw_info)
+        else:
             raise ConnectionError("Peer sent invalid data.")
-        self.parent.set_result(raw_info)
 
     async def _on_stop(self):
         if self._stream is not None:

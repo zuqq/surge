@@ -77,6 +77,7 @@ def main():
         print("Done.")
 
     runners.run(base.Download(meta, params, outstanding, max_peers=args.peers))
+    print("\n", end="")
 
 
 if __name__ == "__main__":

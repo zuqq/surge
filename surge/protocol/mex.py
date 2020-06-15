@@ -13,7 +13,8 @@ class Closed(base.Closed):
             raise exc
         await self.protocol.write(_peer.Handshake(self._info_hash, self._peer_id))
         await self.protocol.write(_peer.ExtensionProtocol(_extension.Handshake()))
-        return await self._handshake
+        await self._handshake
+        return self._metadata_size
 
     async def receive(self):
         exc = self._exception
@@ -62,9 +63,11 @@ class Stream(Closed):
         self._handshake = asyncio.get_event_loop().create_future()
         self._waiters[_extension.Handshake].add(self._handshake)
         self._ut_metadata = None
+        self._metadata_size = None
 
         def on_handshake(message):
             self._ut_metadata = message.ut_metadata
+            self._metadata_size = message.metadata_size
 
         def on_data(message):
             self._queue.append((message.index, message.data))
