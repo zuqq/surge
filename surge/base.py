@@ -20,8 +20,7 @@ class Download(actor.Supervisor):
                  meta: metadata.Metadata,
                  params: tracker.Parameters,
                  outstanding: Set[metadata.Piece],
-                 *,
-                 max_peers: int = 50):
+                 max_peers: int):
         super().__init__()
 
         self._meta = meta
@@ -30,7 +29,7 @@ class Download(actor.Supervisor):
         self._borrowers: DefaultDict[metadata.Piece, Set[PeerConnection]]
         self._borrowers = collections.defaultdict(set)
 
-        self._peer_queue = tracker.PeerQueue(self, meta.announce_list, params)
+        self._peer_queue = tracker.PeerQueue(self, params, meta.announce_list)
 
         self._max_peers = max_peers
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
@@ -94,6 +93,7 @@ class Download(actor.Supervisor):
             else:
                 bar = f"[{(parts * outstanding // pieces) * '#' : <{parts}}]"
                 print("\r\x1b[K" + progress + " " + bar + " ", end="")
+        print("\n", end="")
 
     async def _main(self):
         await self.spawn_child(self._peer_queue)

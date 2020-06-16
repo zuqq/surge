@@ -1,9 +1,28 @@
-from typing import Generator, Iterable
+"""Download files from the BitTorrent network.
+
+Usage:
+    __main__.py (-h | --help)
+    __main__.py [--folder FOLDER] [--resume] [--peers PEERS] [--log LOG]
+                (--file FILE | --magnet MAGNET)
+
+Options:
+    -h, --help          Show this screen.
+    --folder FOLDER     Destination folder
+    --resume            Resume the download.
+    --peers PEERS       Maximal number of peers [default: 50].
+    --log LOG           Log file.
+    --file FILE         Torrent file.
+    --magnet MAGNET     Magnet link.
+
+"""
+
+from typing import Dict
 
 import argparse
 import logging
 import os
 
+from docopt import docopt
 
 from . import base
 from . import bencoding
@@ -14,23 +33,11 @@ from . import runners
 from . import tracker
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Download files from the BitTorrent network."
-    )
-    parser.add_argument("--resume", help="resume download", action="store_true")
-    parser.add_argument("--peers", help="number of peers", default=50, type=int)
-    parser.add_argument("--folder", help="destination folder")
-    parser.add_argument("--log", help="log file")
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--file", help="torrent file")
-    group.add_argument("--magnet", help="magnet link")
-    args = parser.parse_args()
-
-    if args.log:
+def main(args: Dict[str, str]):
+    if args["--log"]:
         logging.basicConfig(
             level=logging.DEBUG,
-            filename=args.log,
+            filename=args["--log"],
             filemode="w",
             format="%(asctime)s,%(msecs)03d %(levelname)s: %(message)s",
             datefmt="%H:%M:%S",
@@ -38,18 +45,19 @@ def main():
     else:
         logging.disable(logging.CRITICAL)
 
-    if args.file:
-        print(f"Using metadata file {args.file}.")
-        with open(args.file, "rb") as f:
+    max_peers = int(args["--peers"])
+
+    if args["--file"]:
+        print(f"Using metadata file {args['--file']}.")
+        with open(args["--file"], "rb") as f:
             raw_meta = f.read()
         meta = metadata.Metadata.from_bytes(raw_meta)
         params = tracker.Parameters.from_bytes(raw_meta)
-
-    if args.magnet:
+    elif args["--magnet"]:
         print("Getting metadata file from peers...", end="")
-        info_hash, announce_list = magnet.parse(args.magnet)
+        info_hash, announce_list = magnet.parse(args["--magnet"])
         params = tracker.Parameters(info_hash)
-        raw_info = runners.run(mex.Download(params, announce_list))
+        raw_info = runners.run(mex.Download(params, announce_list, max_peers))
         # Peers only send us the raw value associated with the `b"info"` key,
         # so we still need to build the metadata dictionary.
         meta = metadata.Metadata.from_dict(
@@ -64,21 +72,23 @@ def main():
     metadata.build_file_tree(meta.folder, meta.files)
     print("Done.")
 
-    if args.folder:
-        meta.folder = os.path.join(args.folder, meta.folder)
+    if args["--folder"]:
+        meta.folder = os.path.join(args["--folder"], meta.folder)
         print(f"Downloading to {meta.folder}.")
 
     outstanding = set(meta.pieces)
 
-    if args.resume:
+    if args["--resume"]:
         print("Checking for available pieces...", end="")
         for piece in metadata.available_pieces(meta.pieces, meta.files, meta.folder):
             outstanding.remove(piece)
         print("Done.")
 
-    runners.run(base.Download(meta, params, outstanding, max_peers=args.peers))
-    print("\n", end="")
+    if not outstanding:
+        print("Nothing to do.")
+    else:
+        runners.run(base.Download(meta, params, outstanding, max_peers))
 
 
 if __name__ == "__main__":
-    main()
+    main(docopt(__doc__))

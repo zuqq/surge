@@ -23,12 +23,11 @@ class Download(actor.Supervisor):
     def __init__(self,
                  params: tracker.Parameters,
                  announce_list: Iterable[str],
-                 *,
-                 max_peers: int = 10):
+                 max_peers: int):
         super().__init__()
 
         self._params = params
-        self._peer_queue = tracker.PeerQueue(self, announce_list, params)
+        self._peer_queue = tracker.PeerQueue(self, params, announce_list)
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
 
     ### Actor implementation
