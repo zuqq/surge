@@ -50,19 +50,16 @@ def main(args: Dict[str, str]):
         print(f"Reading metadata from {path}.")
         with open(path, "rb") as f:
             raw_meta = f.read()
-
         meta = metadata.Metadata.from_bytes(raw_meta)
         params = tracker.Parameters.from_bytes(raw_meta)
     elif args["--magnet"]:
-        print("Getting metadata file from peers...", end="")
+        print("Downloading metadata from peers...", end="")
         info_hash, announce_list = magnet.parse(args["--magnet"])
         params = tracker.Parameters(info_hash)
         raw_info = runners.run(mex.Download(params, announce_list, max_peers))
         print("Done.")
-
         raw_meta = metadata.from_info(announce_list, raw_info)
         meta = metadata.Metadata.from_bytes(raw_meta)
-
         path = f"{info_hash.hex()}.torrent"
         print(f"Writing metadata to {path}.")
         with open(path, "wb") as f:

@@ -152,9 +152,13 @@ class Metadata:
 def from_info(announce_list: List[str], raw_info: bytes) -> bytes:
     # We can't just decode and re-encode, because the value associated with
     # the key `b"info"` needs to be preserved exactly.
-    return (b"d"
-            + b"13:announce-list"
-            + bencoding.encode([[url.encode() for url in announce_list]])
-            + b"4:info"
-            + raw_info
-            + b"e")
+    return b"".join(
+        (
+            b"d",
+            b"13:announce-list",
+            bencoding.encode([[url.encode() for url in announce_list]]),
+            b"4:info",
+            raw_info,
+            b"e",
+        )
+    )
