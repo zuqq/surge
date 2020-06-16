@@ -18,14 +18,12 @@ Options:
 
 from typing import Dict
 
-import argparse
 import logging
 import os
 
 from docopt import docopt
 
 from . import base
-from . import bencoding
 from . import magnet
 from . import metadata
 from . import mex
