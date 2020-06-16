@@ -160,16 +160,14 @@ class _BaseProtocol(asyncio.DatagramProtocol):
 
 
 class Protocol(_BaseProtocol):
-    def __init__(self, params):
+    def __init__(self, params: metadata.Parameters):
         super().__init__()
 
         self._params = params
 
-    async def establish(self):
+    async def request(self) -> metadata.Response:
         transaction_id = secrets.token_bytes(4)
         self._write(ConnectRequest(transaction_id))
-        response = parse(await self._read())
-        connection_id = response.connection_id
+        connection_id = parse(await self._read()).connection_id
         self._write(AnnounceRequest(transaction_id, connection_id, self._params))
-        response = parse(await self._read())
-        return response.response
+        return parse(await self._read()).response
