@@ -1,21 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import collections
 import secrets
 import struct
 
 from . import metadata
-from .. import state
 
 
 class Request:
     def to_bytes(self) -> bytes:
-        raise NotImplementedError
-
-
-class Response:
-    @classmethod
-    def from_bytes(cls, data: bytes) -> Response:
         raise NotImplementedError
 
 
@@ -53,10 +47,16 @@ class AnnounceRequest(Request):
             self.params.uploaded,
             0,
             0,
-            secrets.token_bytes(4),  # TODO: Semantics of this value?
+            secrets.token_bytes(4),
             -1,
             6881,
         )
+
+
+class Response:
+    @classmethod
+    def from_bytes(cls, data: bytes) -> Response:
+        raise NotImplementedError
 
 
 class ConnectResponse(Response):
@@ -94,48 +94,56 @@ def parse(data: bytes) -> Response:
     raise ValueError("Unkown message identifier.")
 
 
-class Closed(state.StateMachineMixin, asyncio.DatagramProtocol):
-    def __init__(self, params):
+class _BaseProtocol(asyncio.DatagramProtocol):
+    def __init__(self):
         super().__init__()
 
-        loop = asyncio.get_event_loop()
-
         self._transport = None
+        self._closing = False
+        self._closed = asyncio.get_event_loop().create_future()
         self._exception = None
-        self._closed = loop.create_future()
 
-        self.response = loop.create_future()
-        self._transaction_id = None
+        self._waiter = None
+        self._queue = collections.deque()
 
-        def on_connect(message):
-            # TODO: Check the returned `transaction_id`.
-            self._write(
-                AnnounceRequest(self._transaction_id, message.connection_id, params)
-            )
+    def _write(self, message):
+        self._transport.sendto(message.to_bytes())
 
-        def on_announce(message):
-            # TODO: Check the returned `connection_id`.
-            # TODO: Why does this happen?
-            if not self.response.done():
-                self.response.set_result(message.response)
+    async def _read(self):
+        exc = self._exception
+        if exc is not None:
+            raise exc
+        if not self._queue:
+            waiter = asyncio.get_running_loop().create_future()
+            self._waiter = waiter
+            await waiter
+        return self._queue.popleft()
 
-        self._transition = {
-            (Open, ConnectResponse): (on_connect, Established),
-            (Established, AnnounceResponse): (on_announce, Established),
-        }
+    def _wakeup(self, exc=None):
+        waiter = self._waiter
+        if waiter is None:
+            return
+        self._waiter = None
+        if waiter.done():
+            return
+        if exc is None:
+            waiter.set_result(None)
+        else:
+            waiter.set_exception(exc)
+
+    async def close(self):
+        if self._transport is not None:
+            self._transport.close()
+        await self._closed
 
     ### asyncio.BaseProtocol
 
     def connection_made(self, transport):
-        self.state = Open
         self._transport = transport
-        self._transaction_id = secrets.token_bytes(4)
-        self._write(ConnectRequest(self._transaction_id))
 
     def connection_lost(self, exc):
-        if exc is not None:
-            self._exception = exc
-        self.state = Closed
+        if not self._closing:
+            self._wakeup(exc or ConnectionError("Unexpected EOF."))
         if not self._closed.done():
             self._closed.set_result(None)
         self._transport = None
@@ -143,35 +151,25 @@ class Closed(state.StateMachineMixin, asyncio.DatagramProtocol):
     ### asyncio.DatagramProtocol
 
     def datagram_received(self, data, addr):
-        self.feed(parse(data))
+        self._queue.append(data)
+        self._wakeup()
 
     def error_received(self, exc):
         self._exception = exc
-
-    ### Stream
-
-    def _write(self, message):
-        raise ConnectionError("Writing to closed connection.")
-
-    ### Interface
-
-    async def close(self):
-        if self._transport is not None:
-            self._transport.close()
-        await self._closed
+        self._wakeup(exc)
 
 
-class Open(Closed):
-    def _write(self, message):
-        self._transport.sendto(message.to_bytes())
-
-
-class Established(Open):
-    pass
-
-
-class Protocol(Closed):
+class Protocol(_BaseProtocol):
     def __init__(self, params):
-        super().__init__(params)
+        super().__init__()
 
-        self.state = Closed
+        self._params = params
+
+    async def establish(self):
+        transaction_id = secrets.token_bytes(4)
+        self._write(ConnectRequest(transaction_id))
+        response = parse(await self._read())
+        connection_id = response.connection_id
+        self._write(AnnounceRequest(transaction_id, connection_id, self._params))
+        response = parse(await self._read())
+        return response.response

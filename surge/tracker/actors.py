@@ -1,4 +1,4 @@
-from typing import Iterable, Set
+from typing import Iterable, Optional, Set
 
 import asyncio
 import dataclasses
@@ -16,7 +16,7 @@ from .. import bencoding
 
 class PeerQueue(actor.Supervisor):
     def __init__(self,
-                 parent: actor.Actor,
+                 parent: Optional[actor.Actor],
                  announce_list: Iterable[str],
                  params: metadata.Parameters):
         super().__init__(parent)
@@ -63,14 +63,11 @@ class _BaseTrackerConnection(actor.Actor):
     def __init__(self,
                  parent: PeerQueue,
                  url: urllib.parse.ParseResult,
-                 params: metadata.Parameters,
-                 *,
-                 max_tries: int = 5):
+                 params: metadata.Parameters):
         super().__init__(parent)
 
         self._url = url
         self._params = params
-        self._max_tries = max_tries
 
     def __repr__(self):
         cls = self.__class__.__name__
@@ -83,38 +80,37 @@ class HTTPTrackerConnection(_BaseTrackerConnection):
         while True:
             params = urllib.parse.parse_qs(self._url.query)
             params.update(dataclasses.asdict(self._params))
-            req_url = self._url._replace(query=urllib.parse.urlencode(params))
+            url = self._url._replace(query=urllib.parse.urlencode(params))
             async with aiohttp.ClientSession() as session:
-                async with session.get(req_url.geturl()) as req:
-                    raw_resp = await req.read()
-            d = bencoding.decode(raw_resp)
+                async with session.get(url.geturl()) as request:
+                    raw_response = await request.read()
+            d = bencoding.decode(raw_response)
             if b"failure reason" in d:
                 raise ConnectionError(d[b"failure reason"].decode())
-            resp = metadata.Response.from_dict(d)
-            for peer in resp.peers:
+            response = metadata.Response.from_dict(d)
+            for peer in response.peers:
                 self.parent.put_nowait(peer)
-            await asyncio.sleep(resp.interval)
+            await asyncio.sleep(response.interval)
 
 
 class UDPTrackerConnection(_BaseTrackerConnection):
     async def _main(self):
         while True:
-            tries = 0
-            while tries < self._max_tries:
+            for i in range(9):  # See BEP 15, 'Time outs'.
                 try:
                     loop = asyncio.get_running_loop()
                     _, protocol = await loop.create_datagram_endpoint(
                         functools.partial(_udp.Protocol, self._params),
                         remote_addr=(self._url.hostname, self._url.port),
                     )
-                    resp = await asyncio.wait_for(protocol.response, timeout=5)
+                    response = await asyncio.wait_for(protocol.establish(), timeout=5)
                 except Exception as e:
                     logging.warning("%r failed with %r", self._url.geturl(), e)
-                    tries += 1
+                    await asyncio.sleep(15 * 2 ** i - 5)
                 else:
                     break
             else:
                 raise ConnectionError("Tracker unreachable.")
-            for peer in resp.peers:
+            for peer in response.peers:
                 self.parent.put_nowait(peer)
-            await asyncio.sleep(resp.interval)
+            await asyncio.sleep(response.interval)
