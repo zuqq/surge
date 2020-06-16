@@ -48,9 +48,11 @@ def main(args: Dict[str, str]):
     max_peers = int(args["--peers"])
 
     if args["--file"]:
-        print(f"Using metadata file {args['--file']}.")
-        with open(args["--file"], "rb") as f:
+        path = args["--file"]
+        print(f"Reading metadata from {path}.")
+        with open(path, "rb") as f:
             raw_meta = f.read()
+
         meta = metadata.Metadata.from_bytes(raw_meta)
         params = tracker.Parameters.from_bytes(raw_meta)
     elif args["--magnet"]:
@@ -58,15 +60,15 @@ def main(args: Dict[str, str]):
         info_hash, announce_list = magnet.parse(args["--magnet"])
         params = tracker.Parameters(info_hash)
         raw_info = runners.run(mex.Download(params, announce_list, max_peers))
-        # Peers only send us the raw value associated with the `b"info"` key,
-        # so we still need to build the metadata dictionary.
-        meta = metadata.Metadata.from_dict(
-            {
-                b"announce-list": [[url.encode() for url in announce_list]],
-                b"info": bencoding.decode(raw_info),
-            }
-        )
         print("Done.")
+
+        raw_meta = metadata.from_info(announce_list, raw_info)
+        meta = metadata.Metadata.from_bytes(raw_meta)
+
+        path = f"{info_hash.hex()}.torrent"
+        print(f"Writing metadata to {path}.")
+        with open(path, "wb") as f:
+            f.write(raw_meta)
 
     print("Building the file tree...", end="")
     metadata.build_file_tree(meta.folder, meta.files)
