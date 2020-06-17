@@ -110,13 +110,10 @@ def main(args: Dict[str, str]):
         print("Nothing to do.")
     else:
         download = base.Download(meta, params, outstanding, max_peers)
-        task = loop.create_task(_print(max_peers, len(meta.pieces), download.poll))
+        download.tasks.add(
+            loop.create_task(_print(max_peers, len(meta.pieces), download.poll))
+        )
         runners.run(loop, download)
-        task.cancel()
-        try:
-            loop.run_until_complete(task)
-        except asyncio.CancelledError:
-            pass
 
 
 if __name__ == "__main__":

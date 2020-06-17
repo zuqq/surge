@@ -13,7 +13,7 @@ from . import protocol
 from . import tracker
 
 
-class Download(actor.Supervisor):
+class Download(actor.Actor):
     def __init__(self,
                  meta: metadata.Metadata,
                  params: tracker.Parameters,
@@ -27,7 +27,9 @@ class Download(actor.Supervisor):
         self._borrowers: DefaultDict[metadata.Piece, Set[PeerConnection]]
         self._borrowers = collections.defaultdict(set)
 
-        self._peer_queue = tracker.PeerQueue(self, params, meta.announce_list)
+        peer_queue = tracker.PeerQueue(self, params, meta.announce_list)
+        self._peer_queue = peer_queue
+        self.children.add(peer_queue)
 
         self._max_peers = max_peers
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
@@ -44,14 +46,13 @@ class Download(actor.Supervisor):
         ]
         return f"<{cls} object at {hex(id(self))} with {', '.join(info)}>"
 
-    # actor.Supervisor
-
     async def _spawn_peer_connections(self):
         while True:
             await self._peer_connection_slots.acquire()
             peer = await self._peer_queue.get()
             connection = PeerConnection(self, self._meta, self._params, peer)
-            await self.spawn_child(connection)
+            self.children.add(connection)
+            await connection.start()
             self._poll.set()
 
     async def _write_pieces(self):
@@ -66,8 +67,9 @@ class Download(actor.Supervisor):
             self._poll.set()
         self.set_result(None)
 
+    # actor.Supervisor
+
     async def _main(self):
-        await self.spawn_child(self._peer_queue)
         await asyncio.gather(self._spawn_peer_connections(), self._write_pieces())
 
     async def _on_child_crash(self, child):
@@ -79,7 +81,7 @@ class Download(actor.Supervisor):
             self._peer_connection_slots.release()
             self._poll.set()
         else:
-            raise RuntimeError(f"Uncaught crash in {child}.")
+            super()._on_child_crash(child)
 
     # Interface
 

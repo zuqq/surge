@@ -39,7 +39,7 @@ def assemble(announce_list: List[str], raw_info: bytes) -> bytes:
 
 # Actors -----------------------------------------------------------------------
 
-class Download(actor.Supervisor):
+class Download(actor.Actor):
     def __init__(self,
                  params: tracker.Parameters,
                  announce_list: Iterable[str],
@@ -48,23 +48,28 @@ class Download(actor.Supervisor):
 
         self._params = params
         self._announce_list = announce_list
-        self._peer_queue = tracker.PeerQueue(self, params, announce_list)
+
+        peer_queue = tracker.PeerQueue(self, params, announce_list)
+        self._peer_queue = peer_queue
+        self.children.add(peer_queue)
+
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
 
     # actor.Supervisor
 
     async def _main(self):
-        await self.spawn_child(self._peer_queue)
         while True:
             await self._peer_connection_slots.acquire()
             peer = await self._peer_queue.get()
-            await self.spawn_child(PeerConnection(self, self._params, peer))
+            connection = PeerConnection(self, self._params, peer)
+            self.children.add(connection)
+            await connection.start()
 
     async def _on_child_crash(self, child):
         if isinstance(child, PeerConnection):
             self._peer_connection_slots.release()
         else:
-            raise RuntimeError(f"Uncaught crash in {child}.")
+            super()._on_child_crash(child)
 
     def done(self, raw_info: bytes):
         self.set_result(assemble(self._announce_list, raw_info))

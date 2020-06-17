@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Awaitable, Callable, Optional, Set
+from typing import Optional, Set
 
 import asyncio
 import logging
@@ -31,24 +31,6 @@ class FutureMixin:
 
 
 class Actor(FutureMixin):
-    """Actor base class.
-
-    `Actor`s form a directed graph whose structure is stored in the attributes
-    `parent` and `children`; acyclicity of this graph is not enforced.
-
-    The principal purpose of an `Actor` is to run the coroutine `_main`.
-    In doing so, it may spawn children and pass messages to its parent and
-    children. Messages are to be implemented as methods of the receiving class.
-
-    `Exception`s in `_main` cause the `Actor` to crash; if it has a parent,
-    the crash bubbles up. An ordinary `Actor` that receives a crash report from
-    one of its children crashes itself. Instances of the subclass `Supervisor`
-    can handle crash reports gracefully instead.
-
-    `Actor`s are controlled via the methods `start` and `stop`; stopping an
-    `Actor` also stops all of its children.
-    """
-
     def __init__(self, parent: Optional[Actor] = None):
         super().__init__()
 
@@ -56,10 +38,44 @@ class Actor(FutureMixin):
         self.children: Set[Actor] = set()
 
         self._running = False
+        self.tasks: Set[asyncio.Task] = set()
+
         self._crashed = False
-        self._coros: Set[Callable[[], Awaitable]] = {self._main}
-        self._tasks: Set[asyncio.Task] = set()
-        self._runner: Optional[asyncio.Task] = None
+        self._crashed_children = asyncio.Queue()  # type: ignore
+
+    def _crash(self, reason: Exception):
+        logging.warning("%r crashed with %r", self, reason)
+
+        if self._crashed or not self._running:
+            return
+        self._crashed = True
+        self.set_exception(reason)
+        if self.parent is not None:
+            self.parent.report_crash(self)
+
+    async def _run(self):
+        try:
+            await self._main()
+        except Exception as e:
+            self._crash(e)
+
+    async def _supervise(self):
+        while True:
+            child = await self._crashed_children.get()
+            _ = child.exception()
+            await child.stop()
+            self.children.remove(child)
+            await self._on_child_crash(child)
+
+    # Overridable methods
+
+    async def _main(self):
+        pass
+
+    async def _on_child_crash(self, child: Actor):
+        self._crash(RuntimeError(f"Uncaught crash: {child}"))
+
+    # Interface
 
     @property
     def running(self):
@@ -69,101 +85,30 @@ class Actor(FutureMixin):
     def crashed(self):
         return self._crashed
 
-    def _crash(self, reason: Exception):
-        if self._crashed or not self._running:
-            return
-        self._crashed = True
-        self.set_exception(reason)
-        if self.parent is not None:
-            self.parent.report_crash(self)
-
-        logging.warning("%r crashed with %r", self, reason)
-
-    async def _run(self):
-        for coro in self._coros:
-            self._tasks.add(asyncio.create_task(coro()))
-        try:
-            await asyncio.gather(*self._tasks)
-        except Exception as e:
-            self._crash(e)
-
-    # Overridable methods
-
-    async def _main(self):
-        pass
-
-    async def _on_stop(self):
-        pass
-
-    def report_crash(self, reporter: Actor):
-        if reporter in self.children:
-            self._crash(RuntimeError(f"Uncaught crash: {reporter}"))
-
-    # Interface
-
     async def start(self):
+        logging.debug("%r starting", self)
+
         if self._running:
             return
         self._running = True
-        self._runner = asyncio.create_task(self._run())
+        self.tasks.add(asyncio.create_task(self._run()))
+        self.tasks.add(asyncio.create_task(self._supervise()))
+        for child in self.children:
+            await child.start()
 
-        logging.debug("%r started", self)
-
-    async def spawn_child(self, child: Actor):
-        """Add `child` to `self`'s children and start it."""
-        if not self._running:
-            raise RuntimeError("Calling 'spawn_child' on a stopped actor.")
-        self.children.add(child)
-        await child.start()
+    def report_crash(self, reporter: Actor):
+        self._crashed_children.put_nowait(reporter)
 
     async def stop(self):
         """First stop `self`, then all of its children."""
+        logging.debug("%r stopping", self)
+
         if not self._running:
             return
         self._running = False
-        self._runner.cancel()
-        try:
-            await self._runner
-        except asyncio.CancelledError:
-            pass
-        for task in self._tasks:
+        self.set_result(None)
+        for task in self.tasks:
             task.cancel()
-        await asyncio.gather(*self._tasks, return_exceptions=True)
+        await asyncio.gather(*self.tasks, return_exceptions=True)
         for child in self.children:
             await child.stop()
-        await self._on_stop()
-        self.set_result(None)
-
-        logging.debug("%r stopped", self)
-
-
-class Supervisor(Actor):
-    """Supervisor base class.
-
-    `Supervisor`s are `Actor`s that supervise their children. By default this
-    amounts to shutting down any crashed children and discarding them; more
-    complex behavior needs to be implemented by the user.
-    """
-
-    def __init__(self, parent: Optional[Actor] = None):
-        super().__init__(parent)
-
-        self._crashed_children = asyncio.Queue()  # type: ignore
-        self._coros.add(self._supervise)
-
-    async def _supervise(self):
-        while True:
-            child = await self._crashed_children.get()
-            await child.stop()
-            _ = child.exception()
-            self.children.remove(child)
-            await self._on_child_crash(child)
-
-    def report_crash(self, reporter: Actor):
-        if reporter in self.children:
-            self._crashed_children.put_nowait(reporter)
-
-    # Overridable methods
-
-    async def _on_child_crash(self, child: Actor):
-        raise RuntimeError(f"Uncaught crash: {child}")

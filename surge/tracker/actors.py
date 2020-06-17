@@ -14,7 +14,7 @@ from .. import actor
 from .. import bencoding
 
 
-class PeerQueue(actor.Supervisor):
+class PeerQueue(actor.Actor):
     def __init__(self,
                  parent: Optional[actor.Actor],
                  params: metadata.Parameters,
@@ -37,14 +37,20 @@ class PeerQueue(actor.Supervisor):
         for announce in self._announce_list:
             url = urllib.parse.urlparse(announce)
             if url.scheme in ("http", "https"):
-                await self.spawn_child(HTTPTrackerConnection(self, self._params, url))
+                connection = HTTPTrackerConnection(self, self._params, url)
             elif url.scheme == "udp":
-                await self.spawn_child(UDPTrackerConnection(self, self._params, url))
+                connection = UDPTrackerConnection(self, self._params, url)
             else:
                 logging.warning("%r is invalid", announce)
+                continue
+            self.children.add(connection)
+            await connection.start()
 
     async def _on_child_crash(self, child):
-        pass
+        if isinstance(child, _BaseTrackerConnection):
+            pass
+        else:
+            super()._on_child_crash(child)
 
     # Interface
 
