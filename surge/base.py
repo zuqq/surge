@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import DefaultDict, Dict, List, Set, Tuple
+from typing import DefaultDict, Dict, List, Optional, Set, Tuple
 
 import asyncio
 import collections
@@ -88,7 +88,7 @@ class Download(actor.Actor):
 
     def get_piece(self,
                   peer_connection: PeerConnection,
-                  available: Set[metadata.Piece]):
+                  available: Set[metadata.Piece]) -> Optional[metadata.Piece]:
         borrowed = set(self._borrowers)
         pool = self._outstanding - borrowed or borrowed
         if not pool:
