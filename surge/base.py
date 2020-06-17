@@ -33,8 +33,8 @@ class Download(actor.Supervisor):
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
         self._piece_data = asyncio.Queue()  # type: ignore
 
-        self._print_event = asyncio.Event()
-        self._print_event.set()
+        self._poll = asyncio.Event()
+        self._poll.set()
 
     def __repr__(self):
         cls = self.__class__.__name__
@@ -52,7 +52,7 @@ class Download(actor.Supervisor):
             peer = await self._peer_queue.get()
             connection = PeerConnection(self, self._meta, self._params, peer)
             await self.spawn_child(connection)
-            self._print_event.set()
+            self._poll.set()
 
     async def _write_pieces(self):
         while self._outstanding:
@@ -63,40 +63,12 @@ class Download(actor.Supervisor):
                 await asyncio.get_running_loop().run_in_executor(None,
                     functools.partial(metadata.write, self._meta.folder, chunk, data))
             self._outstanding.remove(piece)
-            self._print_event.set()
+            self._poll.set()
         self.set_result(None)
-
-    async def _print_progress(self):
-        peers_digits = len(str(self._max_peers))
-        pieces = len(self._meta.pieces)
-        pieces_digits = len(str(pieces))
-
-        while self._outstanding:
-            await self._print_event.wait()
-            self._print_event.clear()
-
-            outstanding = pieces - len(self._outstanding)
-            progress = (
-                "Downloading from"
-                f" {len(self.children) - 1 : >{peers_digits}} peers:"
-                f" {outstanding : >{pieces_digits}}/{pieces} pieces"
-            )
-            width, _ = os.get_terminal_size()
-            parts = width - len(progress) - 4
-            if parts < 10:
-                print("\r\x1b[K" + progress, end="")
-            else:
-                bar = f"[{(parts * outstanding // pieces) * '#' : <{parts}}]"
-                print("\r\x1b[K" + progress + " " + bar + " ", end="")
-        print("\n", end="")
 
     async def _main(self):
         await self.spawn_child(self._peer_queue)
-        await asyncio.gather(
-            self._spawn_peer_connections(),
-            self._write_pieces(),
-            self._print_progress(),
-        )
+        await asyncio.gather(self._spawn_peer_connections(), self._write_pieces())
 
     async def _on_child_crash(self, child):
         if isinstance(child, PeerConnection):
@@ -105,7 +77,7 @@ class Download(actor.Supervisor):
                 if not borrowers:
                     self._borrowers.pop(piece)
             self._peer_connection_slots.release()
-            self._print_event.set()
+            self._poll.set()
         else:
             raise RuntimeError(f"Uncaught crash in {child}.")
 
@@ -134,6 +106,12 @@ class Download(actor.Supervisor):
         for borrower in self._borrowers.pop(piece) - {peer_connection}:
             borrower.cancel_piece(piece)
         self._piece_data.put_nowait((piece, data))
+
+    async def poll(self) -> Tuple[Int, Int]:
+        """Return (connected_peers, outstanding_pieces)."""
+        await self._poll.wait()
+        self._poll.clear()
+        return (max(0, len(self.children) - 1), len(self._outstanding))
 
 
 class PeerConnection(actor.Actor):

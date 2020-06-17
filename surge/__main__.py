@@ -18,6 +18,7 @@ Options:
 
 from typing import Dict
 
+import asyncio
 import logging
 import os
 
@@ -31,7 +32,33 @@ from . import runners
 from . import tracker
 
 
+async def _print(max_peers, pieces, poll):
+    peers = 0
+    peers_digits = len(str(max_peers))
+    outstanding = pieces
+    pieces_digits = len(str(pieces))
+
+    while outstanding:
+        peers, outstanding = await poll()
+        downloaded = pieces - outstanding
+        progress = (
+            "Downloading from"
+            f" {peers : >{peers_digits}} peers:"
+            f" {downloaded : >{pieces_digits}}/{pieces} pieces"
+        )
+        width, _ = os.get_terminal_size()
+        parts = width - len(progress) - 4
+        if parts < 10:
+            print("\r\x1b[K" + progress, end="")
+        else:
+            bar = f"[{(parts * downloaded // pieces) * '#' : <{parts}}]"
+            print("\r\x1b[K" + progress + " " + bar + " ", end="")
+    print("\n", end="")
+
+
 def main(args: Dict[str, str]):
+    loop = asyncio.get_event_loop()
+
     if args["--log"]:
         logging.basicConfig(
             level=logging.DEBUG,
@@ -55,7 +82,7 @@ def main(args: Dict[str, str]):
         print("Downloading metadata from peers...", end="")
         info_hash, announce_list = magnet.parse(args["--magnet"])
         params = tracker.Parameters(info_hash)
-        raw_meta = runners.run(mex.Download(params, announce_list, max_peers))
+        raw_meta = runners.run(loop, mex.Download(params, announce_list, max_peers))
         meta = metadata.Metadata.from_bytes(raw_meta)
         print("Done.")
         path = f"{info_hash.hex()}.torrent"
@@ -82,7 +109,14 @@ def main(args: Dict[str, str]):
     if not outstanding:
         print("Nothing to do.")
     else:
-        runners.run(base.Download(meta, params, outstanding, max_peers))
+        download = base.Download(meta, params, outstanding, max_peers)
+        task = loop.create_task(_print(max_peers, len(meta.pieces), download.poll))
+        runners.run(loop, download)
+        task.cancel()
+        try:
+            loop.run_until_complete(task)
+        except asyncio.CancelledError:
+            pass
 
 
 if __name__ == "__main__":
