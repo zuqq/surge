@@ -55,10 +55,9 @@ def main(args: Dict[str, str]):
         print("Downloading metadata from peers...", end="")
         info_hash, announce_list = magnet.parse(args["--magnet"])
         params = tracker.Parameters(info_hash)
-        raw_info = runners.run(mex.Download(params, announce_list, max_peers))
-        print("Done.")
-        raw_meta = metadata.from_info(announce_list, raw_info)
+        raw_meta = runners.run(mex.Download(params, announce_list, max_peers))
         meta = metadata.Metadata.from_bytes(raw_meta)
+        print("Done.")
         path = f"{info_hash.hex()}.torrent"
         print(f"Writing metadata to {path}.")
         with open(path, "wb") as f:
