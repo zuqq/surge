@@ -65,6 +65,7 @@ class Chunk:
     """The part of a `Piece` belonging to a single `File`."""
 
     file: File
+    piece: Piece
     begin: int
     length: int
 
@@ -74,7 +75,15 @@ def chunks(files: Iterable[File], piece: Piece) -> Generator[Chunk, None, None]:
         begin = max(file.begin, piece.begin)
         end = min(file.begin + file.length, piece.begin + piece.length)
         if begin <= end:
-            yield Chunk(file, begin, end - begin)
+            yield Chunk(file, piece, begin, end - begin)
+
+
+def write(folder: str, chunk: Chunk, data: bytes):
+    path = os.path.join(folder, chunk.file.path)
+    with open(path, "rb+") as f:
+        f.seek(chunk.begin - chunk.file.begin)
+        begin = chunk.begin - chunk.piece.begin
+        f.write(data[begin : begin + chunk.length])
 
 
 @dataclasses.dataclass(eq=True, frozen=True, order=True)

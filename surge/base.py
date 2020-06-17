@@ -7,8 +7,6 @@ import functools
 import os
 import random
 
-import aiofiles  # type: ignore
-
 from . import actor
 from . import metadata
 from . import protocol
@@ -62,11 +60,8 @@ class Download(actor.Supervisor):
             if piece not in self._outstanding:
                 continue
             for chunk in metadata.chunks(self._meta.files, piece):
-                path = os.path.join(self._meta.folder, chunk.file.path)
-                async with aiofiles.open(path, "rb+") as f:
-                    await f.seek(chunk.begin - chunk.file.begin)
-                    begin = chunk.begin - piece.begin
-                    await f.write(data[begin : begin + chunk.length])
+                await asyncio.get_running_loop().run_in_executor(None,
+                    functools.partial(metadata.write, self._meta.folder, chunk, data))
             self._outstanding.remove(piece)
             self._print_event.set()
         self.set_result(None)
