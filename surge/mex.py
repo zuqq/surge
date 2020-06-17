@@ -115,6 +115,7 @@ class PeerConnection(actor.Actor):
         else:
             raise ConnectionError("Peer sent invalid data.")
 
-    async def _on_stop(self):
+    async def stop(self):
+        await super().stop()
         if self._stream is not None:
             await self._stream.close()

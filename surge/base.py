@@ -208,7 +208,8 @@ class PeerConnection(actor.Actor):
         await self._stream.establish()
         await asyncio.gather(self._receive_blocks(), self._request_blocks())
 
-    async def _on_stop(self):
+    async def stop(self):
+        await super().stop()
         if self._stream is not None:
             await self._stream.close()
 
