@@ -71,7 +71,7 @@ class Download(actor.Actor):
         else:
             super()._on_child_crash(child)
 
-    def done(self, raw_info: bytes):
+    def info_done(self, raw_info: bytes):
         self.set_result(assemble(self._announce_list, raw_info))
 
 
@@ -111,7 +111,7 @@ class PeerConnection(actor.Actor):
                 data.append(payload)
         raw_info = b"".join(data)
         if valid(self._params.info_hash, metadata_size, raw_info):
-            self.parent.done(raw_info)
+            self.parent.info_done(raw_info)
         else:
             raise ConnectionError("Peer sent invalid data.")
 

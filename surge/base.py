@@ -1,10 +1,9 @@
 from __future__ import annotations
-from typing import DefaultDict, Dict, List, Set
+from typing import DefaultDict, Dict, List, Set, Tuple
 
 import asyncio
 import collections
 import functools
-import os
 import random
 
 from . import actor
@@ -61,8 +60,10 @@ class Download(actor.Actor):
             if piece not in self._outstanding:
                 continue
             for chunk in metadata.chunks(self._meta.files, piece):
-                await asyncio.get_running_loop().run_in_executor(None,
-                    functools.partial(metadata.write, self._meta.folder, chunk, data))
+                await asyncio.get_running_loop().run_in_executor(
+                    None,
+                    functools.partial(metadata.write, self._meta.folder, chunk, data)
+                )
             self._outstanding.remove(piece)
             self._poll.set()
         self.set_result(None)
@@ -109,7 +110,7 @@ class Download(actor.Actor):
             borrower.cancel_piece(piece)
         self._piece_data.put_nowait((piece, data))
 
-    async def poll(self) -> Tuple[Int, Int]:
+    async def poll(self) -> Tuple[int, int]:
         """Return (connected_peers, outstanding_pieces)."""
         await self._poll.wait()
         self._poll.clear()
