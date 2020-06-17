@@ -29,36 +29,15 @@ class ActorSpec(actor.Actor):
 
 
 @pytest.mark.asyncio
-async def test_spawn_child():
+async def test_start_stop_propagates():
     parent = actor.Actor()
     child = unittest.mock.Mock(spec_set=ActorSpec)
+    parent.children.add(child)
 
     await parent.start()
-    await parent.spawn_child(child)
 
-    assert child in parent.children
     child.start.assert_awaited()
 
-    await parent.stop()
-
-
-@pytest.mark.asyncio
-async def test_spawn_while_stopped():
-    parent = actor.Actor()
-    child = actor.Actor(parent)
-
-    with pytest.raises(RuntimeError):
-        await parent.spawn_child(child)
-
-
-@pytest.mark.asyncio
-async def test_stop_propagates():
-    parent = actor.Actor()
-    child = unittest.mock.Mock(spec_set=ActorSpec)
-    child.parent = None
-
-    await parent.start()
-    await parent.spawn_child(child)
     await parent.stop()
 
     child.stop.assert_awaited()
@@ -106,9 +85,9 @@ async def test_crash_reported():
 async def test_uncaught_crash():
     parent = actor.Actor()
     child = CrashingActor(parent)
+    parent.children.add(child)
 
     await parent.start()
-    await parent.spawn_child(child)
     try:
         await child
     except PlannedException:
@@ -125,10 +104,9 @@ async def test_crash_propagates():
     parent = unittest.mock.Mock(spec_set=ActorSpec)
     child = actor.Actor(parent)
     grandchild = CrashingActor(child)
+    child.children.add(grandchild)
 
-    child.parent = parent
     await child.start()
-    await child.spawn_child(grandchild)
     try:
         await grandchild
     except PlannedException:
@@ -145,11 +123,11 @@ async def test_crash_propagates():
 
 @pytest.mark.asyncio
 async def test_supervisor():
-    parent = actor.Supervisor()
+    parent = actor.Actor()
     child = unittest.mock.Mock(spec_set=ActorSpec)
+    parent.children.add(child)
 
     await parent.start()
-    await parent.spawn_child(child)
     parent.report_crash(child)
     try:
         await parent
