@@ -15,7 +15,7 @@ class File:
     path: str
 
     @classmethod
-    def from_dict(cls, begin, d):
+    def from_dict(cls, begin: int, d: Dict[bytes, Any]) -> File:
         length = d[b"length"]
         path = os.path.join(*(part.decode() for part in d[b"path"]))
         return cls(begin, length, path)
@@ -100,7 +100,8 @@ class Metadata:
     files: List[File]
 
     @classmethod
-    def from_dict(cls, d: Dict[bytes, Any]) -> Metadata:
+    def from_bytes(cls, raw_meta: bytes) -> Metadata:
+        d = bencoding.decode(raw_meta)
         announce_list = []
         if b"announce-list" in d:  # See BEP 12.
             # I'm ignoring the tiered structure because I'll be requesting peers
@@ -143,10 +144,6 @@ class Metadata:
             begin = end
 
         return cls(announce_list, length, piece_length, pieces, folder, files)
-
-    @classmethod
-    def from_bytes(cls, raw_meta: bytes) -> Metadata:
-        return cls.from_dict(bencoding.decode(raw_meta))
 
 
 def from_info(announce_list: List[str], raw_info: bytes) -> bytes:

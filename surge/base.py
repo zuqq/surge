@@ -46,7 +46,7 @@ class Download(actor.Supervisor):
         ]
         return f"<{cls} object at {hex(id(self))} with {', '.join(info)}>"
 
-    ### Actor implementation
+    # actor.Supervisor
 
     async def _spawn_peer_connections(self):
         while True:
@@ -100,7 +100,7 @@ class Download(actor.Supervisor):
         await asyncio.gather(
             self._spawn_peer_connections(),
             self._write_pieces(),
-            self._print_progress()
+            self._print_progress(),
         )
 
     async def _on_child_crash(self, child):
@@ -114,7 +114,7 @@ class Download(actor.Supervisor):
         else:
             raise RuntimeError(f"Uncaught crash in {child}.")
 
-    ### Messages from PeerConnection
+    # Interface
 
     def get_piece(self,
                   peer_connection: PeerConnection,
@@ -169,12 +169,10 @@ class PeerConnection(actor.Actor):
         peer = f"peer={self._peer}"
         return f"<{cls} object at {hex(id(self))} with {peer}>"
 
-    ### Actor implementation
-
     def _pop(self, piece):
         # If `piece` is the newest piece, discard the stack.
         if self._stack and self._stack[-1].piece == piece:
-            self._stack = []
+            self._stack.clear()
         self._outstanding.pop(piece)
         return self._data.pop(piece)
 
@@ -217,18 +215,17 @@ class PeerConnection(actor.Actor):
             await self._stream.request(block)
             self._timer[block] = asyncio.create_task(self._timeout())
 
+    # actor.Actor
+
     async def _main(self):
         loop = asyncio.get_running_loop()
         self._stream = protocol.BaseStream(
             self._params.info_hash,
             self._params.peer_id,
-            self._meta.pieces
+            self._meta.pieces,
         )
         _, _ = await loop.create_connection(
-            functools.partial(
-                protocol.Protocol,
-                self._stream
-            ),
+            functools.partial(protocol.Protocol, self._stream),
             self._peer.address,
             self._peer.port,
         )
@@ -239,7 +236,7 @@ class PeerConnection(actor.Actor):
         if self._stream is not None:
             await self._stream.close()
 
-    ### Messages from Download
+    # Interface
 
     def cancel_piece(self, piece: metadata.Piece):
         # TODO: Send cancel messages to the peer.

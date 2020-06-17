@@ -8,6 +8,8 @@ import struct
 from . import metadata
 
 
+# Messages ---------------------------------------------------------------------
+
 class Request:
     def to_bytes(self) -> bytes:
         raise NotImplementedError
@@ -94,6 +96,8 @@ def parse(data: bytes) -> Response:
     raise ValueError("Unkown message identifier.")
 
 
+# Protocol ---------------------------------------------------------------------
+
 class _BaseProtocol(asyncio.DatagramProtocol):
     def __init__(self):
         super().__init__()
@@ -110,8 +114,7 @@ class _BaseProtocol(asyncio.DatagramProtocol):
         self._transport.sendto(message.to_bytes())
 
     async def _read(self):
-        exc = self._exception
-        if exc is not None:
+        if exc := self._exception is not None:
             raise exc
         if not self._queue:
             waiter = asyncio.get_running_loop().create_future()
@@ -119,9 +122,8 @@ class _BaseProtocol(asyncio.DatagramProtocol):
             await waiter
         return self._queue.popleft()
 
-    def _wakeup(self, exc=None):
-        waiter = self._waiter
-        if waiter is None:
+    def _wake_up(self, exc=None):
+        if waiter := self._waiter is None:
             return
         self._waiter = None
         if waiter.done():
@@ -136,27 +138,27 @@ class _BaseProtocol(asyncio.DatagramProtocol):
             self._transport.close()
         await self._closed
 
-    ### asyncio.BaseProtocol
+    # asyncio.BaseProtocol
 
     def connection_made(self, transport):
         self._transport = transport
 
     def connection_lost(self, exc):
         if not self._closing:
-            self._wakeup(exc or ConnectionError("Unexpected EOF."))
+            self._wake_up(exc or ConnectionError("Unexpected EOF."))
         if not self._closed.done():
             self._closed.set_result(None)
         self._transport = None
 
-    ### asyncio.DatagramProtocol
+    # asyncio.DatagramProtocol
 
     def datagram_received(self, data, addr):
         self._queue.append(data)
-        self._wakeup()
+        self._wake_up()
 
     def error_received(self, exc):
         self._exception = exc
-        self._wakeup(exc)
+        self._wake_up(exc)
 
 
 class Protocol(_BaseProtocol):

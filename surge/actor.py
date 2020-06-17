@@ -87,7 +87,7 @@ class Actor(FutureMixin):
         except Exception as e:
             self._crash(e)
 
-    ### Overridable methods
+    # Overridable methods
 
     async def _main(self):
         pass
@@ -99,7 +99,7 @@ class Actor(FutureMixin):
         if reporter in self.children:
             self._crash(RuntimeError(f"Uncaught crash: {reporter}"))
 
-    ### Interface
+    # Interface
 
     async def start(self):
         if self._running:
@@ -163,7 +163,7 @@ class Supervisor(Actor):
         if reporter in self.children:
             self._crashed_children.put_nowait(reporter)
 
-    ### Overridable methods
+    # Overridable methods
 
     async def _on_child_crash(self, child: Actor):
         raise RuntimeError(f"Uncaught crash: {child}")

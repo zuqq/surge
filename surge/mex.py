@@ -9,6 +9,8 @@ from . import protocol
 from . import tracker
 
 
+# Pieces -----------------------------------------------------------------------
+
 def pieces(metadata_size):
     piece_size = 2 ** 14
     return range((metadata_size + piece_size - 1) // piece_size)
@@ -18,6 +20,8 @@ def valid(info_hash, metadata_size, raw_info):
     return (len(raw_info) == metadata_size
             and hashlib.sha1(raw_info).digest() == info_hash)
 
+
+# Actors -----------------------------------------------------------------------
 
 class Download(actor.Supervisor):
     def __init__(self,
@@ -30,7 +34,7 @@ class Download(actor.Supervisor):
         self._peer_queue = tracker.PeerQueue(self, params, announce_list)
         self._peer_connection_slots = asyncio.Semaphore(max_peers)
 
-    ### Actor implementation
+    # actor.Supervisor
 
     async def _main(self):
         await self.spawn_child(self._peer_queue)
@@ -57,7 +61,7 @@ class PeerConnection(actor.Actor):
         self._peer = peer
         self._stream = None
 
-    ### Actor implementation
+    # actor.Actor
 
     async def _main(self):
         loop = asyncio.get_running_loop()

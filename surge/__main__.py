@@ -45,14 +45,13 @@ def main(args: Dict[str, str]):
 
     max_peers = int(args["--peers"])
 
-    if args["--file"]:
-        path = args["--file"]
+    if path := args["--file"]:
         print(f"Reading metadata from {path}.")
         with open(path, "rb") as f:
             raw_meta = f.read()
         meta = metadata.Metadata.from_bytes(raw_meta)
         params = tracker.Parameters.from_bytes(raw_meta)
-    elif args["--magnet"]:
+    else:
         print("Downloading metadata from peers...", end="")
         info_hash, announce_list = magnet.parse(args["--magnet"])
         params = tracker.Parameters(info_hash)
@@ -69,8 +68,8 @@ def main(args: Dict[str, str]):
     metadata.build_file_tree(meta.folder, meta.files)
     print("Done.")
 
-    if args["--folder"]:
-        meta.folder = os.path.join(args["--folder"], meta.folder)
+    if folder := args["--folder"]:
+        meta.folder = os.path.join(folder, meta.folder)
         print(f"Downloading to {meta.folder}.")
 
     outstanding = set(meta.pieces)

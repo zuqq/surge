@@ -31,7 +31,7 @@ class PeerQueue(actor.Supervisor):
         cls = self.__class__.__name__
         return f"<{cls} object at {hex(id(self))}>"
 
-    ### Actor implementation
+    # actor.Supervisor
 
     async def _main(self):
         for announce in self._announce_list:
@@ -46,7 +46,7 @@ class PeerQueue(actor.Supervisor):
     async def _on_child_crash(self, child):
         pass
 
-    ### Queue interface
+    # Interface
 
     async def get(self) -> metadata.Peer:
         """Return a fresh peer."""

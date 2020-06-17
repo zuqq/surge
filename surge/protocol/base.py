@@ -20,7 +20,7 @@ class Protocol(asyncio.Protocol):
         stream.protocol = self
         self._stream = weakref.ref(stream)
 
-    ### asyncio.BaseProtocol
+    # asyncio.BaseProtocol
 
     def connection_made(self, transport):
         self._transport = transport
@@ -37,13 +37,12 @@ class Protocol(asyncio.Protocol):
 
     def resume_writing(self):
         self._paused = False
-        waiter = self._drain_waiter
-        if waiter is not None:
+        if waiter := self._drain_waiter is not None:
             self._drain_waiter = None
             if not waiter.done():
                 waiter.set_result(None)
 
-    ### asyncio.Protocol
+    # asyncio.Protocol
 
     def data_received(self, data):
         self._buffer.extend(data)
@@ -58,7 +57,7 @@ class Protocol(asyncio.Protocol):
     def eof_received(self):
         return False
 
-    ### Interface
+    # Interface
 
     async def write(self, message):
         self._transport.write(message.to_bytes())
@@ -94,8 +93,7 @@ class Closed(state.StateMachineMixin):
         self._waiters.clear()
 
     async def establish(self):
-        exc = self._exception
-        if exc is not None:
+        if exc := self._exception is not None:
             raise exc
         await self.protocol.write(_peer.Handshake(self._info_hash, self._peer_id))
         return await self._bitfield
@@ -104,8 +102,7 @@ class Closed(state.StateMachineMixin):
         raise NotImplementedError
 
     async def receive(self):
-        exc = self._exception
-        if exc is not None:
+        if exc := self._exception is not None:
             raise exc
         if not self._queue:
             waiter = asyncio.get_running_loop().create_future()
