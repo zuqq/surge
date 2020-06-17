@@ -8,7 +8,7 @@ Surge is download-only for now.
 Installation
 ------------
 
-Surge needs Python 3.8 with `aiofiles`_ and `aiohttp`_. The recommended way of
+Surge requires Python 3.8 with `aiohttp`_ and `docopt`_. The recommended way of
 installing these dependencies is to use `poetry`_. Run
 
 .. code-block::
@@ -19,8 +19,8 @@ in the root folder, which automatically gathers the dependencies from the
 provided ``pyproject.toml``. The flag ``--no-dev`` instructs poetry not to
 install the additional packages that are required to run the tests.
 
-.. _aiofiles: https://pypi.org/project/aiofiles/
 .. _aiohttp: https://pypi.org/project/aiohttp/
+.. _docopt: https://pypi.org/project/docopt/
 .. _poetry: https://python-poetry.org/
 
 Usage
@@ -35,7 +35,7 @@ appropriate environment it can be run as ``python -m surge``.
 .. code-block::
 
     $ python -m surge --file debian.torrent
-    Using metadata file debian.torrent.
+    Reading metadata from debian.torrent.
     Building the file tree...Done.
     Downloading from 34 peers: 1340/1340 pieces [#################################]
 
@@ -44,19 +44,21 @@ appropriate environment it can be run as ``python -m surge``.
 .. code-block::
 
     $ python -m surge --help
-    usage: __main__.py [-h] [--resume] [--peers PEERS] [--folder FOLDER] [--log LOG]
-                       (--file FILE | --magnet MAGNET)
-
     Download files from the BitTorrent network.
 
-    optional arguments:
-      -h, --help       show this help message and exit
-      --resume         resume download
-      --peers PEERS    number of peers
-      --folder FOLDER  destination folder
-      --log LOG        log file
-      --file FILE      torrent file
-      --magnet MAGNET  magnet link
+    Usage:
+        __main__.py (-h | --help)
+        __main__.py [--folder FOLDER] [--resume] [--peers PEERS] [--log LOG]
+                    (--file FILE | --magnet MAGNET)
+
+    Options:
+        -h, --help          Show this screen.
+        --folder FOLDER     Destination folder
+        --resume            Resume the download.
+        --peers PEERS       Maximal number of peers [default: 50].
+        --log LOG           Log file.
+        --file FILE         Torrent file.
+        --magnet MAGNET     Magnet link.
 
 
 Architecture
