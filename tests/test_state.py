@@ -19,7 +19,7 @@ def test_state():
     waiter = asyncio.Future()
     waiter.set_result = unittest.mock.Mock()
 
-    class Closed(state.StateMachineMixin):
+    class Closed(state.StateMachine):
         def __init__(self):
             super().__init__()
 

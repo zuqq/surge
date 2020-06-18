@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import dataclasses
 import secrets
 import struct
 
@@ -37,21 +38,33 @@ class AnnounceRequest(Request):
         self.params = params
 
     def to_bytes(self) -> bytes:
+        params = dataclasses.asdict(self.params)
+        params.update(
+            {
+                "connection_id": self.connection_id,
+                "value": self.value,
+                "transaction_id": self.transaction_id,
+                "event": 0,
+                "ip": 0,
+                "key": secrets.token_bytes(4),
+                "num_want": -1,
+            }
+        )
         return struct.pack(
             ">8sl4s20s20sqqqlL4slH",
-            self.connection_id,
-            self.value,
-            self.transaction_id,
-            self.params.info_hash,
-            self.params.peer_id,
-            self.params.downloaded,
-            self.params.left,
-            self.params.uploaded,
-            0,
-            0,
-            secrets.token_bytes(4),
-            -1,
-            6881,
+            params["connection_id"],
+            params["value"],
+            params["transaction_id"],
+            params["info_hash"],
+            params["peer_id"],
+            params["downloaded"],
+            params["left"],
+            params["uploaded"],
+            params["event"],
+            params["ip"],
+            params["key"],
+            params["num_want"],
+            params["port"],
         )
 
 
@@ -103,7 +116,6 @@ class _BaseProtocol(asyncio.DatagramProtocol):
         super().__init__()
 
         self._transport = None
-        self._closing = False
         self._closed = asyncio.get_event_loop().create_future()
         self._exception = None
 
@@ -114,8 +126,8 @@ class _BaseProtocol(asyncio.DatagramProtocol):
         self._transport.sendto(message.to_bytes())
 
     async def _read(self):
-        if exc := self._exception is not None:
-            raise exc
+        if self._exception is not None:
+            raise self._exception
         if not self._queue:
             waiter = asyncio.get_running_loop().create_future()
             self._waiter = waiter
@@ -123,7 +135,7 @@ class _BaseProtocol(asyncio.DatagramProtocol):
         return self._queue.popleft()
 
     def _wake_up(self, exc=None):
-        if waiter := self._waiter is None:
+        if (waiter := self._waiter) is None:
             return
         self._waiter = None
         if waiter.done():
@@ -144,8 +156,12 @@ class _BaseProtocol(asyncio.DatagramProtocol):
         self._transport = transport
 
     def connection_lost(self, exc):
-        if not self._closing:
-            self._wake_up(exc or ConnectionError("Unexpected EOF."))
+        if not self._transport.is_closing():
+            if exc is None:
+                exc = ConnectionError(
+                    f"Unexpected EOF {self._transport.get_extra_info('peername')}"
+                )
+            self._wake_up(exc)
         if not self._closed.done():
             self._closed.set_result(None)
         self._transport = None

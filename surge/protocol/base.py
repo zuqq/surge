@@ -10,15 +10,25 @@ from .. import state
 class Protocol(asyncio.Protocol):
     def __init__(self, stream):
         self._transport = None
-        self._closing = False
         self._closed = asyncio.get_event_loop().create_future()
         self._buffer = bytearray(int.to_bytes(68, 4, "big"))
 
         self._paused = False
-        self._drain_waiter = None
+        self._waiter = None
 
         stream.protocol = self
         self._stream = weakref.ref(stream)
+
+    def _wake_up(self, exc=None):
+        if (waiter := self._waiter) is None:
+            return
+        self._waiter = None
+        if waiter.done():
+            return
+        if exc is None:
+            waiter.set_result(None)
+        else:
+            waiter.set_exception(exc)
 
     # asyncio.BaseProtocol
 
@@ -26,8 +36,13 @@ class Protocol(asyncio.Protocol):
         self._transport = transport
 
     def connection_lost(self, exc):
-        if not self._closing:
-            self._stream().set_exception(exc or ConnectionError("Unexpected EOF."))
+        if not self._transport.is_closing():
+            if exc is None:
+                exc = ConnectionError(
+                    f"Unexpected EOF {self._transport.get_extra_info('peername')}"
+                )
+            self._wake_up(exc)
+            self._stream().set_exception(exc)
         if not self._closed.done():
             self._closed.set_result(None)
         self._transport = None
@@ -37,10 +52,7 @@ class Protocol(asyncio.Protocol):
 
     def resume_writing(self):
         self._paused = False
-        if waiter := self._drain_waiter is not None:
-            self._drain_waiter = None
-            if not waiter.done():
-                waiter.set_result(None)
+        self._wake_up()
 
     # asyncio.Protocol
 
@@ -64,17 +76,16 @@ class Protocol(asyncio.Protocol):
         if not self._paused:
             return
         waiter = asyncio.get_running_loop().create_future()
-        self._drain_waiter = waiter
+        self._waiter = waiter
         await waiter
 
     async def close(self):
-        self._closing = True
         if self._transport is not None:
             self._transport.close()
         await self._closed
 
 
-class Closed(state.StateMachineMixin):
+class Closed(state.StateMachine):
     def __init__(self, info_hash, peer_id):
         super().__init__()
 
@@ -93,8 +104,8 @@ class Closed(state.StateMachineMixin):
         self._waiters.clear()
 
     async def establish(self):
-        if exc := self._exception is not None:
-            raise exc
+        if self._exception is not None:
+            raise self._exception
         await self.protocol.write(_peer.Handshake(self._info_hash, self._peer_id))
         return await self._bitfield
 
@@ -102,8 +113,8 @@ class Closed(state.StateMachineMixin):
         raise NotImplementedError
 
     async def receive(self):
-        if exc := self._exception is not None:
-            raise exc
+        if self._exception is not None:
+            raise self._exception
         if not self._queue:
             waiter = asyncio.get_running_loop().create_future()
             self._waiters[_peer.Block].add(waiter)

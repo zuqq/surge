@@ -94,6 +94,7 @@ class HTTPTrackerConnection(_BaseTrackerConnection):
             if b"failure reason" in d:
                 raise ConnectionError(d[b"failure reason"].decode())
             response = metadata.Response.from_dict(d)
+            logging.debug("%r received %r peers", self, len(response.peers))
             for peer in response.peers:
                 self.parent.put_nowait(peer)
             await asyncio.sleep(response.interval)
@@ -102,14 +103,14 @@ class HTTPTrackerConnection(_BaseTrackerConnection):
 class UDPTrackerConnection(_BaseTrackerConnection):
     async def _main(self):
         while True:
-            for i in range(9):  # See BEP 15, 'Time outs'.
+            for i in range(9):  # See BEP 15, "Time outs".
                 try:
                     loop = asyncio.get_running_loop()
                     _, protocol = await loop.create_datagram_endpoint(
                         functools.partial(_udp.Protocol, self._params),
                         remote_addr=(self._url.hostname, self._url.port),
                     )
-                    response = await asyncio.wait_for(protocol.request(), timeout=5)
+                    response = await asyncio.wait_for(protocol.request(), 5)
                 except Exception as e:
                     logging.warning("%r failed with %r", self._url.geturl(), e)
                     await asyncio.sleep(15 * 2 ** i - 5)
@@ -117,6 +118,7 @@ class UDPTrackerConnection(_BaseTrackerConnection):
                     break
             else:
                 raise ConnectionError("Tracker unreachable.")
+            logging.debug("%r received %r peers", self, len(response.peers))
             for peer in response.peers:
                 self.parent.put_nowait(peer)
             await asyncio.sleep(response.interval)

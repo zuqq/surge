@@ -95,17 +95,15 @@ class PeerConnection(actor.Actor):
             self._params.peer_id,
         )
         _, _ = await loop.create_connection(
-            functools.partial(
-                protocol.Protocol,
-                self._stream
-            ),
+            functools.partial(protocol.Protocol, self._stream),
             self._peer.address,
             self._peer.port,
         )
-        metadata_size = await self._stream.establish()
+        metadata_size = await asyncio.wait_for(self._stream.establish(), 5)
+
         data = []
         for i in pieces(metadata_size):
-            await self._stream.request(i)
+            await asyncio.wait_for(self._stream.request(i), 5)
             index, payload = await self._stream.receive()
             if index == i:
                 data.append(payload)

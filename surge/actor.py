@@ -5,7 +5,7 @@ import asyncio
 import logging
 
 
-class FutureMixin:
+class _Future:
     def __init__(self):
         self._future = asyncio.get_event_loop().create_future()
 
@@ -30,7 +30,7 @@ class FutureMixin:
         return self._future.exception()
 
 
-class Actor(FutureMixin):
+class Actor(_Future):
     def __init__(self, parent: Optional[Actor] = None):
         super().__init__()
 
@@ -44,10 +44,9 @@ class Actor(FutureMixin):
         self._crashed_children = asyncio.Queue()  # type: ignore
 
     def _crash(self, reason: Exception):
-        logging.warning("%r crashed with %r", self, reason)
-
         if self._crashed or not self._running:
             return
+        logging.warning("%r crashed with %r", self, reason)
         self._crashed = True
         self.set_exception(reason)
         if self.parent is not None:
@@ -62,7 +61,6 @@ class Actor(FutureMixin):
     async def _supervise(self):
         while True:
             child = await self._crashed_children.get()
-            _ = child.exception()
             await child.stop()
             self.children.remove(child)
             await self._on_child_crash(child)
@@ -86,10 +84,9 @@ class Actor(FutureMixin):
         return self._crashed
 
     async def start(self):
-        logging.debug("%r starting", self)
-
         if self._running:
             return
+        logging.debug("%r starting", self)
         self._running = True
         self.tasks.add(asyncio.create_task(self._run()))
         self.tasks.add(asyncio.create_task(self._supervise()))
@@ -101,14 +98,14 @@ class Actor(FutureMixin):
 
     async def stop(self):
         """First stop `self`, then all of its children."""
-        logging.debug("%r stopping", self)
-
         if not self._running:
             return
-        self._running = False
-        self.set_result(None)
+        logging.debug("%r stopping", self)
         for task in self.tasks:
             task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)
+        self._running = False
+        self.set_result(None)
+        self.exception()
         for child in self.children:
             await child.stop()

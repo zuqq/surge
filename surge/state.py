@@ -1,7 +1,7 @@
 import collections
 
 
-class StateMachineMixin:
+class StateMachine:
     def __init__(self):
         # Maps `(start_state, event_type)` to `(side_effect, end_state)`.
         # Transitions from a state to itself with no side effect are implicit.

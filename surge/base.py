@@ -188,7 +188,7 @@ class PeerConnection(actor.Actor):
                 self._outstanding[piece] = set(blocks)
                 self._data[piece] = bytearray(piece.length)
             block = self._stack.pop()
-            await self._stream.request(block)
+            await asyncio.wait_for(self._stream.request(block), 5)
             self._timer[block] = asyncio.create_task(self._timeout())
 
     # actor.Actor
@@ -205,7 +205,7 @@ class PeerConnection(actor.Actor):
             self._peer.address,
             self._peer.port,
         )
-        await self._stream.establish()
+        await asyncio.wait_for(self._stream.establish(), 5)
         await asyncio.gather(self._receive_blocks(), self._request_blocks())
 
     async def stop(self):
