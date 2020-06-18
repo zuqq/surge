@@ -160,6 +160,7 @@ class _BaseProtocol(asyncio.DatagramProtocol):
                 exc = ConnectionError(
                     f"Unexpected EOF {self._transport.get_extra_info('peername')}"
                 )
+            self._exception = exc
             self._wake_up(exc)
         if not self._closed.done():
             self._closed.set_result(None)
