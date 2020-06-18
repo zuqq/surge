@@ -97,7 +97,7 @@ class State:
         raise NotImplementedError
 
 
-class BaseStream(state.StateMachine):
+class Stream(state.StateMachine):
     def __init__(self, info_hash, peer_id):
         super().__init__()
 
@@ -171,7 +171,7 @@ class Unchoked(Closed):
         await stream.protocol.write(_peer.Request(block))
 
 
-class Stream(BaseStream):
+class BaseStream(Stream):
     def __init__(self, info_hash, peer_id, pieces):
         super().__init__(info_hash, peer_id)
 

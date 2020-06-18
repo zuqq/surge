@@ -46,7 +46,7 @@ class Unchoked(Closed):
         )
 
 
-class Stream(base.BaseStream):
+class MetadataStream(base.Stream):
     def __init__(self, info_hash, peer_id):
         super().__init__(info_hash, peer_id)
 

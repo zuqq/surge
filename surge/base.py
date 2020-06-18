@@ -194,13 +194,12 @@ class PeerConnection(actor.Actor):
     # actor.Actor
 
     async def _main(self):
-        loop = asyncio.get_running_loop()
         self._stream = protocol.BaseStream(
             self._params.info_hash,
             self._params.peer_id,
             self._meta.pieces,
         )
-        _, _ = await loop.create_connection(
+        _, _ = await asyncio.get_running_loop().create_connection(
             functools.partial(protocol.Protocol, self._stream),
             self._peer.address,
             self._peer.port,
