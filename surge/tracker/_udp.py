@@ -146,8 +146,7 @@ class _BaseProtocol(asyncio.DatagramProtocol):
             waiter.set_exception(exc)
 
     async def close(self):
-        if self._transport is not None:
-            self._transport.close()
+        self._transport.close()
         await self._closed
 
     # asyncio.BaseProtocol
@@ -164,7 +163,6 @@ class _BaseProtocol(asyncio.DatagramProtocol):
             self._wake_up(exc)
         if not self._closed.done():
             self._closed.set_result(None)
-        self._transport = None
 
     # asyncio.DatagramProtocol
 

@@ -7,6 +7,12 @@ from surge import state
 
 
 def test_state():
+    class Closed:
+        pass
+
+    class Open:
+        pass
+
     class OpenCommand:
         pass
 
@@ -19,21 +25,20 @@ def test_state():
     waiter = asyncio.Future()
     waiter.set_result = unittest.mock.Mock()
 
-    class Closed(state.StateMachine):
+    class StateMachine(state.StateMachine):
         def __init__(self):
             super().__init__()
 
-            self._waiters[CloseCommand].add(waiter)
+            self.add_waiter(waiter, CloseCommand)
 
             self._transition = {
                 (Closed, OpenCommand): (on_open, Open),
                 (Open, CloseCommand): (on_close, Closed),
             }
 
-    class Open(Closed):
-        pass
+            self.state = Closed
 
-    state_machine = Closed()
+    state_machine = StateMachine()
 
     state_machine.feed(OpenCommand())
     assert state_machine.state is Open

@@ -45,7 +45,6 @@ class Protocol(asyncio.Protocol):
             self._stream().set_exception(exc)
         if not self._closed.done():
             self._closed.set_result(None)
-        self._transport = None
 
     def pause_writing(self):
         self._paused = True
@@ -80,12 +79,25 @@ class Protocol(asyncio.Protocol):
         await waiter
 
     async def close(self):
-        if self._transport is not None:
-            self._transport.close()
+        self._transport.close()
         await self._closed
 
 
-class Closed(state.StateMachine):
+class State:
+    @staticmethod
+    async def establish(stream):
+        raise NotImplementedError
+
+    @staticmethod
+    async def request(stream, block):
+        raise NotImplementedError
+
+    @staticmethod
+    async def receive(stream):
+        raise NotImplementedError
+
+
+class BaseStream(state.StateMachine):
     def __init__(self, info_hash, peer_id):
         super().__init__()
 
@@ -94,7 +106,8 @@ class Closed(state.StateMachine):
 
         self.protocol = None
         self._exception = None
-        self._queue = collections.deque(maxlen=1024)
+
+        self.queue = collections.deque(maxlen=1024)
 
     def set_exception(self, exc):
         self._exception = exc
@@ -103,27 +116,39 @@ class Closed(state.StateMachine):
                 waiter.set_exception(exc)
         self._waiters.clear()
 
+    async def close(self):
+        if self.protocol is not None:
+            await self.protocol.close()
+
+    # Methods that delegate to `self.state`.
+
     async def establish(self):
         if self._exception is not None:
             raise self._exception
         await self.protocol.write(_peer.Handshake(self._info_hash, self._peer_id))
-        return await self._bitfield
+        return await self.state.establish(self)
 
     async def request(self, block):
-        raise NotImplementedError
+        await self.state.request(self, block)
 
     async def receive(self):
         if self._exception is not None:
             raise self._exception
-        if not self._queue:
-            waiter = asyncio.get_running_loop().create_future()
-            self._waiters[_peer.Block].add(waiter)
-            await waiter
-        return self._queue.popleft()
+        return await self.state.receive(self)
 
-    async def close(self):
-        if self.protocol is not None:
-            await self.protocol.close()
+
+class Closed(State):
+    @staticmethod
+    async def establish(stream):
+        return await stream.bitfield
+
+    @staticmethod
+    async def receive(stream):
+        if not stream.queue:
+            waiter = asyncio.get_running_loop().create_future()
+            stream.add_waiter(waiter, _peer.Block)
+            await waiter
+        return stream.queue.popleft()
 
 
 class Open(Closed):
@@ -131,26 +156,28 @@ class Open(Closed):
 
 
 class Choked(Closed):
-    async def request(self, block):
+    @staticmethod
+    async def request(stream, block):
         waiter = asyncio.get_running_loop().create_future()
-        self._waiters[_peer.Unchoke].add(waiter)
-        await self.protocol.write(_peer.Interested())
+        stream.add_waiter(waiter, _peer.Unchoke)
+        await stream.protocol.write(_peer.Interested())
         await waiter
-        await self.protocol.write(_peer.Request(block))
+        await Unchoked.request(stream, block)
 
 
 class Unchoked(Closed):
-    async def request(self, block):
-        await self.protocol.write(_peer.Request(block))
+    @staticmethod
+    async def request(stream, block):
+        await stream.protocol.write(_peer.Request(block))
 
 
-class Stream(Closed):
+class Stream(BaseStream):
     def __init__(self, info_hash, peer_id, pieces):
         super().__init__(info_hash, peer_id)
 
         self.available = set()
-        self._bitfield = asyncio.get_event_loop().create_future()
-        self._waiters[_peer.Bitfield].add(self._bitfield)
+        self.bitfield = asyncio.get_event_loop().create_future()
+        self.add_waiter(self.bitfield, _peer.Bitfield)
 
         def on_bitfield(message):
             self.available = message.available(pieces)
@@ -159,7 +186,7 @@ class Stream(Closed):
             self.available.add(message.piece(pieces))
 
         def on_block(message):
-            self._queue.append((message.block(pieces), message.data))
+            self.queue.append((message.block(pieces), message.data))
 
         self._transition = {
             (Closed, _peer.Handshake): (None, Open),
