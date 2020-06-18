@@ -57,8 +57,6 @@ async def _print(max_peers, pieces, poll):
 
 
 def main(args: Dict[str, str]):
-    loop = asyncio.get_event_loop()
-
     if args["--log"]:
         logging.basicConfig(
             level=logging.DEBUG,
@@ -82,7 +80,7 @@ def main(args: Dict[str, str]):
         print("Downloading metadata from peers...", end="")
         info_hash, announce_list = magnet.parse(args["--magnet"])
         params = tracker.Parameters(info_hash)
-        raw_meta = runners.run(loop, mex.Download(params, announce_list, max_peers))
+        raw_meta = runners.run(mex.Download(params, announce_list, max_peers))
         meta = metadata.Metadata.from_bytes(raw_meta)
         print("Done.")
         path = f"{info_hash.hex()}.torrent"
@@ -111,9 +109,11 @@ def main(args: Dict[str, str]):
     else:
         download = base.Download(meta, params, outstanding, max_peers)
         download.tasks.add(
-            loop.create_task(_print(max_peers, len(meta.pieces), download.poll))
+            asyncio.get_event_loop().create_task(
+                _print(max_peers, len(meta.pieces), download.poll)
+            )
         )
-        runners.run(loop, download)
+        runners.run(download)
 
 
 if __name__ == "__main__":
