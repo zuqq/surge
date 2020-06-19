@@ -1,4 +1,4 @@
-__all__ = ("BaseStream", "MetadataStream", "Protocol")
+__all__ = ("base_stream", "mex_stream")
 
-from .base import BaseStream, Protocol
-from .mex import MetadataStream
+from .base import open_stream as base_stream
+from .mex import open_stream as mex_stream

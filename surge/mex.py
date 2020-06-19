@@ -1,7 +1,6 @@
 from typing import Iterable, List
 
 import asyncio
-import functools
 import hashlib
 
 from . import actor
@@ -89,12 +88,9 @@ class PeerConnection(actor.Actor):
     # actor.Actor
 
     async def _main(self):
-        self._stream = protocol.MetadataStream(
+        self._stream = await protocol.mex_stream(
             self._params.info_hash,
             self._params.peer_id,
-        )
-        _, _ = await asyncio.get_running_loop().create_connection(
-            functools.partial(protocol.Protocol, self._stream),
             self._peer.address,
             self._peer.port,
         )
