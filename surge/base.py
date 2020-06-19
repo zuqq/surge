@@ -1,225 +1,229 @@
 from __future__ import annotations
-from typing import DefaultDict, Dict, List, Optional, Set, Tuple
+from typing import DefaultDict, Dict, List, Optional, Set
 
 import asyncio
 import collections
 import functools
 import random
 
-from . import actor
+from . import events
+from . import messages
 from . import metadata
-from . import protocol
 from . import tracker
+from .actor import Actor
+from .stream import Stream
 
 
-class Download(actor.Actor):
-    def __init__(self,
-                 meta: metadata.Metadata,
-                 params: tracker.Parameters,
-                 outstanding: Set[metadata.Piece],
-                 max_peers: int):
+async def download(
+        meta: metadata.Metadata,
+        params: tracker.Parameters,
+        missing: Set[metadata.Piece]):
+    async with Root(meta, params, missing) as root:
+        chunks = metadata.piece_to_chunks(meta.files, meta.pieces)
+        loop = asyncio.get_running_loop()
+        folder = meta.folder
+
+        n = len(meta.pieces)
+        d = len(str(n))
+
+        def print_progress():
+            print(f"\r\x1b[KProgress: {n - len(missing) : >{d}}/{n} pieces.", end="")
+
+        # Print once before the loop to indicate that the download is starting.
+        print_progress()
+        async for piece, data in root:
+            for chunk in chunks[piece]:
+                await loop.run_in_executor(
+                    None, functools.partial(metadata.write_chunk, folder, chunk, data)
+                )
+                print_progress()
+
+        print("\n", end="")
+
+
+class Root(Actor):
+    def __init__(
+            self,
+            meta: metadata.Metadata,
+            params: tracker.Parameters,
+            missing: Set[metadata.Piece]):
         super().__init__()
 
-        self._meta = meta
-        self._params = params
-        self._outstanding = outstanding
-        self._borrowers: DefaultDict[metadata.Piece, Set[PeerConnection]]
+        peer_queue = tracker.PeerQueue(self, meta.announce_list, params)
+        self.children.add(peer_queue)
+        self._coros.add(self._main(meta, params, peer_queue))
+
+        self._missing = missing
+        self._borrowers: DefaultDict[metadata.Piece, Set[Node]]
         self._borrowers = collections.defaultdict(set)
 
-        peer_queue = tracker.PeerQueue(self, params, meta.announce_list)
-        self._peer_queue = peer_queue
-        self.children.add(peer_queue)
+        self._slots = asyncio.Semaphore(50)
+        self._queue = asyncio.Queue(10)  # type: ignore
 
-        self._max_peers = max_peers
-        self._peer_connection_slots = asyncio.Semaphore(max_peers)
-        self._piece_data = asyncio.Queue()  # type: ignore
+    def __aiter__(self):
+        return self
 
-        self._poll = asyncio.Event()
-        self._poll.set()
+    async def __anext__(self):
+        item = await self._queue.get()
+        if item is None:
+            raise StopAsyncIteration
+        return item
 
-    def __repr__(self):
-        cls = self.__class__.__name__
-        info = [
-            f"info_hash={repr(self._params.info_hash)}",
-            f"peer_id={repr(self._params.peer_id)}",
-        ]
-        return f"<{cls} object at {hex(id(self))} with {', '.join(info)}>"
-
-    async def _spawn_peer_connections(self):
+    async def _main(self, meta, params, peer_queue):
         while True:
-            await self._peer_connection_slots.acquire()
-            peer = await self._peer_queue.get()
-            connection = PeerConnection(self, self._meta, self._params, peer)
-            self.children.add(connection)
-            await connection.start()
-            self._poll.set()
+            await self._slots.acquire()
+            peer = await peer_queue.get()
+            await self.spawn_child(Node(self, meta, params, peer))
 
-    async def _write_pieces(self):
-        chunks = metadata.piece_to_chunks(self._meta.files, self._meta.pieces)
-        while self._outstanding:
-            piece, data = await self._piece_data.get()
-            if piece not in self._outstanding:
-                continue
-            for chunk in chunks[piece]:
-                await asyncio.get_running_loop().run_in_executor(
-                    None,
-                    functools.partial(
-                        metadata.write_chunk,
-                        self._meta.folder,
-                        chunk,
-                        data,
-                    )
-                )
-            self._outstanding.remove(piece)
-            self._poll.set()
-        self.set_result(None)
-
-    # actor.Supervisor
-
-    async def _main(self):
-        await asyncio.gather(self._spawn_peer_connections(), self._write_pieces())
-
-    async def _on_child_crash(self, child):
-        if isinstance(child, PeerConnection):
+    def _on_child_crash(self, child):
+        if isinstance(child, Node):
             for piece, borrowers in list(self._borrowers.items()):
                 borrowers.discard(child)
                 if not borrowers:
                     self._borrowers.pop(piece)
-            self._peer_connection_slots.release()
-            self._poll.set()
+            self._slots.release()
         else:
             super()._on_child_crash(child)
 
-    # Interface
+    # Messages from `Node`.
 
-    def get_piece(self,
-                  peer_connection: PeerConnection,
-                  available: Set[metadata.Piece]) -> Optional[metadata.Piece]:
+    def get_piece(self, node: Node) -> Optional[metadata.Piece]:
         borrowed = set(self._borrowers)
-        pool = self._outstanding - borrowed or borrowed
+        # Strict endgame mode: Only send duplicate requests if every missing
+        # piece is already being requested from some peer.
+        pool = self._missing - borrowed or borrowed
         if not pool:
             return None
         try:
-            piece = random.choice(list(pool & available))
+            piece = random.choice(list(pool & node.available))
         except IndexError:
             piece = random.choice(list(pool))
-        self._borrowers[piece].add(peer_connection)
+        self._borrowers[piece].add(node)
         return piece
 
-    def piece_done(self,
-                   peer_connection: PeerConnection,
-                   piece: metadata.Piece,
-                   data: bytes):
+    def return_piece(self, node: Node, piece: metadata.Piece):
         if piece not in self._borrowers:
             return
-        for borrower in self._borrowers.pop(piece) - {peer_connection}:
+        self._borrowers[piece].remove(node)
+
+    async def put_piece(self, node: Node, piece: metadata.Piece, data: bytes):
+        if piece not in self._borrowers:
+            return
+        for borrower in self._borrowers.pop(piece) - {node}:
             borrower.cancel_piece(piece)
-        self._piece_data.put_nowait((piece, data))
-
-    async def poll(self) -> Tuple[int, int]:
-        """Return (connected_peers, outstanding_pieces)."""
-        await self._poll.wait()
-        self._poll.clear()
-        return (max(0, len(self.children) - 1), len(self._outstanding))
+        self._queue.put_nowait((piece, data))
+        self._missing.remove(piece)
+        if not self._missing:
+            self._queue.put_nowait(None)
 
 
-class PeerConnection(actor.Actor):
-    def __init__(self,
-                 parent: Download,
-                 meta: metadata.Metadata,
-                 params: tracker.Parameters,
-                 peer: tracker.Peer,
-                 *,
-                 max_requests: int = 10):
+class Progress:
+    def __init__(self, piece, blocks):
+        self._missing = set(blocks)
+        self._data = bytearray(piece.length)
+
+    @property
+    def done(self):
+        return not self._missing
+
+    @property
+    def data(self):
+        return bytes(self._data)
+
+    def add(self, block, data):
+        self._missing.discard(block)
+        self._data[block.begin : block.begin + block.length] = data
+
+
+class Node(Actor):
+    def __init__(
+            self,
+            parent: Root,
+            meta: metadata.Metadata,
+            params: tracker.Parameters,
+            peer: tracker.Peer):
         super().__init__(parent)
 
-        self._meta = meta
-        self._params = params
-        self._peer = peer
+        self._coros.add(self._main(meta.pieces, params.info_hash, params.peer_id))
 
-        self._stream = None
-
-        self._slots = asyncio.Semaphore(max_requests)
-        self._timer: Dict[metadata.Block, asyncio.Task] = {}
+        self.peer = peer
+        self.available: Set[metadata.Block] = set()
 
         self._stack: List[metadata.Block] = []
-        self._outstanding: Dict[metadata.Piece, Set[metadata.Block]] = {}
-        self._data: Dict[metadata.Piece, bytearray] = {}
+        self._progress: Dict[metadata.Piece, Progress] = {}
 
-    def __repr__(self):
-        cls = self.__class__.__name__
-        peer = f"peer={self._peer}"
-        return f"<{cls} object at {hex(id(self))} with {peer}>"
+    def _reset(self):
+        self._stack = []
+        for piece in self._progress:
+            self.parent.return_piece(self, piece)
+        self._progress = {}
 
-    def _pop(self, piece):
-        # If `piece` is the newest piece, discard the stack.
-        if self._stack and self._stack[-1].piece == piece:
-            self._stack.clear()
-        self._outstanding.pop(piece)
-        return self._data.pop(piece)
+    def _get_block(self) -> Optional[metadata.Block]:
+        if not self._stack:
+            piece = self.parent.get_piece(self)
+            if piece is None:
+                return None
+            blocks = metadata.blocks(piece)
+            self._stack = blocks[::-1]
+            self._progress[piece] = Progress(piece, blocks)
+        return self._stack.pop()
 
-    async def _receive_blocks(self):
-        while True:
-            block, data = await self._stream.receive()
-            if block not in self._timer:
-                continue
-            self._timer.pop(block).cancel()
-            piece = block.piece
-            try:
-                self._outstanding[piece].remove(block)
-            except KeyError:
-                continue
-            self._data[piece][block.begin : block.begin + block.length] = data
-            if not self._outstanding[piece]:
-                piece_data = bytes(self._pop(piece))
-                if metadata.valid_piece(piece, piece_data):
-                    self.parent.piece_done(self, piece, piece_data)
+    async def _put_block(self, block: metadata.Block, data: bytes):
+        piece = block.piece
+        if piece not in self._progress:
+            return
+        progress = self._progress[piece]
+        progress.add(block, data)
+        if progress.done:
+            data = self._progress.pop(piece).data
+            if metadata.valid_piece(piece, data):
+                await self.parent.put_piece(self, piece, data)
+            else:
+                raise ValueError("Peer sent invalid data.")
+
+    async def _main(self, pieces, info_hash, peer_id):
+        async with Stream(self.peer) as stream:
+            transducer = events.Transducer(info_hash, peer_id)
+            slots = 10
+
+            # Unroll the first two iterations of the loop because handshake
+            # messages don't have a length prefix.
+            event = next(transducer)
+            await stream.write(event.message)
+
+            event = next(transducer)
+            transducer.feed(await stream.read_handshake())
+
+            for event in transducer:
+                if isinstance(event, events.Receive):
+                    message = event.message
+                    if isinstance(message, messages.Choke):
+                        self._reset()
+                    elif isinstance(message, messages.Have):
+                        self.available.add(message.piece(pieces))
+                    elif isinstance(message, messages.Bitfield):
+                        self.available = message.available(pieces)
+                    elif isinstance(message, messages.Block):
+                        await self._put_block(message.block(pieces), message.data)
+                        slots += 1
+                    elif isinstance(message, messages.Handshake):
+                        if message.info_hash != info_hash:
+                            raise ConnectionError("Peer's info_hash doesn't match.")
+                elif isinstance(event, events.Send):
+                    await stream.write(event.message)
+                elif slots and isinstance(event, events.Request):
+                    if (block := self._get_block()) is None:
+                        break
+                    await stream.write(messages.Request(block))
+                    slots -= 1
                 else:
-                    raise ValueError("Peer sent invalid data.")
-            self._slots.release()
+                    transducer.feed(await stream.read_message())
 
-    async def _timeout(self, *, timeout=5):
-        await asyncio.sleep(timeout)
-        self._crash(TimeoutError("Request timed out."))
-
-    async def _request_blocks(self):
-        while True:
-            await self._slots.acquire()
-            if not self._stack:
-                piece = self.parent.get_piece(self, self._stream.available)
-                if piece is None:
-                    break
-                blocks = list(metadata.blocks(piece))
-                self._stack = blocks[::-1]
-                self._outstanding[piece] = set(blocks)
-                self._data[piece] = bytearray(piece.length)
-            block = self._stack.pop()
-            await asyncio.wait_for(self._stream.request(block), 5)
-            self._timer[block] = asyncio.create_task(self._timeout())
-
-    # actor.Actor
-
-    async def _main(self):
-        self._stream = await protocol.base_stream(
-            self._params.info_hash,
-            self._params.peer_id,
-            self._meta.pieces,
-            self._peer.address,
-            self._peer.port,
-        )
-        await asyncio.wait_for(self._stream.establish(), 5)
-        await asyncio.gather(self._receive_blocks(), self._request_blocks())
-
-    async def stop(self):
-        await super().stop()
-        if self._stream is not None:
-            await self._stream.close()
-
-    # Interface
+    # Messages from `Root`.
 
     def cancel_piece(self, piece: metadata.Piece):
-        # TODO: Send cancel messages to the peer.
-        try:
-            self._pop(piece)
-        except KeyError:
-            pass
+        if piece not in self._progress:
+            return
+        if self._stack and self._stack[-1].piece == piece:
+            self._stack = []
+        self._progress.pop(piece)

@@ -8,6 +8,9 @@ from . import _metadata
 from .. import metadata
 
 
+# Base class -------------------------------------------------------------------
+
+
 class Message:
     format = ""
     fields: Tuple[str, ...] = ()
@@ -21,26 +24,14 @@ class Message:
         return cls()
 
 
-_registry: Dict[int, Type[Message]] = {}
+# Messages without identifier byte ---------------------------------------------
 
 
-def register(cls: Type[Message]) -> Type[Message]:
-    _registry[cls.value] = cls  # type: ignore
-    return cls
-
-
-@register
 class Handshake(Message):
-    # According to the specification, a handshake message has neither length
-    # prefix nor identifier byte. Here's how I make it fit in with the others:
-    # - Initialize the receive buffer with a length prefix for the handshake.
-    # - The first byte of a handshake message is always 19. No other message can
-    # have that as its first byte, so it serves as the identifier byte.
-
     format = ">B19sQ20s20s"
-    fields = ("value", "pstr", "reserved", "info_hash", "peer_id")
+    fields = ("pstrlen", "pstr", "reserved", "info_hash", "peer_id")
 
-    value = 19  # Called "pstrlen" in other places.
+    pstrlen = 19
     pstr = b"BitTorrent protocol"
     reserved = 1 << 20
 
@@ -50,7 +41,7 @@ class Handshake(Message):
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Handshake:
-        _, _, _, info_hash, peer_id = struct.unpack(cls.format, data[4:])
+        _, _, _, info_hash, peer_id = struct.unpack(cls.format, data)
         return cls(info_hash, peer_id)
 
 
@@ -58,6 +49,17 @@ class Keepalive(Message):
     format = ">L"
     fields = ("prefix",)
     prefix = 0
+
+
+# Registry for messages with identifier byte -----------------------------------
+
+
+_registry: Dict[int, Type[Message]] = {}
+
+
+def register(cls: Type[Message]) -> Type[Message]:
+    _registry[cls.value] = cls  # type: ignore
+    return cls
 
 
 @register
@@ -203,6 +205,9 @@ class ExtensionProtocol(Message):
         return cls(_extension.parse(data[5:]))
 
 
+# Parser -----------------------------------------------------------------------
+
+
 def parse(data: bytes) -> Union[Message, _extension.Message, _metadata.Message]:
     n = int.from_bytes(data[:4], "big")
     if len(data) != 4 + n:
@@ -225,4 +230,4 @@ def parse(data: bytes) -> Union[Message, _extension.Message, _metadata.Message]:
         return extension_message
     if isinstance(extension_message, _extension.Metadata):
         return extension_message.metadata_message
-    raise ValueError("Unkown extension message.")
+    raise ValueError("Unknown extension message.")

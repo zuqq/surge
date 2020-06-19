@@ -6,10 +6,11 @@ import dataclasses
 import secrets
 import struct
 
-from . import metadata
+from . import _metadata
 
 
 # Messages ---------------------------------------------------------------------
+
 
 class Request:
     def to_bytes(self) -> bytes:
@@ -29,10 +30,11 @@ class ConnectRequest(Request):
 class AnnounceRequest(Request):
     value = 1
 
-    def __init__(self,
-                 transaction_id: bytes,
-                 connection_id: bytes,
-                 params: metadata.Parameters):
+    def __init__(
+            self,
+            transaction_id: bytes,
+            connection_id: bytes,
+            params: _metadata.Parameters):
         self.transaction_id = transaction_id
         self.connection_id = connection_id
         self.params = params
@@ -89,13 +91,13 @@ class ConnectResponse(Response):
 class AnnounceResponse(Response):
     value = 1
 
-    def __init__(self, response: metadata.Response):
+    def __init__(self, response: _metadata.Response):
         self.response = response
 
     @classmethod
     def from_bytes(cls, data: bytes) -> AnnounceResponse:
         _, _, interval, _, _ = struct.unpack(">l4slll", data[:20])
-        return cls(metadata.Response.from_bytes(interval, data[20:]))
+        return cls(_metadata.Response.from_bytes(interval, data[20:]))
 
 
 def parse(data: bytes) -> Response:
@@ -110,6 +112,7 @@ def parse(data: bytes) -> Response:
 
 
 # Protocol ---------------------------------------------------------------------
+
 
 class _BaseProtocol(asyncio.DatagramProtocol):
     def __init__(self):
@@ -157,9 +160,8 @@ class _BaseProtocol(asyncio.DatagramProtocol):
     def connection_lost(self, exc):
         if not self._transport.is_closing():
             if exc is None:
-                exc = ConnectionError(
-                    f"Unexpected EOF {self._transport.get_extra_info('peername')}"
-                )
+                peer = self._transport.get_extra_info("peername")
+                exc = ConnectionError(f"Unexpected EOF {peer}")
             self._exception = exc
             self._wake_up(exc)
         if not self._closed.done():
@@ -177,12 +179,12 @@ class _BaseProtocol(asyncio.DatagramProtocol):
 
 
 class Protocol(_BaseProtocol):
-    def __init__(self, params: metadata.Parameters):
+    def __init__(self, params: _metadata.Parameters):
         super().__init__()
 
         self._params = params
 
-    async def request(self) -> metadata.Response:
+    async def request(self) -> _metadata.Response:
         transaction_id = secrets.token_bytes(4)
         self._write(ConnectRequest(transaction_id))
         connection_id = parse(await self._read()).connection_id

@@ -40,16 +40,17 @@ class Piece:
 
 
 def valid_piece(piece: Piece, data: bytes) -> bool:
-    return len(data) == piece.length and hashlib.sha1(data).digest() == piece.hash
+    return hashlib.sha1(data).digest() == piece.hash
 
 
-def available_pieces(pieces: Sequence[Piece],
-                     files: Sequence[File],
-                     folder: str) -> Generator[Piece, None, None]:
+def available_pieces(
+        pieces: Sequence[Piece],
+        files: Sequence[File],
+        folder: str) -> Generator[Piece, None, None]:
     chunks = piece_to_chunks(files, pieces)
     for piece in pieces:
         data = []
-        for chunk in chunks[pieces]:
+        for chunk in chunks[piece]:
             path = os.path.join(folder, chunk.file.path)
             try:
                 with open(path, "rb") as f:
@@ -71,8 +72,9 @@ class Chunk:
     length: int
 
 
-def piece_to_chunks(files: Sequence[File],
-                    pieces: Sequence[Piece]) -> Dict[Piece, List[Chunk]]:
+def piece_to_chunks(
+        files: Sequence[File],
+        pieces: Sequence[Piece]) -> Dict[Piece, List[Chunk]]:
     result = {piece: [] for piece in pieces}
     i = 0
     j = 0
@@ -108,10 +110,12 @@ class Block:
     length: int
 
 
-def blocks(piece: Piece) -> Generator[Block, None, None]:
+def blocks(piece: Piece) -> List[Block]:
     block_size = 2 ** 14
+    result = []
     for begin in range(0, piece.length, block_size):
-        yield Block(piece, begin, min(block_size, piece.length - begin))
+        result.append(Block(piece, begin, min(block_size, piece.length - begin)))
+    return result
 
 
 @dataclasses.dataclass

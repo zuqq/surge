@@ -1,24 +1,46 @@
+"""Metadata exchange protocol (BEP 9)
+
+Because this protocol is essentially linear, I decided to use a simple
+procedural style. The minimal message flow looks like this:
+
+    Us                         Peer
+     |        Handshake         |
+     |------------------------->|
+     |        Handshake         |
+     |<-------------------------|
+     |    ExtensionHandshake    |
+     |------------------------->|
+     |    ExtensionHandshake    |
+     |<-------------------------|
+     |     MetadataRequest      |
+     |------------------------->|
+     |         Metadata         |
+     |<-------------------------|
+     |     MetadataRequest      |
+     |------------------------->|
+     |           ...            |
+
+After exchanging handshakes, the peer might send us BitTorrent messages that are
+irrelevant to this particular protocol; such messages are simply ignored.
+"""
+
 from typing import Iterable, List
 
 import asyncio
 import hashlib
 
-from . import actor
 from . import bencoding
-from . import protocol
+from . import messages
 from . import tracker
+from .actor import Actor
+from .stream import Stream
 
 
 # Metadata ---------------------------------------------------------------------
 
-def pieces(metadata_size: int) -> Iterable[int]:
-    piece_size = 2 ** 14
-    return range((metadata_size + piece_size - 1) // piece_size)
 
-
-def valid_info(info_hash: bytes, metadata_size: int, raw_info: bytes) -> bool:
-    return (len(raw_info) == metadata_size
-            and hashlib.sha1(raw_info).digest() == info_hash)
+def valid_info(info_hash: bytes, raw_info: bytes) -> bool:
+    return hashlib.sha1(raw_info).digest() == info_hash
 
 
 def assemble(announce_list: List[str], raw_info: bytes) -> bytes:
@@ -38,77 +60,88 @@ def assemble(announce_list: List[str], raw_info: bytes) -> bytes:
 
 # Actors -----------------------------------------------------------------------
 
-class Download(actor.Actor):
-    def __init__(self,
-                 params: tracker.Parameters,
-                 announce_list: Iterable[str],
-                 max_peers: int):
+
+async def download(announce_list, params):
+    async with Root(announce_list, params) as root:
+        return await root
+
+
+class Root(Actor):
+    def __init__(self, announce_list: Iterable[str], params: tracker.Parameters):
         super().__init__()
 
-        self._params = params
+        peer_queue = tracker.PeerQueue(self, announce_list, params)
+        self.children.add(peer_queue)
+        self._coros.add(self._main(params, peer_queue))
+
         self._announce_list = announce_list
 
-        peer_queue = tracker.PeerQueue(self, params, announce_list)
-        self._peer_queue = peer_queue
-        self.children.add(peer_queue)
+        self._future = asyncio.get_event_loop().create_future()
+        self._slots = asyncio.Semaphore(50)
 
-        self._peer_connection_slots = asyncio.Semaphore(max_peers)
+    def __await__(self):
+        return self._future.__await__()
 
-    # actor.Supervisor
-
-    async def _main(self):
+    async def _main(self, params, peer_queue):
         while True:
-            await self._peer_connection_slots.acquire()
-            peer = await self._peer_queue.get()
-            connection = PeerConnection(self, self._params, peer)
-            self.children.add(connection)
-            await connection.start()
+            await self._slots.acquire()
+            peer = await peer_queue.get()
+            await self.spawn_child(Node(self, params, peer))
 
-    async def _on_child_crash(self, child):
-        if isinstance(child, PeerConnection):
-            self._peer_connection_slots.release()
+    def _on_child_crash(self, child):
+        if isinstance(child, Node):
+            self._slots.release()
         else:
             super()._on_child_crash(child)
 
-    def info_done(self, raw_info: bytes):
-        self.set_result(assemble(self._announce_list, raw_info))
+    def done(self, raw_info: bytes):
+        self._future.set_result(assemble(self._announce_list, raw_info))
 
 
-class PeerConnection(actor.Actor):
-    def __init__(self,
-                 parent: Download,
-                 params: tracker.Parameters,
-                 peer: tracker.Peer):
+class Node(Actor):
+    def __init__(self, parent: Root, params: tracker.Parameters, peer: tracker.Peer):
         super().__init__(parent)
 
-        self._params = params
-        self._peer = peer
-        self._stream = None
+        self._coros.add(self._main(params.info_hash, params.peer_id))
 
-    # actor.Actor
+        self.peer = peer
 
-    async def _main(self):
-        self._stream = await protocol.mex_stream(
-            self._params.info_hash,
-            self._params.peer_id,
-            self._peer.address,
-            self._peer.port,
-        )
-        metadata_size = await asyncio.wait_for(self._stream.establish(), 5)
+    async def _main(self, info_hash, peer_id):
+        async with Stream(self.peer) as stream:
+            await stream.write(messages.Handshake(info_hash, peer_id))
 
-        data = []
-        for i in pieces(metadata_size):
-            await asyncio.wait_for(self._stream.request(i), 5)
-            index, payload = await self._stream.receive()
-            if index == i:
-                data.append(payload)
-        raw_info = b"".join(data)
-        if valid_info(self._params.info_hash, metadata_size, raw_info):
-            self.parent.info_done(raw_info)
-        else:
-            raise ConnectionError("Peer sent invalid data.")
+            message = await stream.read_handshake()
+            if not isinstance(message, messages.Handshake):
+                raise ConnectionError("Expected handshake.")
+            if message.info_hash != info_hash:
+                raise ConnectionError("Peer's info_hash doesn't match.")
 
-    async def stop(self):
-        await super().stop()
-        if self._stream is not None:
-            await self._stream.close()
+            await stream.write(messages.extension_handshake())
+
+            while True:
+                message = await stream.read_message()
+                if isinstance(message, messages.ExtensionHandshake):
+                    ut_metadata = message.ut_metadata
+                    metadata_size = message.metadata_size
+                    break
+
+            # The metadata is partitioned into pieces of size `2 ** 14`, except
+            # for the last piece which may be smaller. The peer knows this
+            # partition, so we only need to tell it the indices of the pieces
+            # that we want. Because the total number of pieces is typically very
+            # small, a simple stop-and-wait protocol is fast enough.
+            piece_length = 2 ** 14
+            pieces = []
+            for i in range((metadata_size + piece_length - 1) // piece_length):
+                await stream.write(messages.metadata_request(i, ut_metadata))
+                while True:
+                    message = await stream.read_message()
+                    if isinstance(message, messages.Metadata) and message.index == i:
+                        pieces.append(message.data)
+                        break
+
+            raw_info = b"".join(pieces)
+            if valid_info(info_hash, raw_info):
+                self.parent.done(raw_info)
+            else:
+                raise ConnectionError("Peer sent invalid data.")
