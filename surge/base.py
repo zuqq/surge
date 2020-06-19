@@ -55,14 +55,20 @@ class Download(actor.Actor):
             self._poll.set()
 
     async def _write_pieces(self):
+        chunks = metadata.piece_to_chunks(self._meta.files, self._meta.pieces)
         while self._outstanding:
             piece, data = await self._piece_data.get()
             if piece not in self._outstanding:
                 continue
-            for chunk in metadata.chunks(self._meta.files, piece):
+            for chunk in chunks[piece]:
                 await asyncio.get_running_loop().run_in_executor(
                     None,
-                    functools.partial(metadata.write, self._meta.folder, chunk, data)
+                    functools.partial(
+                        metadata.write_chunk,
+                        self._meta.folder,
+                        chunk,
+                        data,
+                    )
                 )
             self._outstanding.remove(piece)
             self._poll.set()
@@ -166,7 +172,7 @@ class PeerConnection(actor.Actor):
             self._data[piece][block.begin : block.begin + block.length] = data
             if not self._outstanding[piece]:
                 piece_data = bytes(self._pop(piece))
-                if metadata.valid(piece, piece_data):
+                if metadata.valid_piece(piece, piece_data):
                     self.parent.piece_done(self, piece, piece_data)
                 else:
                     raise ValueError("Peer sent invalid data.")

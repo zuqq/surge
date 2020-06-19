@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Dict, Generator, Iterable, List
+from typing import Any, Dict, Generator, Iterable, List, Sequence
 
 import dataclasses
 import hashlib
@@ -39,16 +39,17 @@ class Piece:
     hash: bytes  # SHA-1 digest of the piece's data.
 
 
-def valid(piece: Piece, data: bytes) -> bool:
+def valid_piece(piece: Piece, data: bytes) -> bool:
     return len(data) == piece.length and hashlib.sha1(data).digest() == piece.hash
 
 
-def available_pieces(pieces: Iterable[Piece],
-                     files: Iterable[File],
+def available_pieces(pieces: Sequence[Piece],
+                     files: Sequence[File],
                      folder: str) -> Generator[Piece, None, None]:
+    chunks = piece_to_chunks(files, pieces)
     for piece in pieces:
         data = []
-        for chunk in chunks(files, piece):
+        for chunk in chunks[pieces]:
             path = os.path.join(folder, chunk.file.path)
             try:
                 with open(path, "rb") as f:
@@ -56,7 +57,7 @@ def available_pieces(pieces: Iterable[Piece],
                     data.append(f.read(chunk.length))
             except FileNotFoundError:
                 continue
-        if valid(piece, b"".join(data)):
+        if valid_piece(piece, b"".join(data)):
             yield piece
 
 
@@ -70,15 +71,29 @@ class Chunk:
     length: int
 
 
-def chunks(files: Iterable[File], piece: Piece) -> Generator[Chunk, None, None]:
-    for file in files:
-        begin = max(file.begin, piece.begin)
-        end = min(file.begin + file.length, piece.begin + piece.length)
-        if begin <= end:
-            yield Chunk(file, piece, begin, end - begin)
+def piece_to_chunks(files: Sequence[File],
+                    pieces: Sequence[Piece]) -> Dict[Piece, List[Chunk]]:
+    result = {piece: [] for piece in pieces}
+    i = 0
+    j = 0
+    begin = 0
+    while i < len(files) and j < len(pieces):
+        file = files[i]
+        piece = pieces[j]
+        file_end = file.begin + file.length
+        piece_end = piece.begin + piece.length
+        if file_end <= piece_end:
+            end = file_end
+            i += 1
+        if piece_end <= file_end:
+            end = piece_end
+            j += 1
+        result[piece].append(Chunk(file, piece, begin, end - begin))
+        begin = end
+    return result
 
 
-def write(folder: str, chunk: Chunk, data: bytes):
+def write_chunk(folder: str, chunk: Chunk, data: bytes):
     path = os.path.join(folder, chunk.file.path)
     with open(path, "rb+") as f:
         f.seek(chunk.begin - chunk.file.begin)

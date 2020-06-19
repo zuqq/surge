@@ -16,7 +16,7 @@ def pieces(metadata_size: int) -> Iterable[int]:
     return range((metadata_size + piece_size - 1) // piece_size)
 
 
-def valid(info_hash: bytes, metadata_size: int, raw_info: bytes) -> bool:
+def valid_info(info_hash: bytes, metadata_size: int, raw_info: bytes) -> bool:
     return (len(raw_info) == metadata_size
             and hashlib.sha1(raw_info).digest() == info_hash)
 
@@ -103,7 +103,7 @@ class PeerConnection(actor.Actor):
             if index == i:
                 data.append(payload)
         raw_info = b"".join(data)
-        if valid(self._params.info_hash, metadata_size, raw_info):
+        if valid_info(self._params.info_hash, metadata_size, raw_info):
             self.parent.info_done(raw_info)
         else:
             raise ConnectionError("Peer sent invalid data.")
