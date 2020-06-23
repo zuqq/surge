@@ -123,9 +123,13 @@ class _BaseProtocol(asyncio.DatagramProtocol):
         self._exception = None
 
         self._waiter = None
-        self._queue = collections.deque()
+        # If this limit is ever hit, something went very wrong: we only expect
+        # two datagrams from the tracker!
+        self._queue = collections.deque(maxlen=10)
 
     def _write(self, message):
+        # There's no flow control for writes because we only send two datagrams
+        # (plus retransmits, but those use exponential backoff).
         self._transport.sendto(message.to_bytes())
 
     async def _read(self):
@@ -161,7 +165,7 @@ class _BaseProtocol(asyncio.DatagramProtocol):
         if not self._transport.is_closing():
             if exc is None:
                 peer = self._transport.get_extra_info("peername")
-                exc = ConnectionError(f"Unexpected EOF {peer}")
+                exc = ConnectionError(f"Unexpected EOF {peer}.")
             self._exception = exc
             self._wake_up(exc)
         if not self._closed.done():

@@ -19,25 +19,17 @@ async def download(
         params: tracker.Parameters,
         missing: Set[metadata.Piece]):
     async with Root(meta, params, missing) as root:
+        total = len(meta.pieces)
+        progress = "\r\x1b[KProgress: {{:{}}}/{} pieces.".format(len(str(total)), total)
         chunks = metadata.piece_to_chunks(meta.files, meta.pieces)
-        loop = asyncio.get_running_loop()
-        folder = meta.folder
-
-        n = len(meta.pieces)
-        d = len(str(n))
-
-        def print_progress():
-            print(f"\r\x1b[KProgress: {n - len(missing) : >{d}}/{n} pieces.", end="")
-
+        run_in_executor = asyncio.get_running_loop().run_in_executor
+        write_chunk = functools.partial(metadata.write_chunk, meta.folder)
         # Print once before the loop to indicate that the download is starting.
-        print_progress()
+        print(progress.format(total - len(missing)), end="")
         async for piece, data in root:
             for chunk in chunks[piece]:
-                await loop.run_in_executor(
-                    None, functools.partial(metadata.write_chunk, folder, chunk, data)
-                )
-                print_progress()
-
+                await run_in_executor(None, functools.partial(write_chunk, chunk, data))
+                print(progress.format(total - len(missing)), end="")
         print("\n", end="")
 
 
@@ -89,7 +81,7 @@ class Root(Actor):
 
     def get_piece(self, node: Node) -> Optional[metadata.Piece]:
         borrowed = set(self._borrowers)
-        # Strict endgame mode: Only send duplicate requests if every missing
+        # Strict endgame mode: only send duplicate requests if every missing
         # piece is already being requested from some peer.
         pool = self._missing - borrowed or borrowed
         if not pool:
