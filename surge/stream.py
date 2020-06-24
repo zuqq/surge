@@ -9,7 +9,6 @@ from . import tracker
 class Stream:
     def __init__(self, peer: tracker.Peer):
         self.peer = peer
-
         self._reader = None
         self._writer = None
 

@@ -56,8 +56,7 @@ class Root(Actor):
         return self
 
     async def __anext__(self):
-        item = await self._queue.get()
-        if item is None:
+        if (item := await self._queue.get()) is None:
             raise StopAsyncIteration
         return item
 

@@ -12,9 +12,11 @@ Minimal message flow:
      |     AnnounceResponse     |
      |<-------------------------|
 
+Retransmission:
+
 If the tracker doesn't respond to a request within `15 * 2 ** n` seconds, where
 `n` starts at `0` and is incremented every time this happens, then the request
-is retransmitted; after `9` tries we give up.
+is retransmitted; if `n` reaches `9`, we give up.
 """
 
 from __future__ import annotations
@@ -61,8 +63,8 @@ class AnnounceRequest(Request):
         self.params = params
 
     def to_bytes(self) -> bytes:
-        params = dataclasses.asdict(self.params)
-        params.update(
+        ps = dataclasses.asdict(self.params)
+        ps.update(
             {
                 "connection_id": self.connection_id,
                 "value": self.value,
@@ -75,19 +77,19 @@ class AnnounceRequest(Request):
         )
         return struct.pack(
             ">8sl4s20s20sqqqlL4slH",
-            params["connection_id"],
-            params["value"],
-            params["transaction_id"],
-            params["info_hash"],
-            params["peer_id"],
-            params["downloaded"],
-            params["left"],
-            params["uploaded"],
-            params["event"],
-            params["ip"],
-            params["key"],
-            params["num_want"],
-            params["port"],
+            ps["connection_id"],
+            ps["value"],
+            ps["transaction_id"],
+            ps["info_hash"],
+            ps["peer_id"],
+            ps["downloaded"],
+            ps["left"],
+            ps["uploaded"],
+            ps["event"],
+            ps["ip"],
+            ps["key"],
+            ps["num_want"],
+            ps["port"],
         )
 
 
@@ -143,24 +145,10 @@ class _BaseProtocol(asyncio.DatagramProtocol):
         self._closed = asyncio.get_event_loop().create_future()
         self._exception = None
 
-        self._waiter = None
         # If this limit is ever hit, something went very wrong: we only expect
         # two datagrams from the tracker!
         self._queue = collections.deque(maxlen=10)
-
-    def _write(self, message):
-        # There's no flow control for writes because we only send two datagrams
-        # (plus retransmits, but those use exponential backoff).
-        self._transport.sendto(message.to_bytes())
-
-    async def _read(self):
-        if self._exception is not None:
-            raise self._exception
-        if not self._queue:
-            waiter = asyncio.get_running_loop().create_future()
-            self._waiter = waiter
-            await waiter
-        return self._queue.popleft()
+        self._waiter = None
 
     def _wake_up(self, exc=None):
         if (waiter := self._waiter) is None:
@@ -172,6 +160,20 @@ class _BaseProtocol(asyncio.DatagramProtocol):
             waiter.set_result(None)
         else:
             waiter.set_exception(exc)
+
+    async def _read(self):
+        if self._exception is not None:
+            raise self._exception
+        if not self._queue:
+            waiter = asyncio.get_running_loop().create_future()
+            self._waiter = waiter
+            await waiter
+        return self._queue.popleft()
+
+    def _write(self, message):
+        # There's no flow control for writes because we only send two datagrams
+        # (plus retransmits, but those use exponential backoff).
+        self._transport.sendto(message.to_bytes())
 
     async def close(self):
         self._transport.close()

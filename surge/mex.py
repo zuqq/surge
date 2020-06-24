@@ -74,12 +74,11 @@ class Root(Actor):
         self._coros.add(self._main(params, peer_queue))
 
         self._announce_list = announce_list
-
-        self._future = asyncio.get_event_loop().create_future()
         self._slots = asyncio.Semaphore(50)
+        self._waiter = asyncio.get_event_loop().create_future()
 
     def __await__(self):
-        return self._future.__await__()
+        return self._waiter.__await__()
 
     async def _main(self, params, peer_queue):
         while True:
@@ -94,8 +93,8 @@ class Root(Actor):
             super()._on_child_crash(child)
 
     def done(self, raw_info: bytes):
-        if not self._future.done():
-            self._future.set_result(assemble(self._announce_list, raw_info))
+        if not self._waiter.done():
+            self._waiter.set_result(assemble(self._announce_list, raw_info))
 
 
 class Node(Actor):

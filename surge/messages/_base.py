@@ -51,7 +51,7 @@ class Keepalive(Message):
     prefix = 0
 
 
-# Registry for messages with identifier byte -----------------------------------
+# Messages with identifier byte ------------------------------------------------
 
 
 _registry: Dict[int, Type[Message]] = {}
