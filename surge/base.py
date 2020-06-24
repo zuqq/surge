@@ -45,12 +45,11 @@ class Root(Actor):
         self.children.add(peer_queue)
         self._coros.add(self._main(meta, params, peer_queue))
 
-        self._missing = missing
+        self.missing = missing
         self._borrowers: DefaultDict[metadata.Piece, Set[Node]]
         self._borrowers = collections.defaultdict(set)
-
-        self._slots = asyncio.Semaphore(50)
         self._queue = asyncio.Queue(10)  # type: ignore
+        self._slots = asyncio.Semaphore(50)
 
     def __aiter__(self):
         return self
@@ -68,10 +67,8 @@ class Root(Actor):
 
     def _on_child_crash(self, child):
         if isinstance(child, Node):
-            for piece, borrowers in list(self._borrowers.items()):
-                borrowers.discard(child)
-                if not borrowers:
-                    self._borrowers.pop(piece)
+            for piece in child.progress:
+                self.return_piece(child, piece)
             self._slots.release()
         else:
             super()._on_child_crash(child)
@@ -82,30 +79,33 @@ class Root(Actor):
         borrowed = set(self._borrowers)
         # Strict endgame mode: only send duplicate requests if every missing
         # piece is already being requested from some peer.
-        pool = self._missing - borrowed or borrowed
+        pool = self.missing - borrowed or borrowed
         if not pool:
             return None
         try:
-            piece = random.choice(list(pool & node.available))
+            piece = random.choice(tuple(pool & node.available))
         except IndexError:
-            piece = random.choice(list(pool))
+            piece = random.choice(tuple(pool))
         self._borrowers[piece].add(node)
         return piece
 
     def return_piece(self, node: Node, piece: metadata.Piece):
         if piece not in self._borrowers:
             return
-        self._borrowers[piece].remove(node)
+        borrowers = self._borrowers[piece]
+        borrowers.discard(node)
+        if not borrowers:
+            self._borrowers.pop(piece)
 
     async def put_piece(self, node: Node, piece: metadata.Piece, data: bytes):
-        if piece not in self._borrowers:
+        if piece not in self.missing:
             return
+        self.missing.remove(piece)
         for borrower in self._borrowers.pop(piece) - {node}:
             borrower.cancel_piece(piece)
-        self._queue.put_nowait((piece, data))
-        self._missing.remove(piece)
-        if not self._missing:
-            self._queue.put_nowait(None)
+        await self._queue.put((piece, data))
+        if not self.missing:
+            await self._queue.put(None)
 
 
 class Progress:
@@ -139,15 +139,14 @@ class Node(Actor):
 
         self.peer = peer
         self.available: Set[metadata.Block] = set()
-
+        self.progress: Dict[metadata.Piece, Progress] = {}
         self._stack: List[metadata.Block] = []
-        self._progress: Dict[metadata.Piece, Progress] = {}
 
-    def _reset(self):
-        self._stack = []
-        for piece in self._progress:
+    def _return_pieces(self):
+        self._stack.clear()
+        for piece in self.progress:
             self.parent.return_piece(self, piece)
-        self._progress = {}
+        self.progress.clear()
 
     def _get_block(self) -> Optional[metadata.Block]:
         if not self._stack:
@@ -156,17 +155,17 @@ class Node(Actor):
                 return None
             blocks = metadata.blocks(piece)
             self._stack = blocks[::-1]
-            self._progress[piece] = Progress(piece, blocks)
+            self.progress[piece] = Progress(piece, blocks)
         return self._stack.pop()
 
     async def _put_block(self, block: metadata.Block, data: bytes):
         piece = block.piece
-        if piece not in self._progress:
+        if piece not in self.progress:
             return
-        progress = self._progress[piece]
+        progress = self.progress[piece]
         progress.add(block, data)
         if progress.done:
-            data = self._progress.pop(piece).data
+            data = self.progress.pop(piece).data
             if metadata.valid_piece(piece, data):
                 await self.parent.put_piece(self, piece, data)
             else:
@@ -189,7 +188,8 @@ class Node(Actor):
                 if isinstance(event, events.Receive):
                     message = event.message
                     if isinstance(message, messages.Choke):
-                        self._reset()
+                        self._return_pieces()
+                        slots = 10
                     elif isinstance(message, messages.Have):
                         self.available.add(message.piece(pieces))
                     elif isinstance(message, messages.Bitfield):
@@ -213,8 +213,8 @@ class Node(Actor):
     # Messages from `Root`.
 
     def cancel_piece(self, piece: metadata.Piece):
-        if piece not in self._progress:
+        if piece not in self.progress:
             return
         if self._stack and self._stack[-1].piece == piece:
-            self._stack = []
-        self._progress.pop(piece)
+            self._stack.clear()
+        self.progress.pop(piece)
