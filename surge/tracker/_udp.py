@@ -25,6 +25,7 @@ import dataclasses
 import secrets
 import struct
 import time
+import urllib
 
 from . import _metadata
 
@@ -203,10 +204,21 @@ class _BaseProtocol(asyncio.DatagramProtocol):
 
 
 class Protocol(_BaseProtocol):
-    def __init__(self, params: _metadata.Parameters):
+    def __init__(self, url: urllib.parse.ParseResult, params: _metadata.Parameters):
         super().__init__()
 
-        self._params = params
+        self.address = (url.hostname, url.port)
+        self.params = params
+
+    async def __aenter__(self):
+        await asyncio.get_running_loop().create_datagram_endpoint(
+            lambda: self, remote_addr=self.address
+        )
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.close()
+        return False
 
     async def _connect(self, n):
         if n >= 9:
@@ -225,7 +237,7 @@ class Protocol(_BaseProtocol):
     async def _announce(self, transaction_id, connection_id, n, recv_time):
         if n >= 9:
             raise ConnectionError("Maximal number of retries reached.")
-        self._write(AnnounceRequest(transaction_id, connection_id, self._params))
+        self._write(AnnounceRequest(transaction_id, connection_id, self.params))
         try:
             raw_response = await asyncio.wait_for(self._read(), 15 * 2 ** n)
         except asyncio.TimeoutError:

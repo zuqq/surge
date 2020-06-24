@@ -91,13 +91,9 @@ class UDPTrackerConnection(actor.Actor):
 
     async def _main(self, url, params):
         while True:
-            _, protocol = await loop.create_datagram_endpoint(
-                functools.partial(_udp.Protocol, params),
-                remote_addr=(url.hostname, url.port),
-            )
-            response = await protocol.request()
+            async with _udp.Protocol(url, params) as protocol:
+                response = await protocol.request()
             logging.debug("%r received %r peers", self, len(response.peers))
             for peer in response.peers:
                 await self.parent.put(peer)
-            await protocol.close()
             await asyncio.sleep(response.interval)
