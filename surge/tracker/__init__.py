@@ -63,9 +63,9 @@ class HTTPTrackerConnection(actor.Actor):
 
     async def _main(self, url, params):
         while True:
-            d = urllib.parse.parse_qs(url.query)
-            d.update(dataclasses.asdict(params))
-            url = url._replace(query=urllib.parse.urlencode(d))
+            ps = urllib.parse.parse_qs(url.query)
+            ps.update(dataclasses.asdict(params))
+            url = url._replace(query=urllib.parse.urlencode(ps))
             async with aiohttp.ClientSession() as session:
                 async with session.get(url.geturl()) as request:
                     raw_response = await request.read()
@@ -91,22 +91,13 @@ class UDPTrackerConnection(actor.Actor):
 
     async def _main(self, url, params):
         while True:
-            for i in range(9):  # See BEP 15, "Time outs".
-                try:
-                    loop = asyncio.get_running_loop()
-                    _, protocol = await loop.create_datagram_endpoint(
-                        functools.partial(_udp.Protocol, params),
-                        remote_addr=(url.hostname, url.port),
-                    )
-                    response = await asyncio.wait_for(protocol.request(), 5)
-                except Exception as e:
-                    logging.warning("%r failed with %r", url.geturl(), e)
-                    await asyncio.sleep(15 * 2 ** i - 5)
-                else:
-                    break
-            else:
-                raise ConnectionError("Tracker unreachable.")
+            _, protocol = await loop.create_datagram_endpoint(
+                functools.partial(_udp.Protocol, params),
+                remote_addr=(url.hostname, url.port),
+            )
+            response = await protocol.request()
             logging.debug("%r received %r peers", self, len(response.peers))
             for peer in response.peers:
                 await self.parent.put(peer)
+            await protocol.close()
             await asyncio.sleep(response.interval)

@@ -1,3 +1,22 @@
+"""UDP Tracker Protocol (BEP 15)
+
+Minimal message flow:
+
+    Us                       Tracker
+     |      ConnectRequest      |
+     |------------------------->|
+     |     ConnectResponse      |
+     |<-------------------------|
+     |      AnnounceRequest     |
+     |------------------------->|
+     |     AnnounceResponse     |
+     |<-------------------------|
+
+If the tracker doesn't respond to a request within `15 * 2 ** n` seconds, where
+`n` starts at `0` and is incremented every time this happens, then the request
+is retransmitted; after `9` tries we give up.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -5,6 +24,7 @@ import collections
 import dataclasses
 import secrets
 import struct
+import time
 
 from . import _metadata
 
@@ -188,9 +208,32 @@ class Protocol(_BaseProtocol):
 
         self._params = params
 
-    async def request(self) -> _metadata.Response:
+    async def _connect(self, n):
+        if n >= 9:
+            raise ConnectionError("Maximal number of retries reached.")
         transaction_id = secrets.token_bytes(4)
         self._write(ConnectRequest(transaction_id))
-        connection_id = parse(await self._read()).connection_id
+        try:
+            raw_response = await asyncio.wait_for(self._read(), 15 * 2 ** n)
+        except asyncio.TimeoutError:
+            return await self._connect(n + 1)
+        else:
+            connection_id = parse(raw_response).connection_id
+            recv_time = time.monotonic()
+            return await self._announce(transaction_id, connection_id, n, recv_time)
+
+    async def _announce(self, transaction_id, connection_id, n, recv_time):
+        if n >= 9:
+            raise ConnectionError("Maximal number of retries reached.")
         self._write(AnnounceRequest(transaction_id, connection_id, self._params))
-        return parse(await self._read()).response
+        try:
+            raw_response = await asyncio.wait_for(self._read(), 15 * 2 ** n)
+        except asyncio.TimeoutError:
+            if time.monotonic() - recv_time >= 60:
+                return await self._connect(n + 1)
+            return await self._announce(transaction_id, connection_id, n + 1, recv_time)
+        else:
+            return parse(raw_response).response
+
+    async def request(self) -> _metadata.Response:
+        return await self._connect(0)

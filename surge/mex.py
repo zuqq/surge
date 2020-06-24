@@ -1,7 +1,6 @@
-"""Metadata exchange protocol (BEP 9)
+"""Metadata Exchange Protocol (BEP 9)
 
-Because this protocol is essentially linear, I decided to use a simple
-procedural style. The minimal message flow looks like this:
+Minimal message flow:
 
     Us                         Peer
      |        Handshake         |
@@ -107,6 +106,8 @@ class Node(Actor):
         self.peer = peer
 
     async def _main(self, info_hash, peer_id):
+        # Because this protocol is essentially linear, I decided to use a simple
+        # procedural style.
         async with Stream(self.peer) as stream:
             await stream.write(messages.Handshake(info_hash, peer_id))
 
