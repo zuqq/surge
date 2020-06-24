@@ -94,7 +94,8 @@ class Root(Actor):
             super()._on_child_crash(child)
 
     def done(self, raw_info: bytes):
-        self._future.set_result(assemble(self._announce_list, raw_info))
+        if not self._future.done():
+            self._future.set_result(assemble(self._announce_list, raw_info))
 
 
 class Node(Actor):
