@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import dataclasses
+import functools
 import secrets
 import struct
 import time
@@ -206,21 +207,10 @@ class _BaseProtocol(asyncio.DatagramProtocol):
 
 
 class Protocol(_BaseProtocol):
-    def __init__(self, url: urllib.parse.ParseResult, params: _metadata.Parameters):
+    def __init__(self, params: _metadata.Parameters):
         super().__init__()
 
-        self.address = (url.hostname, url.port)
         self.params = params
-
-    async def __aenter__(self):
-        await asyncio.get_running_loop().create_datagram_endpoint(
-            lambda: self, remote_addr=self.address
-        )
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        await self.close()
-        return False
 
     async def _connect(self, n):
         if n >= 9:
@@ -251,3 +241,13 @@ class Protocol(_BaseProtocol):
 
     async def request(self) -> _metadata.Response:
         return await self._connect(0)
+
+
+async def request(url: urllib.parse.ParseResult, params: _metadata.Parameters):
+    _, protocol = await asyncio.get_running_loop().create_datagram_endpoint(
+        functools.partial(Protocol, params), remote_addr=(url.hostname, url.port)
+    )
+    try:
+        return await protocol.request()
+    finally:
+        await protocol.close()

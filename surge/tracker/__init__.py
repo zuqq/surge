@@ -91,8 +91,7 @@ class UDPTrackerConnection(actor.Actor):
 
     async def _main(self, url, params):
         while True:
-            async with _udp.Protocol(url, params) as protocol:
-                response = await protocol.request()
+            response = await _udp.request(url, params)
             logging.debug("%r received %r peers", self, len(response.peers))
             for peer in response.peers:
                 await self.parent.put(peer)
