@@ -51,7 +51,7 @@ class Actor:
         # This method is async because it requires a running event loop.
         if self.running:
             return
-        logging.debug("%r starting", self)
+        logging.info("%r starting", self)
         self.running = True
         self._runner = asyncio.create_task(self._run())
         for child in self.children:
@@ -68,7 +68,7 @@ class Actor:
         """First stop `self`, then all of its children."""
         if not self.running:
             return
-        logging.debug("%r stopping", self)
+        logging.info("%r stopping", self)
         self.running = False
         if self._runner is not None:
             self._runner.cancel()

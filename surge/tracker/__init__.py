@@ -73,7 +73,7 @@ class HTTPTrackerConnection(actor.Actor):
             if b"failure reason" in d:
                 raise ConnectionError(d[b"failure reason"].decode())
             response = Response.from_dict(d)
-            logging.debug("%r received %r peers", self, len(response.peers))
+            logging.info("%r received %r peers", self, len(response.peers))
             for peer in response.peers:
                 await self.parent.put(peer)
             await asyncio.sleep(response.interval)
@@ -92,7 +92,7 @@ class UDPTrackerConnection(actor.Actor):
     async def _main(self, url, params):
         while True:
             response = await _udp.request(url, params)
-            logging.debug("%r received %r peers", self, len(response.peers))
+            logging.info("%r received %r peers", self, len(response.peers))
             for peer in response.peers:
                 await self.parent.put(peer)
             await asyncio.sleep(response.interval)

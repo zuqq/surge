@@ -10,7 +10,7 @@ Options:
     --folder FOLDER     Destination folder
     --resume            Resume the download.
     --log LOG           Log file.
-    --file FILE         Torrent file.
+    --file PATH         Torrent file.
     --magnet MAGNET     Magnet link.
 
 """
@@ -33,10 +33,10 @@ from . import tracker
 def main(args: Dict[str, str]):
     loop = asyncio.get_event_loop()
 
-    if args["--log"]:
+    if log := args["--log"]:
         logging.basicConfig(
-            level=logging.DEBUG,
-            filename=args["--log"],
+            level=logging.INFO,
+            filename=log,
             filemode="w",
             format="%(asctime)s,%(msecs)03d %(levelname)s: %(message)s",
             datefmt="%H:%M:%S",
