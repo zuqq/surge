@@ -103,22 +103,20 @@ def write_chunk(folder: str, chunk: Chunk, data: bytes):
         f.write(data[begin : begin + chunk.length])
 
 
-@dataclasses.dataclass(eq=True, frozen=True, order=True)
+@dataclasses.dataclass(eq=True, frozen=True)
 class Block:
     piece: Piece
     begin: int
     length: int
 
 
-def blocks(piece: Piece) -> List[Block]:
+def blocks(piece: Piece) -> Generator[Block, None, None]:
     block_size = 2 ** 14
-    result = []
     for begin in range(0, piece.length, block_size):
-        result.append(Block(piece, begin, min(block_size, piece.length - begin)))
-    return result
+        yield Block(piece, begin, min(block_size, piece.length - begin))
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(eq=True, frozen=True)
 class Metadata:
     announce_list: List[str]
     length: int
@@ -144,20 +142,20 @@ class Metadata:
 
         info = d[b"info"]
 
+        files = []
         if b"length" in info:
             # Single file mode.
             length = info[b"length"]
-            files = [File(0, length, info[b"name"].decode())]
             folder = ""
+            files.append(File(0, length, info[b"name"].decode()))
         else:
             # Multiple file mode.
-            length = 0
-            files = []
+            length = 0  # Will be computed below.
+            folder = info[b"name"].decode()
             for f in info[b"files"]:
                 file = File.from_dict(length, f)
                 files.append(file)
                 length += file.length
-            folder = info[b"name"].decode()
 
         piece_length = info[b"piece length"]
 

@@ -40,16 +40,15 @@ class Root(Actor):
             params: tracker.Parameters,
             missing: Set[metadata.Piece]):
         super().__init__()
-
         peer_queue = tracker.PeerQueue(self, meta.announce_list, params)
         self.children.add(peer_queue)
         self._coros.add(self._main(meta, params, peer_queue))
 
         self.missing = missing
-        self._borrowers: DefaultDict[metadata.Piece, Set[Node]]
-        self._borrowers = collections.defaultdict(set)
         self._queue = asyncio.Queue(10)  # type: ignore
         self._slots = asyncio.Semaphore(50)
+        self._downloading: DefaultDict[metadata.Piece, Set[Node]]
+        self._downloading = collections.defaultdict(set)
 
     def __aiter__(self):
         return self
@@ -67,63 +66,35 @@ class Root(Actor):
 
     def _on_child_crash(self, child):
         if isinstance(child, Node):
-            for piece in child.progress:
-                self.return_piece(child, piece)
+            for piece in child.downloading:
+                self._downloading[piece].remove(child)
+                if not self._downloading[piece]:
+                    self._downloading.pop(piece)
             self._slots.release()
         else:
             super()._on_child_crash(child)
 
-    # Messages from `Node`.
-
     def get_piece(self, node: Node) -> Optional[metadata.Piece]:
-        borrowed = set(self._borrowers)
+        downloading = set(self._downloading)
         # Strict endgame mode: only send duplicate requests if every missing
         # piece is already being requested from some peer.
-        pool = self.missing - borrowed or borrowed
+        pool = (self.missing - downloading or downloading) - node.downloading
         if not pool:
             return None
-        try:
-            piece = random.choice(tuple(pool & node.available))
-        except IndexError:
-            piece = random.choice(tuple(pool))
-        self._borrowers[piece].add(node)
+        piece = random.choice(tuple(pool & node.available or pool))
+        self._downloading[piece].add(node)
         return piece
 
-    def return_piece(self, node: Node, piece: metadata.Piece):
-        if piece not in self._borrowers:
-            return
-        borrowers = self._borrowers[piece]
-        borrowers.discard(node)
-        if not borrowers:
-            self._borrowers.pop(piece)
-
     async def put_piece(self, node: Node, piece: metadata.Piece, data: bytes):
-        if piece not in self.missing:
+        if piece not in self._downloading:
             return
         self.missing.remove(piece)
-        for borrower in self._borrowers.pop(piece) - {node}:
-            borrower.cancel_piece(piece)
+        self._downloading[piece].remove(node)
+        for child in self._downloading.pop(piece):
+            child.cancel_piece(piece)
         await self._queue.put((piece, data))
         if not self.missing:
             await self._queue.put(None)
-
-
-class Progress:
-    def __init__(self, piece, blocks):
-        self._missing = set(blocks)
-        self._data = bytearray(piece.length)
-
-    @property
-    def done(self):
-        return not self._missing
-
-    @property
-    def data(self):
-        return bytes(self._data)
-
-    def add(self, block, data):
-        self._missing.discard(block)
-        self._data[block.begin : block.begin + block.length] = data
 
 
 class Node(Actor):
@@ -134,87 +105,42 @@ class Node(Actor):
             params: tracker.Parameters,
             peer: tracker.Peer):
         super().__init__(parent)
-
-        self._coros.add(self._main(meta.pieces, params.info_hash, params.peer_id))
+        self._coros.add(self._main())
 
         self.peer = peer
-        self.available: Set[metadata.Block] = set()
-        self.progress: Dict[metadata.Piece, Progress] = {}
-        self._stack: List[metadata.Block] = []
+        self.downloading: Set[metadata.Piece] = set()
+        self._state = events.State(meta.pieces, params.info_hash, params.peer_id)
 
-    def _return_pieces(self):
-        self._stack.clear()
-        for piece in self.progress:
-            self.parent.return_piece(self, piece)
-        self.progress.clear()
-
-    def _get_block(self) -> Optional[metadata.Block]:
-        if not self._stack:
-            piece = self.parent.get_piece(self)
-            if piece is None:
-                return None
-            blocks = metadata.blocks(piece)
-            self._stack = blocks[::-1]
-            self.progress[piece] = Progress(piece, blocks)
-        return self._stack.pop()
-
-    async def _put_block(self, block: metadata.Block, data: bytes):
-        piece = block.piece
-        if piece not in self.progress:
-            return
-        progress = self.progress[piece]
-        progress.add(block, data)
-        if progress.done:
-            data = self.progress.pop(piece).data
-            if metadata.valid_piece(piece, data):
-                await self.parent.put_piece(self, piece, data)
-            else:
-                raise ValueError("Peer sent invalid data.")
-
-    async def _main(self, pieces, info_hash, peer_id):
+    async def _main(self):
         async with Stream(self.peer) as stream:
-            transducer = events.Transducer(info_hash, peer_id)
-            slots = 10
+            state = self._state
 
             # Unroll the first two iterations of the loop because handshake
             # messages don't have a length prefix.
-            event = next(transducer)
+            event = state.send(None)
             await stream.write(event.message)
 
-            event = next(transducer)
-            transducer.feed(await stream.read_handshake())
+            event = state.send(None)
+            message = await stream.read_handshake()
 
-            for event in transducer:
-                if isinstance(event, events.Receive):
-                    message = event.message
-                    if isinstance(message, messages.Choke):
-                        self._return_pieces()
-                        slots = 10
-                    elif isinstance(message, messages.Have):
-                        self.available.add(message.piece(pieces))
-                    elif isinstance(message, messages.Bitfield):
-                        self.available = message.available(pieces)
-                    elif isinstance(message, messages.Block):
-                        await self._put_block(message.block(pieces), message.data)
-                        slots += 1
-                    elif isinstance(message, messages.Handshake):
-                        if message.info_hash != info_hash:
-                            raise ConnectionError("Peer's info_hash doesn't match.")
-                elif isinstance(event, events.Send):
+            while True:
+                event = state.send(message)
+                message = None
+                if isinstance(event, events.Send):
                     await stream.write(event.message)
-                elif slots and isinstance(event, events.Request):
-                    if (block := self._get_block()) is None:
-                        break
-                    await stream.write(messages.Request(block))
-                    slots -= 1
-                else:
-                    transducer.feed(await stream.read_message())
+                elif isinstance(event, events.Result):
+                    self.downloading.remove(event.piece)
+                    await self.parent.put_piece(self, event.piece, event.data)
+                elif isinstance(event, events.NeedPiece):
+                    piece = self.parent.get_piece(self)
+                    self.downloading.add(piece)
+                    state.download_piece(piece)
+                elif isinstance(event, events.NeedMessage):
+                    message = await asyncio.wait_for(stream.read_message(), 5)
 
-    # Messages from `Root`.
+    @property
+    def available(self):
+        return self._state.available
 
     def cancel_piece(self, piece: metadata.Piece):
-        if piece not in self.progress:
-            return
-        if self._stack and self._stack[-1].piece == piece:
-            self._stack.clear()
-        self.progress.pop(piece)
+        self._state.cancel_piece(piece)
