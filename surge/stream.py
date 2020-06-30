@@ -8,14 +8,13 @@ from . import tracker
 
 class Stream:
     def __init__(self, peer: tracker.Peer):
-        self.peer = peer
+        self._peer = peer
         self._reader = None
         self._writer = None
 
     async def __aenter__(self):
-        peer = self.peer
         self._reader, self._writer = await asyncio.open_connection(
-            peer.address, peer.port
+            self._peer.address, self._peer.port
         )
         return self
 

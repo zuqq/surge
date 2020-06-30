@@ -16,20 +16,19 @@ from .actor import Actor
 from .stream import Stream
 
 
-async def print_progress(total: int, root: Root):
+async def print_progress(pieces: Sequence[metadata.Piece], root: Root):
+    total = len(pieces)
     progress_template = "\r\x1b[KProgress: {{}}/{} pieces".format(total)
-    connections_template = "({} {}, {} {})"
+    connections_template = "({} tracker{}, {} peer{})"
     try:
         while True:
-            trackers = len(root.peer_queue.children)
-            peers = max(0, len(root.children) - 1)
             print(
                 progress_template.format(total - len(root.missing)),
                 connections_template.format(
-                    trackers,
-                    "tracker" if trackers == 1 else "trackers",
-                    peers,
-                    "peer" if peers == 1 else "peers",
+                    root.trackers,
+                    "s" if root.trackers != 1 else "",
+                    root.peers,
+                    "s" if root.peers != 1 else "",
                 ),
                 end=".",
                 flush=True,
@@ -48,7 +47,7 @@ async def download(
         params: tracker.Parameters,
         missing: Set[metadata.Piece]):
     async with Root(meta, params, missing) as root:
-        printer = asyncio.create_task(print_progress(len(meta.pieces), root))
+        printer = asyncio.create_task(print_progress(meta.pieces, root))
         chunks = metadata.piece_to_chunks(meta.files, meta.pieces)
         folder = meta.folder
         async for piece, data in root:
@@ -68,8 +67,8 @@ class Root(Actor):
             params: tracker.Parameters,
             missing: Set[metadata.Piece]):
         super().__init__()
-        self.peer_queue = tracker.PeerQueue(self, meta.announce_list, params)
-        self.children.add(self.peer_queue)
+        self._peer_queue = tracker.PeerQueue(self, meta.announce_list, params)
+        self.children.add(self._peer_queue)
         self._coros.add(self._main(meta.pieces, params.info_hash, params.peer_id))
 
         self.missing = missing
@@ -89,7 +88,7 @@ class Root(Actor):
     async def _main(self, pieces, info_hash, peer_id):
         while True:
             await self._slots.acquire()
-            peer = await self.peer_queue.get()
+            peer = await self._peer_queue.get()
             await self.spawn_child(Node(self, pieces, info_hash, peer_id, peer))
 
     def _on_child_crash(self, child):
@@ -102,7 +101,15 @@ class Root(Actor):
         else:
             super()._on_child_crash(child)
 
-    def get_piece(self, node: Node) -> Optional[metadata.Piece]:
+    @property
+    def trackers(self) -> int:
+        return len(self._peer_queue.children)
+
+    @property
+    def peers(self) -> int:
+        return max(0, len(self.children) - 1)
+
+    def get_nowait(self, node: Node) -> Optional[metadata.Piece]:
         downloading = set(self._downloading)
         # Strict endgame mode: only send duplicate requests if every missing
         # piece is already being requested from some peer.
@@ -113,7 +120,7 @@ class Root(Actor):
         self._downloading[piece].add(node)
         return piece
 
-    async def put_piece(self, node: Node, piece: metadata.Piece, data: bytes):
+    async def put(self, node: Node, piece: metadata.Piece, data: bytes):
         if piece not in self._downloading:
             return
         self.missing.remove(piece)
@@ -159,11 +166,14 @@ class Node(Actor):
                     await stream.write(event.message)
                 elif isinstance(event, events.Result):
                     self.downloading.remove(event.piece)
-                    await self.parent.put_piece(self, event.piece, event.data)
+                    await self.parent.put(self, event.piece, event.data)
                 elif isinstance(event, events.NeedPiece):
-                    piece = self.parent.get_piece(self)
-                    self.downloading.add(piece)
-                    state.download_piece(piece)
+                    piece = self.parent.get_nowait(self)
+                    if piece is None:
+                        state.should_request = False
+                    else:
+                        self.downloading.add(piece)
+                        state.send_piece(piece)
                 elif isinstance(event, events.NeedMessage):
                     message = await asyncio.wait_for(stream.read_message(), 5)
 

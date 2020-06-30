@@ -210,7 +210,7 @@ class Protocol(_BaseProtocol):
     def __init__(self, params: _metadata.Parameters):
         super().__init__()
 
-        self.params = params
+        self._params = params
 
     async def _connect(self, n):
         if n >= 9:
@@ -229,7 +229,7 @@ class Protocol(_BaseProtocol):
     async def _announce(self, transaction_id, connection_id, n, recv_time):
         if n >= 9:
             raise ConnectionError("Maximal number of retries reached.")
-        self._write(AnnounceRequest(transaction_id, connection_id, self.params))
+        self._write(AnnounceRequest(transaction_id, connection_id, self._params))
         try:
             raw_response = await asyncio.wait_for(self._read(), 15 * 2 ** n)
         except asyncio.TimeoutError:

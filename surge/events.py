@@ -104,9 +104,8 @@ class Transducer:
 
     def send(self, message) -> Union[Send, Receive, Request, NeedMessage]:
         if message is not None:
-            message_type = type(message)
             callback, relay, self._state = self._receive.get(
-                (self._state, message_type), (None, False, self._state)
+                (self._state, type(message)), (None, False, self._state)
             )
             if callback is not None:
                 callback(message)
@@ -154,12 +153,11 @@ class Wrapper:
             pieces: Sequence[metadata.Piece],
             info_hash: bytes,
             peer_id: bytes):
+        self.should_request = True  # Are there more blocks to request?
         self._transducer = Transducer(pieces, info_hash, peer_id)
         self._pieces = pieces
 
         self._max_requests = 50
-        self._should_request = True  # Are there more blocks to request?
-
         self._progress: Dict[metadata.Piece, Progress] = {}
         self._stack: List[metadata.Block] = []
         self._requested: Set[metadata.Block] = set()
@@ -170,7 +168,7 @@ class Wrapper:
         self._stack.clear()
         self._requested.clear()
         for piece in in_progress:
-            self.download_piece(piece)
+            self.send_piece(piece)
 
     def _on_block(self, message) -> Optional[Result]:
         block = message.block(self._pieces)
@@ -203,7 +201,7 @@ class Wrapper:
                     if result is not None:
                         return result
             elif (isinstance(event, Request)
-                        and self._should_request
+                        and self.should_request
                         and len(self._requested) < self._max_requests):
                     if not self._stack:
                         return NeedPiece()
@@ -217,13 +215,10 @@ class Wrapper:
     def available(self):
         return self._transducer.available
 
-    def download_piece(self, piece: metadata.Piece):
-        if piece is None:
-            self._should_request = False
-        else:
-            blocks = tuple(metadata.blocks(piece))
-            self._progress[piece] = Progress(piece, blocks)
-            self._stack.extend(reversed(blocks))
+    def send_piece(self, piece: metadata.Piece):
+        blocks = tuple(metadata.blocks(piece))
+        self._progress[piece] = Progress(piece, blocks)
+        self._stack.extend(reversed(blocks))
 
     def cancel_piece(self, piece: metadata.Piece):
         self._progress.pop(piece)
