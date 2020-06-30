@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Coroutine, Optional, Set
 
 import asyncio
+import contextlib
 import logging
 
 
@@ -33,9 +34,10 @@ class Actor:
         try:
             await asyncio.gather(*self._tasks)
         except Exception as e:
-            logging.warning("%r crashed with %r", self, e)
-            if self.parent is not None:
-                self.parent.report_crash(self)
+            if self.running:
+                logging.warning("%r crashed with %r", self, e)
+                if self.parent is not None:
+                    self.parent.report_crash(self)
 
     def _on_child_crash(self, child: Actor):
         raise RuntimeError(f"Uncaught crash: {child}")
@@ -72,10 +74,8 @@ class Actor:
         self.running = False
         if self._runner is not None:
             self._runner.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._runner
-            except asyncio.CancelledError:
-                pass
         for task in self._tasks:
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
