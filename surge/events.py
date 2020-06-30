@@ -80,22 +80,21 @@ class Transducer:
             if message.info_hash != info_hash:
                 raise ConnectionError("Peer's info_hash doesn't match.")
 
-        # Maps `(state, message_type)` to `(callback, new_state)`. If a pair
-        # `(state, message_type)` does not appear here, then it is a no-op.
+        # Maps `(state, message_type)` to `(callback, relay, new_state)`, where
+        # `relay` is a boolean indicating whether or not to relay the message to
+        # the caller. If a pair `(state, message_type)` does not appear here,
+        # then it is a no-op.
         self._receive = {
-            (_UNCHOKED, messages.Choke): (None, _CHOKED),
-            (_CHOKED, messages.Unchoke): (None, _UNCHOKED),
-            (_INTERESTED, messages.Unchoke): (None, _UNCHOKED),
-            (_CHOKED, messages.Have): (on_have, _CHOKED),
-            (_UNCHOKED, messages.Have): (on_have, _UNCHOKED),
-            (_WAITING, messages.Bitfield): (on_bitfield, _CHOKED),
-            (_CHOKED, messages.Block): (None, _CHOKED),
-            (_UNCHOKED, messages.Block): (None, _UNCHOKED),
-            (_OPEN, messages.Handshake): (on_handshake, _WAITING),
+            (_UNCHOKED, messages.Choke): (None, True, _CHOKED),
+            (_CHOKED, messages.Unchoke): (None, False, _UNCHOKED),
+            (_INTERESTED, messages.Unchoke): (None, False, _UNCHOKED),
+            (_CHOKED, messages.Have): (on_have, False, _CHOKED),
+            (_UNCHOKED, messages.Have): (on_have, False, _UNCHOKED),
+            (_WAITING, messages.Bitfield): (on_bitfield, False, _CHOKED),
+            (_CHOKED, messages.Block): (None, True, _CHOKED),
+            (_UNCHOKED, messages.Block): (None, True, _UNCHOKED),
+            (_OPEN, messages.Handshake): (on_handshake, False, _WAITING),
         }
-
-        # Message types that will be relayed to the caller.
-        self._relay = {messages.Choke, messages.Block}
 
         # Maps `state` to `(to_send, new_state)`.
         self._send = {
@@ -106,12 +105,12 @@ class Transducer:
     def send(self, message) -> Union[Send, Receive, Request, NeedMessage]:
         if message is not None:
             message_type = type(message)
-            callback, self._state = self._receive.get(
-                (self._state, message_type), (None, self._state)
+            callback, relay, self._state = self._receive.get(
+                (self._state, message_type), (None, False, self._state)
             )
             if callback is not None:
                 callback(message)
-            if message_type in self._relay:
+            if relay:
                 return Receive(message)
 
         to_send, self._state = self._send.get(self._state, (None, self._state))
@@ -122,6 +121,9 @@ class Transducer:
             return Request()
 
         return NeedMessage()
+
+
+# Wrapper ----------------------------------------------------------------------
 
 
 class Progress:
@@ -144,7 +146,9 @@ class Progress:
         self._data[block.begin : block.begin + block.length] = data
 
 
-class State:
+class Wrapper:
+    """A wrapper around `Transducer` that downloads pieces."""
+
     def __init__(
             self,
             pieces: Sequence[metadata.Piece],

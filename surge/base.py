@@ -109,7 +109,7 @@ class Node(Actor):
 
         self.peer = peer
         self.downloading: Set[metadata.Piece] = set()
-        self._state = events.State(meta.pieces, params.info_hash, params.peer_id)
+        self._state = events.Wrapper(meta.pieces, params.info_hash, params.peer_id)
 
     async def _main(self):
         async with Stream(self.peer) as stream:
