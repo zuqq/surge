@@ -1,8 +1,10 @@
 from __future__ import annotations
-from typing import DefaultDict, Dict, List, Optional, Set
+from typing import DefaultDict, Dict, List, Optional, Sequence, Set
 
 import asyncio
 import collections
+import contextlib
+import dataclasses
 import functools
 import random
 
@@ -14,23 +16,49 @@ from .actor import Actor
 from .stream import Stream
 
 
+async def print_progress(total: int, root: Root):
+    progress_template = "\r\x1b[KProgress: {{}}/{} pieces".format(total)
+    connections_template = "({} {}, {} {})"
+    try:
+        while True:
+            trackers = len(root.peer_queue.children)
+            peers = max(0, len(root.children) - 1)
+            print(
+                progress_template.format(total - len(root.missing)),
+                connections_template.format(
+                    trackers,
+                    "tracker" if trackers == 1 else "trackers",
+                    peers,
+                    "peer" if peers == 1 else "peers",
+                ),
+                end=".",
+                flush=True,
+            )
+            await asyncio.sleep(1)
+    except asyncio.CancelledError:
+        if not root.missing:
+            # Print one last time, so that the final terminal output reflects
+            # the fact that the download completed.
+            print(progress_template.format(total), end=".\n", flush=True)
+        raise
+
+
 async def download(
         meta: metadata.Metadata,
         params: tracker.Parameters,
         missing: Set[metadata.Piece]):
     async with Root(meta, params, missing) as root:
-        total = len(meta.pieces)
-        progress = "\r\x1b[KProgress: {{:{}}}/{} pieces.".format(len(str(total)), total)
+        printer = asyncio.create_task(print_progress(len(meta.pieces), root))
         chunks = metadata.piece_to_chunks(meta.files, meta.pieces)
-        run_in_executor = asyncio.get_running_loop().run_in_executor
-        write_chunk = functools.partial(metadata.write_chunk, meta.folder)
-        # Print once before the loop to indicate that the download is starting.
-        print(progress.format(total - len(missing)), end="")
+        folder = meta.folder
         async for piece, data in root:
             for chunk in chunks[piece]:
-                await run_in_executor(None, functools.partial(write_chunk, chunk, data))
-                print(progress.format(total - len(missing)), end="")
-        print("\n", end="")
+                await asyncio.get_running_loop().run_in_executor(
+                    None, functools.partial(metadata.write_chunk, folder, chunk, data)
+                )
+        printer.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await printer
 
 
 class Root(Actor):
@@ -40,9 +68,9 @@ class Root(Actor):
             params: tracker.Parameters,
             missing: Set[metadata.Piece]):
         super().__init__()
-        peer_queue = tracker.PeerQueue(self, meta.announce_list, params)
-        self.children.add(peer_queue)
-        self._coros.add(self._main(meta, params, peer_queue))
+        self.peer_queue = tracker.PeerQueue(self, meta.announce_list, params)
+        self.children.add(self.peer_queue)
+        self._coros.add(self._main(meta.pieces, params.info_hash, params.peer_id))
 
         self.missing = missing
         self._queue = asyncio.Queue(10)  # type: ignore
@@ -58,11 +86,11 @@ class Root(Actor):
             raise StopAsyncIteration
         return item
 
-    async def _main(self, meta, params, peer_queue):
+    async def _main(self, pieces, info_hash, peer_id):
         while True:
             await self._slots.acquire()
-            peer = await peer_queue.get()
-            await self.spawn_child(Node(self, meta, params, peer))
+            peer = await self.peer_queue.get()
+            await self.spawn_child(Node(self, pieces, info_hash, peer_id, peer))
 
     def _on_child_crash(self, child):
         if isinstance(child, Node):
@@ -101,15 +129,16 @@ class Node(Actor):
     def __init__(
             self,
             parent: Root,
-            meta: metadata.Metadata,
-            params: tracker.Parameters,
+            pieces: Sequence[metadata.Piece],
+            info_hash: bytes,
+            peer_id: bytes,
             peer: tracker.Peer):
         super().__init__(parent)
         self._coros.add(self._main())
 
         self.peer = peer
         self.downloading: Set[metadata.Piece] = set()
-        self._state = events.Wrapper(meta.pieces, params.info_hash, params.peer_id)
+        self._state = events.Wrapper(pieces, info_hash, peer_id)
 
     async def _main(self):
         async with Stream(self.peer) as stream:
