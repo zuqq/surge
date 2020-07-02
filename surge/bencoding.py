@@ -33,13 +33,18 @@ def _str(bs, start):
 
 
 def decode_from(bs, start):
-    if bs[start] == ord("i"):
+    try:
+        token = bs[start]
+    # These are the exceptions that should be raised by `__getitem__`.
+    except (TypeError, IndexError, KeyError) as e:
+        raise ValueError(bs[start:]) from e
+    if token == ord("i"):
         return _int(bs, start)
-    if bs[start] == ord("l"):
+    if token == ord("l"):
         return _list(bs, start)
-    if bs[start] == ord("d"):
+    if token == ord("d"):
         return _dict(bs, start)
-    if bs[start] in (ord(str(i)) for i in range(10)):
+    if token in {ord(str(i)) for i in range(10)}:
         return _str(bs, start)
     raise ValueError(bs[start:])
 
@@ -52,7 +57,7 @@ def decode(bs):
     start, rval = decode_from(bs, 0)
     if start == len(bs):
         return rval
-    raise ValueError(bs)
+    raise ValueError("Not enough bytes.")
 
 
 def raw_val(bs, key):
@@ -109,4 +114,4 @@ def encode(obj):
         return _encode_dict(obj)
     if isinstance(obj, bytes):
         return _encode_str(obj)
-    raise ValueError(obj)
+    raise TypeError(obj)
