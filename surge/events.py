@@ -173,7 +173,7 @@ class Wrapper:
     def _on_block(self, message) -> Optional[Result]:
         block = message.block(self._pieces)
         if block not in self._requested:
-            return
+            return None
         self._requested.remove(block)
         piece = block.piece
         progress = self._progress[piece]
@@ -183,8 +183,7 @@ class Wrapper:
         data = self._progress.pop(piece).data
         if metadata.valid_piece(piece, data):
             return Result(piece, data)
-        else:
-            raise ConnectionError("Invalid data.")
+        raise ConnectionError("Invalid data.")
 
     def send(self, message) -> Union[Send, Result, NeedPiece, NeedMessage]:
         while True:
@@ -192,7 +191,7 @@ class Wrapper:
             message = None
             if isinstance(event, Send):
                 return event
-            elif isinstance(event, Receive):
+            if isinstance(event, Receive):
                 received = event.message
                 if isinstance(received, messages.Choke):
                     self._on_choke()
@@ -201,13 +200,13 @@ class Wrapper:
                     if result is not None:
                         return result
             elif (isinstance(event, Request)
-                        and self.should_request
-                        and len(self._requested) < self._max_requests):
-                    if not self._stack:
-                        return NeedPiece()
-                    block = self._stack.pop()
-                    self._requested.add(block)
-                    return Send(messages.Request(block))
+                  and self.should_request
+                  and len(self._requested) < self._max_requests):
+                if not self._stack:
+                    return NeedPiece()
+                block = self._stack.pop()
+                self._requested.add(block)
+                return Send(messages.Request(block))
             else:
                 return NeedMessage()
 

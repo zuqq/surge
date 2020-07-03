@@ -1,15 +1,13 @@
 from __future__ import annotations
-from typing import DefaultDict, Dict, List, Optional, Sequence, Set
+from typing import DefaultDict, Optional, Sequence, Set
 
 import asyncio
 import collections
 import contextlib
-import dataclasses
 import functools
 import random
 
 from . import events
-from . import messages
 from . import metadata
 from . import tracker
 from .actor import Actor
@@ -49,10 +47,11 @@ async def download(
     async with Root(meta, params, missing) as root:
         printer = asyncio.create_task(print_progress(meta.pieces, root))
         chunks = metadata.piece_to_chunks(meta.files, meta.pieces)
+        loop = asyncio.get_running_loop()
         folder = meta.folder
         async for piece, data in root:
             for chunk in chunks[piece]:
-                await asyncio.get_running_loop().run_in_executor(
+                await loop.run_in_executor(
                     None, functools.partial(metadata.write_chunk, folder, chunk, data)
                 )
         printer.cancel()
