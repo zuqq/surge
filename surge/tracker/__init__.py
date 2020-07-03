@@ -58,14 +58,20 @@ class HTTPTrackerConnection(actor.Actor):
             url: urllib.parse.ParseResult,
             params: Parameters):
         super().__init__(parent)
+        self._coros.add(self._main(params))
 
-        self._coros.add(self._main(url, params))
+        self.url = url
 
-    async def _main(self, url, params):
+    def __repr__(self):
+        class_name = self.__module__ + '.' + self.__class__.__qualname__
+        url = self.url.geturl()
+        return f"<{class_name} with url={repr(url)}>"
+
+    async def _main(self, params):
         while True:
-            ps = urllib.parse.parse_qs(url.query)
+            ps = urllib.parse.parse_qs(self.url.query)
             ps.update(dataclasses.asdict(params))
-            url = url._replace(query=urllib.parse.urlencode(ps))
+            url = self.url._replace(query=urllib.parse.urlencode(ps))
             async with aiohttp.ClientSession() as session:
                 async with session.get(url.geturl()) as request:
                     raw_response = await request.read()
@@ -86,12 +92,19 @@ class UDPTrackerConnection(actor.Actor):
             url: urllib.parse.ParseResult,
             params: Parameters):
         super().__init__(parent)
+        self._coros.add(self._main(params))
 
-        self._coros.add(self._main(url, params))
+        self.url = url
 
-    async def _main(self, url, params):
+    def __repr__(self):
+        class_name = self.__module__ + '.' + self.__class__.__qualname__
+        address = hex(id(self))
+        url = self.url.geturl()
+        return f"<{class_name} object at {address} with url={repr(url)}>"
+
+    async def _main(self, params):
         while True:
-            response = await _udp.request(url, params)
+            response = await _udp.request(self.url, params)
             logging.info("%r received %r peers", self, len(response.peers))
             for peer in response.peers:
                 await self.parent.put(peer)

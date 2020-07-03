@@ -4,6 +4,7 @@ from typing import DefaultDict, Optional, Sequence, Set
 import asyncio
 import collections
 import contextlib
+import dataclasses
 import functools
 import random
 
@@ -154,6 +155,11 @@ class Node(Actor):
         self.peer = peer
         self.downloading: Set[metadata.Piece] = set()
         self._state = events.State(pieces, info_hash, peer_id, max_requests)
+
+    def __repr__(self):
+        class_name = self.__module__ + '.' + self.__class__.__qualname__
+        peer = dataclasses.astuple(self.peer)
+        return f"<{class_name} with peer={peer}>"
 
     async def _main(self):
         async with Stream(self.peer) as stream:

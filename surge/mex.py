@@ -26,6 +26,7 @@ irrelevant to this particular protocol; such messages are simply ignored.
 from typing import Iterable, List
 
 import asyncio
+import dataclasses
 import hashlib
 
 from . import bencoding
@@ -72,7 +73,6 @@ class Root(Actor):
             params: tracker.Parameters,
             max_peers: int):
         super().__init__()
-
         peer_queue = tracker.PeerQueue(self, announce_list, params)
         self.children.add(peer_queue)
         self._coros.add(self._main(params, peer_queue))
@@ -104,10 +104,14 @@ class Root(Actor):
 class Node(Actor):
     def __init__(self, parent: Root, params: tracker.Parameters, peer: tracker.Peer):
         super().__init__(parent)
-
         self._coros.add(self._main(params.info_hash, params.peer_id))
 
         self.peer = peer
+
+    def __repr__(self):
+        class_name = self.__module__ + '.' + self.__class__.__qualname__
+        peer = dataclasses.astuple(self.peer)
+        return f"<{class_name} with peer={peer}>"
 
     async def _main(self, info_hash, peer_id):
         # Because this protocol is essentially linear, I decided to use a simple
