@@ -60,13 +60,17 @@ def assemble(announce_list: List[str], raw_info: bytes) -> bytes:
 # Actors -----------------------------------------------------------------------
 
 
-async def download(announce_list, params):
-    async with Root(announce_list, params) as root:
+async def download(announce_list, params, max_peers):
+    async with Root(announce_list, params, max_peers) as root:
         return await root
 
 
 class Root(Actor):
-    def __init__(self, announce_list: Iterable[str], params: tracker.Parameters):
+    def __init__(
+            self,
+            announce_list: Iterable[str],
+            params: tracker.Parameters,
+            max_peers: int):
         super().__init__()
 
         peer_queue = tracker.PeerQueue(self, announce_list, params)
@@ -74,7 +78,7 @@ class Root(Actor):
         self._coros.add(self._main(params, peer_queue))
 
         self._announce_list = announce_list
-        self._slots = asyncio.Semaphore(50)
+        self._slots = asyncio.Semaphore(max_peers)
         self._waiter = asyncio.get_event_loop().create_future()
 
     def __await__(self):

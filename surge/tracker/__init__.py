@@ -34,7 +34,7 @@ class PeerQueue(actor.Actor):
             else:
                 logging.warning("%r is invalid", announce)
 
-        self._peers = asyncio.Queue(200)  # type: ignore
+        self._peers = asyncio.Queue(len(self.children) * 200)  # type: ignore
         self._seen: Set[Peer] = set()
 
     def _on_child_crash(self, child):

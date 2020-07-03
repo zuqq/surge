@@ -65,7 +65,9 @@ class Transducer:
             pieces: Sequence[metadata.Piece],
             info_hash: bytes,
             peer_id: bytes):
-        self.available: Set[metadata.Piece] = set()
+        self.available: Set[metadata.Piece] = set()  # Pieces that the peer has.
+        self._info_hash = info_hash
+        self._peer_id = peer_id
         self._state = _CLOSED
 
         # Callbacks
@@ -96,12 +98,6 @@ class Transducer:
             (_OPEN, messages.Handshake): (on_handshake, False, _WAITING),
         }
 
-        # Maps `state` to `(to_send, new_state)`.
-        self._send = {
-            _CLOSED: (messages.Handshake(info_hash, peer_id), _OPEN),
-            _CHOKED: (messages.Interested(), _INTERESTED),
-        }
-
     def send(self, message) -> Union[Send, Receive, Request, NeedMessage]:
         if message is not None:
             callback, relay, self._state = self._receive.get(
@@ -112,9 +108,13 @@ class Transducer:
             if relay:
                 return Receive(message)
 
-        to_send, self._state = self._send.get(self._state, (None, self._state))
-        if to_send is not None:
-            return Send(to_send)
+        if self._state is _CLOSED:
+            self._state = _OPEN
+            return Send(messages.Handshake(self._info_hash, self._peer_id))
+
+        if self._state is _CHOKED:
+            self._state = _INTERESTED
+            return Send(messages.Interested())
 
         if self._state is _UNCHOKED:
             return Request()
@@ -145,19 +145,20 @@ class Progress:
         self._data[block.begin : block.begin + block.length] = data
 
 
-class Wrapper:
+class State:
     """A wrapper around `Transducer` that downloads pieces."""
 
     def __init__(
             self,
             pieces: Sequence[metadata.Piece],
             info_hash: bytes,
-            peer_id: bytes):
+            peer_id: bytes,
+            max_requests: int):
         self.should_request = True  # Are there more blocks to request?
         self._transducer = Transducer(pieces, info_hash, peer_id)
         self._pieces = pieces
 
-        self._max_requests = 50
+        self._max_requests = max_requests
         self._progress: Dict[metadata.Piece, Progress] = {}
         self._stack: List[metadata.Block] = []
         self._requested: Set[metadata.Block] = set()

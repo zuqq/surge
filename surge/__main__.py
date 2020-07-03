@@ -3,6 +3,7 @@
 Usage:
     __main__.py (-h | --help)
     __main__.py [--folder FOLDER] [--resume] [--log LOG]
+                [--peers PEERS] [--requests REQUESTS]
                 (--file FILE | --magnet MAGNET)
 
 Options:
@@ -10,6 +11,8 @@ Options:
     --folder FOLDER     Destination folder
     --resume            Resume the download.
     --log LOG           Log file.
+    --peers PEERS       Maximal number of peers [default: 50].
+    --requests REQUEST  Maximal number of requests [default: 50].
     --file PATH         Torrent file.
     --magnet MAGNET     Magnet link.
 
@@ -33,6 +36,9 @@ from . import tracker
 def main(args: Dict[str, str]):
     loop = asyncio.get_event_loop()
 
+    max_peers = int(args["--peers"])
+    max_requests = int(args["--requests"])
+
     if log := args["--log"]:
         logging.basicConfig(
             level=logging.INFO,
@@ -55,7 +61,9 @@ def main(args: Dict[str, str]):
         print("Downloading metadata from peers...", end="", flush=True)
         info_hash, announce_list = magnet.parse(args["--magnet"])
         params = tracker.Parameters(info_hash)
-        raw_meta = loop.run_until_complete(mex.download(announce_list, params))
+        raw_meta = loop.run_until_complete(
+            mex.download(announce_list, params, max_peers)
+        )
         meta = metadata.Metadata.from_bytes(raw_meta)
         print("Done.")
         path = f"{info_hash.hex()}.torrent"
@@ -82,7 +90,9 @@ def main(args: Dict[str, str]):
     if not missing:
         print("Nothing to do.")
     else:
-        loop.run_until_complete(base.download(meta, params, missing))
+        loop.run_until_complete(
+            base.download(meta, params, missing, max_peers, max_requests)
+        )
 
 
 if __name__ == "__main__":

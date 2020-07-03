@@ -43,8 +43,10 @@ async def print_progress(pieces: Sequence[metadata.Piece], root: Root):
 async def download(
         meta: metadata.Metadata,
         params: tracker.Parameters,
-        missing: Set[metadata.Piece]):
-    async with Root(meta, params, missing) as root:
+        missing: Set[metadata.Piece],
+        max_peers: int,
+        max_requests: int):
+    async with Root(meta, params, missing, max_peers, max_requests) as root:
         printer = asyncio.create_task(print_progress(meta.pieces, root))
         chunks = metadata.piece_to_chunks(meta.files, meta.pieces)
         loop = asyncio.get_running_loop()
@@ -64,15 +66,19 @@ class Root(Actor):
             self,
             meta: metadata.Metadata,
             params: tracker.Parameters,
-            missing: Set[metadata.Piece]):
+            missing: Set[metadata.Piece],
+            max_peers: int,
+            max_requests: int):
         super().__init__()
         self._peer_queue = tracker.PeerQueue(self, meta.announce_list, params)
         self.children.add(self._peer_queue)
-        self._coros.add(self._main(meta.pieces, params.info_hash, params.peer_id))
+        self._coros.add(
+            self._main(meta.pieces, params.info_hash, params.peer_id, max_requests)
+        )
 
         self.missing = missing
-        self._queue = asyncio.Queue(10)  # type: ignore
-        self._slots = asyncio.Semaphore(50)
+        self._queue = asyncio.Queue(max_peers)  # type: ignore
+        self._slots = asyncio.Semaphore(max_peers)
         self._downloading: DefaultDict[metadata.Piece, Set[Node]]
         self._downloading = collections.defaultdict(set)
 
@@ -84,11 +90,13 @@ class Root(Actor):
             raise StopAsyncIteration
         return item
 
-    async def _main(self, pieces, info_hash, peer_id):
+    async def _main(self, pieces, info_hash, peer_id, max_requests):
         while True:
             await self._slots.acquire()
             peer = await self._peer_queue.get()
-            await self.spawn_child(Node(self, pieces, info_hash, peer_id, peer))
+            await self.spawn_child(
+                Node(self, pieces, info_hash, peer_id, peer, max_requests)
+            )
 
     def _on_child_crash(self, child):
         if isinstance(child, Node):
@@ -138,13 +146,14 @@ class Node(Actor):
             pieces: Sequence[metadata.Piece],
             info_hash: bytes,
             peer_id: bytes,
-            peer: tracker.Peer):
+            peer: tracker.Peer,
+            max_requests: int):
         super().__init__(parent)
         self._coros.add(self._main())
 
         self.peer = peer
         self.downloading: Set[metadata.Piece] = set()
-        self._state = events.Wrapper(pieces, info_hash, peer_id)
+        self._state = events.State(pieces, info_hash, peer_id, max_requests)
 
     async def _main(self):
         async with Stream(self.peer) as stream:
