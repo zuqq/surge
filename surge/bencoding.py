@@ -104,7 +104,7 @@ def _encode_str(bs):
 def encode(obj):
     """Encode `obj` in BEncoding.
 
-    Raises `ValueError` if `obj` is not representable in BEncoding.
+    Raises `TypeError` if `obj` is not representable in BEncoding.
     """
     if isinstance(obj, int):
         return _encode_int(obj)

@@ -19,7 +19,7 @@ class BencodingTest(unittest.TestCase):
             with self.subTest(x=x, y=y):
                 self.assertEqual(bencoding.decode(x), y)
 
-        for x in [b"", b"ie", b"iae", b"dde", b"2:abc"]:
+        for x in [b"", b"ie", b"iae", b"dde", b"2:abc", b"s"]:
             with self.subTest(x=x):
                 with self.assertRaises(ValueError):
                     bencoding.decode(x)
