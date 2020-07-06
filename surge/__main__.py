@@ -71,19 +71,19 @@ def main(args: Dict[str, str]):
         with open(path, "wb") as f:
             f.write(raw_meta)
 
-    print("Building the file tree...", end="", flush=True)
-    metadata.build_file_tree(meta.folder, meta.files)
-    print("Done.")
-
     if folder := args["--folder"]:
         meta.folder = os.path.join(folder, meta.folder)
         print(f"Downloading to {meta.folder}.")
+
+    print("Building the file tree...", end="", flush=True)
+    metadata.build_file_tree(meta.folder, meta.files)
+    print("Done.")
 
     missing = set(meta.pieces)
 
     if args["--resume"]:
         print("Checking for available pieces...", end="", flush=True)
-        for piece in metadata.available_pieces(meta.pieces, meta.files, meta.folder):
+        for piece in metadata.available_pieces(meta.pieces, meta.folder, meta.files):
             missing.remove(piece)
         print("Done.")
 

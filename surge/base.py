@@ -49,7 +49,7 @@ async def download(
         max_requests: int):
     async with Root(meta, params, missing, max_peers, max_requests) as root:
         printer = asyncio.create_task(print_progress(meta.pieces, root))
-        chunks = metadata.piece_to_chunks(meta.files, meta.pieces)
+        chunks = metadata.piece_to_chunks(meta.pieces, meta.files)
         loop = asyncio.get_running_loop()
         folder = meta.folder
         async for piece, data in root:

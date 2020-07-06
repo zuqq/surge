@@ -45,9 +45,9 @@ def valid_piece(piece: Piece, data: bytes) -> bool:
 
 def available_pieces(
         pieces: Sequence[Piece],
-        files: Sequence[File],
-        folder: str) -> Generator[Piece, None, None]:
-    chunks = piece_to_chunks(files, pieces)
+        folder: str,
+        files: Sequence[File]) -> Generator[Piece, None, None]:
+    chunks = piece_to_chunks(pieces, files)
     for piece in pieces:
         data = []
         for chunk in chunks[piece]:
@@ -73,8 +73,8 @@ class Chunk:
 
 
 def piece_to_chunks(
-        files: Sequence[File],
-        pieces: Sequence[Piece]) -> Dict[Piece, List[Chunk]]:
+        pieces: Sequence[Piece],
+        files: Sequence[File]) -> Dict[Piece, List[Chunk]]:
     result = {piece: [] for piece in pieces}
     i = 0
     j = 0
