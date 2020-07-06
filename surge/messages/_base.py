@@ -54,11 +54,11 @@ class Keepalive(Message):
 # Messages with identifier byte ------------------------------------------------
 
 
-_registry: Dict[int, Type[Message]] = {}
+registry: Dict[int, Type[Message]] = {}
 
 
 def register(cls: Type[Message]) -> Type[Message]:
-    _registry[cls.value] = cls  # type: ignore
+    registry[cls.value] = cls  # type: ignore
     return cls
 
 
@@ -121,8 +121,7 @@ class Bitfield(Message):
     def __init__(self, payload: bytes):
         self.prefix = 1 + len(payload)
         self.payload = payload
-
-        self.format = f"LB{len(payload)}s"
+        self.format = f">LB{len(payload)}s"
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Bitfield:
@@ -149,10 +148,14 @@ class Request(Message):
     prefix = 13
     value = 6
 
-    def __init__(self, block: metadata.Block):
-        self.index = block.piece.index
-        self.begin = block.begin
-        self.length = block.length
+    def __init__(self, index: int, begin: int, length: int):
+        self.index = index
+        self.begin = begin
+        self.length = length
+
+    @classmethod
+    def from_block(cls, block: metadata.Block):
+        return cls(block.piece.index, block.begin, block.length)
 
 
 @register
@@ -161,11 +164,15 @@ class Block(Message):
     value = 7
 
     def __init__(self, index: int, begin: int, data: bytes):
+        self.prefix = 13 + len(data)
         self.index = index
         self.begin = begin
         self.data = data
-
         self.format = f">LBLL{len(self.data)}s"
+
+    @classmethod
+    def from_block(cls, block: metadata.Block, data: bytes):
+        return cls(block.piece.index, block.begin, data)
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Block:
@@ -213,7 +220,7 @@ def parse(data: bytes) -> Union[Message, _extension.Message, _metadata.Message]:
     if len(data) != 4 + n:
         raise ValueError("Incorrect length prefix.")
     try:
-        cls = _registry[data[4]]
+        cls = registry[data[4]]
     except IndexError:
         return Keepalive()
     except KeyError:

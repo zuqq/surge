@@ -205,7 +205,7 @@ class State(Transducer):
                     return NeedPiece()
                 block = self._stack.pop()
                 self._requested.add(block)
-                return Send(messages.Request(block))
+                return Send(messages.Request.from_block(block))
             else:
                 return NeedMessage()
 
