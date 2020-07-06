@@ -66,21 +66,10 @@ class Transducer:
             info_hash: bytes,
             peer_id: bytes):
         self.available: Set[metadata.Piece] = set()  # Pieces that the peer has.
+        self._pieces = pieces
         self._info_hash = info_hash
         self._peer_id = peer_id
         self._state = _CLOSED
-
-        # Callbacks
-
-        def on_have(message):
-            self.available.add(message.piece(pieces))
-
-        def on_bitfield(message):
-            self.available = message.available(pieces)
-
-        def on_handshake(message):
-            if message.info_hash != info_hash:
-                raise ConnectionError("Peer's info_hash doesn't match.")
 
         # Maps `(state, message_type)` to `(callback, relay, new_state)`, where
         # `relay` is a boolean indicating whether or not to relay the message to
@@ -90,13 +79,23 @@ class Transducer:
             (_UNCHOKED, messages.Choke): (None, True, _CHOKED),
             (_CHOKED, messages.Unchoke): (None, False, _UNCHOKED),
             (_INTERESTED, messages.Unchoke): (None, False, _UNCHOKED),
-            (_CHOKED, messages.Have): (on_have, False, _CHOKED),
-            (_UNCHOKED, messages.Have): (on_have, False, _UNCHOKED),
-            (_WAITING, messages.Bitfield): (on_bitfield, False, _CHOKED),
+            (_CHOKED, messages.Have): (self._on_have, False, _CHOKED),
+            (_UNCHOKED, messages.Have): (self._on_have, False, _UNCHOKED),
+            (_WAITING, messages.Bitfield): (self._on_bitfield, False, _CHOKED),
             (_CHOKED, messages.Block): (None, True, _CHOKED),
             (_UNCHOKED, messages.Block): (None, True, _UNCHOKED),
-            (_OPEN, messages.Handshake): (on_handshake, False, _WAITING),
+            (_OPEN, messages.Handshake): (self._on_handshake, False, _WAITING),
         }
+
+    def _on_have(self, message):
+        self.available.add(message.piece(self._pieces))
+
+    def _on_bitfield(self, message):
+        self.available = message.available(self._pieces)
+
+    def _on_handshake(self, message):
+        if message.info_hash != self._info_hash:
+            raise ConnectionError("Peer's info_hash doesn't match.")
 
     def send(self, message) -> Union[Send, Receive, Request, NeedMessage]:
         if message is not None:
@@ -145,7 +144,7 @@ class Progress:
         self._data[block.begin : block.begin + block.length] = data
 
 
-class State:
+class State(Transducer):
     """A wrapper around `Transducer` that downloads pieces."""
 
     def __init__(
@@ -154,10 +153,9 @@ class State:
             info_hash: bytes,
             peer_id: bytes,
             max_requests: int):
-        self.should_request = True  # Are there more blocks to request?
-        self._transducer = Transducer(pieces, info_hash, peer_id)
-        self._pieces = pieces
+        super().__init__(pieces, info_hash, peer_id)
 
+        self.should_request = True  # Are there more blocks to request?
         self._max_requests = max_requests
         self._progress: Dict[metadata.Piece, Progress] = {}
         self._stack: List[metadata.Block] = []
@@ -188,7 +186,7 @@ class State:
 
     def send(self, message) -> Union[Send, Result, NeedPiece, NeedMessage]:
         while True:
-            event = self._transducer.send(message)
+            event = super().send(message)
             message = None
             if isinstance(event, Send):
                 return event
@@ -210,10 +208,6 @@ class State:
                 return Send(messages.Request(block))
             else:
                 return NeedMessage()
-
-    @property
-    def available(self):
-        return self._transducer.available
 
     def send_piece(self, piece: metadata.Piece):
         blocks = tuple(metadata.blocks(piece))
