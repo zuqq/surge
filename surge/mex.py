@@ -58,6 +58,48 @@ def assemble(announce_list: List[str], raw_info: bytes) -> bytes:
     )
 
 
+# Protocol ---------------------------------------------------------------------
+
+
+def mex(info_hash, peer_id):
+    message = messages.Handshake(info_hash, peer_id)
+    received = yield message
+    if not isinstance(received, messages.Handshake):
+        raise ConnectionError("Expected handshake.")
+    if received.info_hash != info_hash:
+        raise ConnectionError("Peer's info_hash doesn't match.")
+
+    message = messages.extension_handshake()
+    while True:
+        received = yield message
+        message = None
+        if isinstance(received, messages.ExtensionHandshake):
+            break
+    ut_metadata = received.ut_metadata
+    metadata_size = received.metadata_size
+
+    # The metadata is partitioned into pieces of size `2 ** 14`, except
+    # for the last piece which may be smaller. The peer knows this
+    # partition, so we only need to tell it the indices of the pieces
+    # that we want. Because the total number of pieces is typically very
+    # small, a simple stop-and-wait protocol is fast enough.
+    piece_length = 2 ** 14
+    pieces = []
+    for i in range((metadata_size + piece_length - 1) // piece_length):
+        message = messages.metadata_request(i, ut_metadata)
+        while True:
+            received = yield message
+            message = None
+            if isinstance(received, messages.Metadata):
+                break
+        pieces.append(received.data)
+
+    raw_info = b"".join(pieces)
+    if valid_info(info_hash, raw_info):
+        return raw_info
+    raise ConnectionError("Peer sent invalid data.")
+
+
 # Actors -----------------------------------------------------------------------
 
 
@@ -114,43 +156,18 @@ class Node(Actor):
         return f"<{class_name} with peer={peer}>"
 
     async def _main(self, info_hash, peer_id):
-        # Because this protocol is essentially linear, I decided to use a simple
-        # procedural style.
         async with Stream(self.peer) as stream:
-            await stream.write(messages.Handshake(info_hash, peer_id))
+            state = mex(info_hash, peer_id)
 
-            message = await stream.read_handshake()
-            if not isinstance(message, messages.Handshake):
-                raise ConnectionError("Expected handshake.")
-            if message.info_hash != info_hash:
-                raise ConnectionError("Peer's info_hash doesn't match.")
+            message = state.send(None)
+            await stream.write(message)
+            received = await stream.read_handshake()
 
-            await stream.write(messages.extension_handshake())
-
-            while True:
-                message = await stream.read_message()
-                if isinstance(message, messages.ExtensionHandshake):
-                    ut_metadata = message.ut_metadata
-                    metadata_size = message.metadata_size
-                    break
-
-            # The metadata is partitioned into pieces of size `2 ** 14`, except
-            # for the last piece which may be smaller. The peer knows this
-            # partition, so we only need to tell it the indices of the pieces
-            # that we want. Because the total number of pieces is typically very
-            # small, a simple stop-and-wait protocol is fast enough.
-            piece_length = 2 ** 14
-            pieces = []
-            for i in range((metadata_size + piece_length - 1) // piece_length):
-                await stream.write(messages.metadata_request(i, ut_metadata))
+            try:
                 while True:
-                    message = await stream.read_message()
-                    if isinstance(message, messages.Metadata) and message.index == i:
-                        pieces.append(message.data)
-                        break
-
-            raw_info = b"".join(pieces)
-            if valid_info(info_hash, raw_info):
-                self.parent.done(raw_info)
-            else:
-                raise ConnectionError("Peer sent invalid data.")
+                    message = state.send(received)
+                    if message is not None:
+                        await stream.write(message)
+                    received = await stream.read_message()
+            except StopIteration as e:
+                self.parent.done(e.value)
