@@ -23,7 +23,7 @@ After exchanging handshakes, the peer might send us BitTorrent messages that are
 irrelevant to this particular protocol; such messages are simply ignored.
 """
 
-from typing import Iterable, List
+from typing import Iterable
 
 import asyncio
 import dataclasses
@@ -43,7 +43,7 @@ def valid_info(info_hash: bytes, raw_info: bytes) -> bool:
     return hashlib.sha1(raw_info).digest() == info_hash
 
 
-def assemble(announce_list: List[str], raw_info: bytes) -> bytes:
+def assemble(announce_list: Iterable[str], raw_info: bytes) -> bytes:
     # We can't just decode and re-encode, because the value associated with
     # the key `b"info"` needs to be preserved exactly.
     return b"".join(
@@ -61,13 +61,12 @@ def assemble(announce_list: List[str], raw_info: bytes) -> bytes:
 # Protocol ---------------------------------------------------------------------
 
 
-def mex(info_hash, peer_id):
-    message = messages.Handshake(info_hash, peer_id)
-    received = yield message
+def mex(info_hash: bytes, peer_id: bytes):
+    received = yield messages.Handshake(info_hash, peer_id)
     if not isinstance(received, messages.Handshake):
         raise ConnectionError("Expected handshake.")
     if received.info_hash != info_hash:
-        raise ConnectionError("Peer's info_hash doesn't match.")
+        raise ConnectionError("Wrong info_hash.")
 
     message = messages.extension_handshake()
     while True:
@@ -92,12 +91,15 @@ def mex(info_hash, peer_id):
             message = None
             if isinstance(received, messages.Metadata):
                 break
+        # This assumes that the peer sends us the correct piece; if not, the
+        # resulting data will be invalid. This should be fine, because we only
+        # request a single piece at a time.
         pieces.append(received.data)
 
     raw_info = b"".join(pieces)
     if valid_info(info_hash, raw_info):
         return raw_info
-    raise ConnectionError("Peer sent invalid data.")
+    raise ConnectionError("Invalid data.")
 
 
 # Actors -----------------------------------------------------------------------

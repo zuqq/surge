@@ -128,10 +128,11 @@ class Metadata:
     @classmethod
     def from_bytes(cls, raw_meta: bytes) -> Metadata:
         d = bencoding.decode(raw_meta)
+
         announce_list = []
         if b"announce-list" in d:  # See BEP 12.
             # I'm ignoring the tiered structure because I'll be requesting peers
-            # from every tracker anyway.
+            # from every tracker; it's also not supported by magnet links.
             for tier in d[b"announce-list"]:
                 for raw_announce in tier:
                     announce_list.append(raw_announce.decode())

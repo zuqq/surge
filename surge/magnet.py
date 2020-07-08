@@ -4,7 +4,10 @@ import urllib.parse
 
 
 def parse(magnet: str) -> Tuple[bytes, List[str]]:
-    """Parse a magnet link into (info_hash, announce_list)."""
+    """Parse a magnet link into (info_hash, announce_list).
+
+    Raises `ValueError` if `magnet` is not a valid magnet link.
+    """
     url = urllib.parse.urlparse(magnet)
     qs = urllib.parse.parse_qs(url.query)
     if url.scheme != "magnet":

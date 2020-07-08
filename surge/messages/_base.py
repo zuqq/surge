@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, List, Set, Tuple, Type, Union
+from typing import Dict, Sequence, Set, Tuple, Type, Union
 
 import struct
 
@@ -109,7 +109,7 @@ class Have(Message):
         _, _, index = struct.unpack(cls.format, data)
         return cls(index)
 
-    def piece(self, pieces: List[metadata.Piece]) -> metadata.Piece:
+    def piece(self, pieces: Sequence[metadata.Piece]) -> metadata.Piece:
         return pieces[self.index]
 
 
@@ -119,16 +119,16 @@ class Bitfield(Message):
     value = 5
 
     def __init__(self, payload: bytes):
+        self.format = f">LB{len(payload)}s"
         self.prefix = 1 + len(payload)
         self.payload = payload
-        self.format = f">LB{len(payload)}s"
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Bitfield:
         _, _, payload = struct.unpack(f">LB{len(data) - 4 - 1}s", data)
         return cls(payload)
 
-    def available(self, pieces: List[metadata.Piece]) -> Set[metadata.Piece]:
+    def available(self, pieces: Sequence[metadata.Piece]) -> Set[metadata.Piece]:
         result = set()
         i = 0
         for b in self.payload:
@@ -164,11 +164,11 @@ class Block(Message):
     value = 7
 
     def __init__(self, index: int, begin: int, data: bytes):
+        self.format = f">LBLL{len(data)}s"
         self.prefix = 13 + len(data)
         self.index = index
         self.begin = begin
         self.data = data
-        self.format = f">LBLL{len(self.data)}s"
 
     @classmethod
     def from_block(cls, block: metadata.Block, data: bytes):
@@ -181,7 +181,7 @@ class Block(Message):
         )
         return cls(index, begin, data)
 
-    def block(self, pieces: List[metadata.Piece]) -> metadata.Block:
+    def block(self, pieces: Sequence[metadata.Piece]) -> metadata.Block:
         return metadata.Block(pieces[self.index], self.begin, len(self.data))
 
 
