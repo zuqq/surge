@@ -128,7 +128,15 @@ class Bitfield(Message):
         _, _, payload = struct.unpack(f">LB{len(data) - 4 - 1}s", data)
         return cls(payload)
 
+    @classmethod
+    def from_indices(cls, indices: Set[int], total: int) -> Bitfield:
+        result = bytearray(total)
+        for i in indices:
+            result[i // 8] |= 1 << (7 - i % 8)
+        return cls(bytes(result))
+
     def available(self, pieces: Sequence[metadata.Piece]) -> Set[metadata.Piece]:
+        # TODO: Deprecate this method and use indices instead.
         result = set()
         i = 0
         for b in self.payload:
@@ -156,6 +164,14 @@ class Request(Message):
     @classmethod
     def from_block(cls, block: metadata.Block):
         return cls(block.piece.index, block.begin, block.length)
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> Block:
+        _, _, index, begin, length = struct.unpack(cls.format, data)
+        return cls(index, begin, length)
+
+    def block(self, pieces: Sequence[metadata.Piece]) -> metadata.Block:
+        return metadata.Block(pieces[self.index], self.begin, self.length)
 
 
 @register
