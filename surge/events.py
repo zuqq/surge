@@ -37,7 +37,7 @@ class NeedMessage:
     pass
 
 
-# States -----------------------------------------------------------------------
+# Transducer -------------------------------------------------------------------
 
 
 class _State:
@@ -54,9 +54,6 @@ _WAITING = _State("WAITING")
 _CHOKED = _State("CHOKED")
 _INTERESTED = _State("INTERESTED")
 _UNCHOKED = _State("UNCHOKED")
-
-
-# Transducer -------------------------------------------------------------------
 
 
 class Transducer:
@@ -121,7 +118,7 @@ class Transducer:
         return NeedMessage()
 
 
-# Wrapper ----------------------------------------------------------------------
+# State ------------------------------------------------------------------------
 
 
 class Progress:
@@ -145,7 +142,7 @@ class Progress:
 
 
 class State(Transducer):
-    """A wrapper around `Transducer` that downloads pieces."""
+    """A subclass of `Transducer` that knows how to downloads pieces."""
 
     def __init__(
             self,
@@ -216,5 +213,5 @@ class State(Transducer):
 
     def cancel_piece(self, piece: metadata.Piece):
         self._progress.pop(piece)
-        self._requested = {block for block in self._requested if block.piece != piece}
-        self._stack = [block for block in self._stack if block.piece != piece]
+        self._requested = {b for b in self._requested if b.piece != piece}
+        self._stack = [b for b in self._stack if b.piece != piece]
