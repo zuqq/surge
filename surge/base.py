@@ -189,7 +189,7 @@ class Node(Actor):
                         self.downloading.add(piece)
                         state.send_piece(piece)
                 elif isinstance(event, events.NeedMessage):
-                    message = await asyncio.wait_for(stream.read_message(), 5)
+                    message = await asyncio.wait_for(stream.read(), 5)
 
     @property
     def available(self):

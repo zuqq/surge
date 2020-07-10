@@ -25,7 +25,7 @@ class Stream:
     async def read_handshake(self) -> messages.Handshake:
         return messages.Handshake.from_bytes(await self._reader.readexactly(68))
 
-    async def read_message(self) -> messages.Message:
+    async def read(self) -> messages.Message:
         prefix = await self._reader.readexactly(4)
         data = await self._reader.readexactly(int.from_bytes(prefix, "big"))
         return messages.parse(prefix + data)

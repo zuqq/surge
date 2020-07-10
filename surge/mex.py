@@ -170,6 +170,6 @@ class Node(Actor):
                     message = state.send(received)
                     if message is not None:
                         await stream.write(message)
-                    received = await stream.read_message()
+                    received = await asyncio.wait_for(stream.read(), 5)
             except StopIteration as e:
                 self.parent.done(e.value)
