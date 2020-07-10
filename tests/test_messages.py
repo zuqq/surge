@@ -1,4 +1,3 @@
-import hashlib
 import struct
 import unittest
 
@@ -6,69 +5,58 @@ from surge import bencoding
 from surge import messages
 from surge import metadata
 
-
-class ExampleMixin(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        # A simple example with a single file "a" containing the byte b"s",
-        # split into a single piece.
-        info = {
-            b"name": b"a",
-            b"piece length": 2 ** 18,
-            b"length": 1,
-            b"pieces": b"\xa0\xf1I\n \xd0!\x1c\x99{D\xbc5~\x19r\xde\xab\x8a\xe3",
-        }
-        cls.info_hash = hashlib.sha1(bencoding.encode(info)).digest()
-        cls.peer_id = b"\x88\x07 \x7f\x00d\xedr J\x13w~.\xb2_P\xf3\xf82"
-        cls.piece = metadata.Piece(
-            0, 0, 1, b"\xa0\xf1I\n \xd0!\x1c\x99{D\xbc5~\x19r\xde\xab\x8a\xe3"
-        )
-        cls.data = b"a"
+from ._example import Example
 
 
-class HandshakeTest(ExampleMixin):
+class HandshakeTest(Example):
+    format = ">B19sQ20s20s"
+    pstrlen = 19
+    pstr = b"BitTorrent protocol"
+    reserved = 0
+
     def test_to_bytes(self):
-        result = messages.Handshake(self.info_hash, self.peer_id).to_bytes()
+        handshake = messages.Handshake(self.info_hash, self.peer_id).to_bytes()
+        pstrlen, pstr, _, info_hash, peer_id = struct.unpack(self.format, handshake)
 
-        self.assertEqual(result[0], 19)
-        self.assertEqual(result[1:20], b"BitTorrent protocol")
-        self.assertEqual(result[28:48], self.info_hash)
-        self.assertEqual(result[48:68], self.peer_id)
+        self.assertEqual(pstrlen, self.pstrlen)
+        self.assertEqual(pstr, self.pstr)
+        self.assertEqual(info_hash, self.info_hash)
+        self.assertEqual(peer_id, self.peer_id)
 
     def test_from_bytes(self):
-        handshake = messages.Handshake.from_bytes(
+        message = messages.Handshake.from_bytes(
             struct.pack(
-                ">B19sQ20s20s",
-                19,
-                b"BitTorrent protocol",
-                0,
+                self.format,
+                self.pstrlen,
+                self.pstr,
+                self.reserved,
                 self.info_hash,
                 self.peer_id,
             )
         )
 
-        self.assertEqual(handshake.info_hash, self.info_hash)
-        self.assertEqual(handshake.peer_id, self.peer_id)
+        self.assertEqual(message.info_hash, self.info_hash)
+        self.assertEqual(message.peer_id, self.peer_id)
 
 
 class KeepaliveTest(unittest.TestCase):
-    message = struct.pack(">L", 0)
+    reference = struct.pack(">L", 0)
 
     def test_to_bytes(self):
-        self.assertEqual(messages.Keepalive().to_bytes(), self.message)
+        self.assertEqual(messages.Keepalive().to_bytes(), self.reference)
 
     def test_parse(self):
-        self.assertIsInstance(messages.parse(self.message), messages.Keepalive)
+        self.assertIsInstance(messages.parse(self.reference), messages.Keepalive)
 
 
 class ChokeTest(unittest.TestCase):
-    message = struct.pack(">LB", 1, 0)
+    reference = struct.pack(">LB", 1, 0)
 
     def test_to_bytes(self):
-        self.assertEqual(messages.Choke().to_bytes(), self.message)
+        self.assertEqual(messages.Choke().to_bytes(), self.reference)
 
     def test_parse(self):
-        self.assertIsInstance(messages.parse(self.message), messages.Choke)
+        self.assertIsInstance(messages.parse(self.reference), messages.Choke)
 
 
 class UnchokeTest(unittest.TestCase):
@@ -86,65 +74,78 @@ class NotInterestedTest(unittest.TestCase):
         self.assertEqual(messages.NotInterested().to_bytes(), struct.pack(">LB", 1, 3))
 
 
-class HaveTest(ExampleMixin):
+class HaveTest(Example):
+    reference = struct.pack(">LBL", 5, 4, 0)
+
     def test_to_bytes(self):
-        self.assertEqual(messages.Have(0).to_bytes(), struct.pack(">LBL", 5, 4, 0))
+        self.assertEqual(messages.Have(0).to_bytes(), self.reference)
 
     def test_from_bytes(self):
-        message = struct.pack(">LBL", 5, 4, 0)
-        self.assertEqual(messages.Have.from_bytes(message).index, 0)
+        self.assertEqual(messages.Have.from_bytes(self.reference).index, 0)
 
     def test_piece(self):
-        self.assertEqual(messages.Have(0).piece([self.piece]), self.piece)
+        self.assertEqual(messages.Have(0).piece(self.pieces), self.pieces[0])
 
 
-class BitfieldTest(ExampleMixin):
-    payload = struct.pack(">B", 1 << 7)
-    message = struct.pack(">LB1s", 2, 5, payload)
+class BitfieldTest(Example):
+    reference = struct.pack(">LBB", 2, 5, 1 << 7)
 
     def test_to_bytes(self):
-        self.assertEqual(messages.Bitfield(self.payload).to_bytes(), self.message)
+        self.assertEqual(
+            messages.Bitfield.from_indices({0}, len(self.pieces)).to_bytes(),
+            self.reference,
+        )
 
     def test_from_bytes(self):
         self.assertEqual(
-            messages.Bitfield.from_bytes(self.message).payload, self.payload
-        )
-
-    def test_available(self):
-        self.assertEqual(
-            messages.Bitfield(self.payload).available([self.piece]), {self.piece}
+            messages.Bitfield.from_bytes(self.reference).available(self.pieces),
+            {self.pieces[0]},
         )
 
 
-class RequestTest(ExampleMixin):
-    def test_to_bytes(self):
-        (block,) = metadata.blocks(self.piece)
-
-        self.assertEqual(
-            messages.Request.from_block(block).to_bytes(),
-            struct.pack(">LBLLL", 13, 6, block.piece.index, block.begin, block.length),
-        )
-
-
-class BlockTest(ExampleMixin):
+class RequestTest(Example):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
 
-        (block,) = metadata.blocks(cls.piece)
+        block, *_ = metadata.blocks(cls.pieces[0])
         cls.block = block
-        cls.message = struct.pack(
-            ">LBLL1s", 14, 7, block.piece.index, block.begin, cls.data
+        cls.reference = struct.pack(
+            ">LBLLL", 13, 6, block.piece.index, block.begin, block.length
         )
 
     def test_to_bytes(self):
         self.assertEqual(
-            messages.Block.from_block(self.block, self.data).to_bytes(), self.message
+            messages.Request.from_block(self.block).to_bytes(),
+            self.reference,
         )
 
     def test_block(self):
         self.assertEqual(
-            messages.Block.from_bytes(self.message).block([self.piece]), self.block
+            messages.Request.from_bytes(self.reference).block(self.pieces), self.block
+        )
+
+class BlockTest(Example):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+
+        block, *_ = metadata.blocks(cls.pieces[0])
+        cls.block = block
+        cls.block_data = cls.data[0][block.begin : block.begin + block.length]
+        cls.reference = struct.pack(
+            ">LBLL1s", 14, 7, block.piece.index, block.begin, cls.block_data
+        )
+
+    def test_to_bytes(self):
+        self.assertEqual(
+            messages.Block.from_block(self.block, self.block_data).to_bytes(),
+            self.reference,
+        )
+
+    def test_block(self):
+        self.assertEqual(
+            messages.Block.from_bytes(self.reference).block(self.pieces), self.block
         )
 
 
