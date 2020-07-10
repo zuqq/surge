@@ -38,6 +38,14 @@ class HandshakeTest(Example):
         self.assertEqual(message.info_hash, self.info_hash)
         self.assertEqual(message.peer_id, self.peer_id)
 
+    def test_extension_protocol(self):
+        message = messages.Handshake(
+            self.info_hash, self.peer_id, extension_protocol=True
+        )
+        _, _, reserved, _, _ = struct.unpack(self.format, message.to_bytes())
+
+        self.assertTrue(reserved & (1 << 20))
+
 
 class KeepaliveTest(unittest.TestCase):
     reference = struct.pack(">L", 0)

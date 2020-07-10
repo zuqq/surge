@@ -62,7 +62,7 @@ def assemble(announce_list: Iterable[str], raw_info: bytes) -> bytes:
 
 
 def mex(info_hash: bytes, peer_id: bytes):
-    received = yield messages.Handshake(info_hash, peer_id)
+    received = yield messages.Handshake(info_hash, peer_id, extension_protocol=True)
     if not isinstance(received, messages.Handshake):
         raise ConnectionError("Expected handshake.")
     if received.info_hash != info_hash:

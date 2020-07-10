@@ -33,11 +33,18 @@ class Handshake(Message):
 
     pstrlen = 19
     pstr = b"BitTorrent protocol"
-    reserved = 1 << 20
+    reserved = 0
 
-    def __init__(self, info_hash: bytes, peer_id: bytes):
+    def __init__(
+            self,
+            info_hash: bytes,
+            peer_id: bytes,
+            *,
+            extension_protocol: bool = False):
         self.info_hash = info_hash
         self.peer_id = peer_id
+        if extension_protocol:
+            self.reserved |= 1 << 20  # See BEP 10.
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Handshake:
