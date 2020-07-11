@@ -116,7 +116,7 @@ def blocks(piece: Piece) -> Generator[Block, None, None]:
         yield Block(piece, begin, min(block_size, piece.length - begin))
 
 
-@dataclasses.dataclass(eq=True, frozen=True)
+@dataclasses.dataclass
 class Metadata:
     announce_list: List[str]
     length: int
