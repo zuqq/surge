@@ -44,7 +44,7 @@ def decode_from(bs, start):
         return _list(bs, start)
     if token == ord("d"):
         return _dict(bs, start)
-    if token in {ord(str(i)) for i in range(10)}:
+    if ord("0") <= token <= ord("9"):
         return _str(bs, start)
     raise ValueError(bs[start:])
 
@@ -77,7 +77,7 @@ def raw_val(bs, key):
 
 
 def _encode_int(n):
-    return ("i" + str(n) + "e").encode("ascii")
+    return b"i" + str(n).encode("ascii") + b"e"
 
 
 def _encode_list(l):
