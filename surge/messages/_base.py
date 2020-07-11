@@ -260,4 +260,3 @@ def parse(data: bytes) -> Union[Message, _extension.Message, _metadata.Message]:
         return extension_message
     if isinstance(extension_message, _extension.Metadata):
         return extension_message.metadata_message
-    raise ValueError("Unknown extension message.")

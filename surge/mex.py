@@ -13,7 +13,7 @@ Minimal message flow:
      |<-------------------------|
      |     MetadataRequest      |
      |------------------------->|
-     |         Metadata         |
+     |       MetadataData       |
      |<-------------------------|
      |     MetadataRequest      |
      |------------------------->|
@@ -89,7 +89,7 @@ def mex(info_hash: bytes, peer_id: bytes):
         while True:
             received = yield message
             message = None
-            if isinstance(received, messages.Metadata):
+            if isinstance(received, messages.MetadataData):
                 break
         # This assumes that the peer sends us the correct piece; if not, the
         # resulting data will be invalid. This should be fine, because we only

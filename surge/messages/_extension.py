@@ -9,11 +9,11 @@ from .. import bencoding
 
 class Message:
     def to_bytes(self) -> bytes:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     @classmethod
     def from_bytes(cls, payload: bytes) -> Message:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
 
 class Handshake(Message):

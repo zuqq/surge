@@ -5,7 +5,7 @@ from .. import bencoding
 
 class Message:
     def to_bytes(self) -> bytes:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
 
 class Request(Message):
@@ -26,12 +26,25 @@ class Data(Message):
         self.total_size = total_size
         self.data = data
 
+    def to_bytes(self) -> bytes:
+        payload = bencoding.encode(
+            {
+                b"msg_type": self.value,
+                b"piece": self.index,
+                b"total_size": self.total_size,
+            }
+        )
+        return payload + self.data
+
 
 class Reject(Message):
     value = 2
 
     def __init__(self, index: int):
         self.index = index
+
+    def to_bytes(self) -> bytes:
+        return bencoding.encode({b"msg_type": self.value, b"piece": self.index})
 
 
 def parse(data: bytes) -> Message:

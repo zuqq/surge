@@ -2,8 +2,8 @@ import struct
 import unittest
 
 from surge import bencoding
-from surge import messages
 from surge import metadata
+from surge import messages
 
 from ._example import Example
 
@@ -124,14 +124,14 @@ class RequestTest(Example):
 
     def test_to_bytes(self):
         self.assertEqual(
-            messages.Request.from_block(self.block).to_bytes(),
-            self.reference,
+            messages.Request.from_block(self.block).to_bytes(), self.reference,
         )
 
     def test_block(self):
         self.assertEqual(
             messages.Request.from_bytes(self.reference).block(self.pieces), self.block
         )
+
 
 class BlockTest(Example):
     @classmethod
@@ -157,6 +157,77 @@ class BlockTest(Example):
         )
 
 
+def metadata_message(payload):
+    return struct.pack(f">LBB{len(payload)}s", 1 + 1 + len(payload), 20, 3, payload)
+
+
+class ExtensionProtocolTest(Example):
+    def test_extension_handshake(self):
+        with self.subTest("to_bytes"):
+            message = messages.extension_handshake().to_bytes()
+            _, value, extension_value, payload = struct.unpack(
+                f">LBB{len(message) - 4 - 1 - 1}s", message
+            )
+            self.assertEqual(value, 20)
+            self.assertEqual(extension_value, 0)
+            d = bencoding.decode(payload)
+            self.assertIn(b"m", d)
+            self.assertIn(b"ut_metadata", d[b"m"])
+
+        with self.subTest("parse"):
+            payload = bencoding.encode(
+                {b"m": {b"ut_metadata": 3}, b"metadata_size": self.metadata_size,}
+            )
+            reference = struct.pack(
+                f">LBB{len(payload)}s", 1 + 1 + len(payload), 20, 0, payload
+            )
+            message = messages.parse(reference)
+            self.assertIsInstance(message, messages.ExtensionHandshake)
+            self.assertEqual(message.ut_metadata, 3)
+            self.assertEqual(message.metadata_size, self.metadata_size)
+
+    def test_metadata_data(self):
+        payload = bencoding.encode(
+            {b"msg_type": 1, b"piece": 0, b"total_size": self.metadata_size}
+        )
+        reference = metadata_message(payload + self.raw_info)
+
+        with self.subTest("to_bytes"):
+            self.assertEqual(
+                messages.metadata_data(0, self.metadata_size, self.raw_info).to_bytes(),
+                reference,
+            )
+
+        with self.subTest("parse"):
+            message = messages.parse(reference)
+            self.assertIsInstance(message, messages.MetadataData)
+            self.assertEqual(message.index, 0)
+            self.assertEqual(message.total_size, self.metadata_size)
+            self.assertEqual(message.data, self.raw_info)
+
+    def test_metadata_reject(self):
+        reference = metadata_message(bencoding.encode({b"msg_type": 2, b"piece": 0}))
+
+        with self.subTest("to_bytes"):
+            self.assertEqual(messages.metadata_reject(0).to_bytes(), reference)
+
+        with self.subTest("parse"):
+            message = messages.parse(reference)
+            self.assertIsInstance(message, messages.MetadataReject)
+            self.assertEqual(message.index, 0)
+
+    def test_metadata_request(self):
+        reference = metadata_message(bencoding.encode({b"msg_type": 0, b"piece": 0}))
+
+        with self.subTest("to_bytes"):
+            self.assertEqual(messages.metadata_request(0, 3).to_bytes(), reference)
+
+        with self.subTest("parse"):
+            message = messages.parse(reference)
+            self.assertIsInstance(message, messages.MetadataRequest)
+            self.assertEqual(message.index, 0)
+
+
 class ParseTest(unittest.TestCase):
     def test_missing_prefix(self):
         with self.assertRaises(ValueError):
@@ -169,3 +240,28 @@ class ParseTest(unittest.TestCase):
     def test_unknown_identifier(self):
         with self.assertRaises(ValueError):
             messages.parse(struct.pack(">LB", 1, 21))
+
+    def test_extension_parse(self):
+        with self.assertRaises(ValueError):
+            messages.parse(struct.pack(">LBB", 2, 20, 1))
+
+    def test_metadata_parse(self):
+        with self.subTest("missing b'msg_type'"):
+            with self.assertRaises(ValueError):
+                messages.parse(metadata_message(bencoding.encode({})))
+
+        with self.subTest("missing b'piece'"):
+            with self.assertRaises(ValueError):
+                messages.parse(metadata_message(bencoding.encode({b"msg_type": 0})))
+
+        with self.subTest("missing b'total_size'"):
+            with self.assertRaises(ValueError):
+                messages.parse(
+                    metadata_message(bencoding.encode({b"msg_type": 1, b"piece": 0}))
+                )
+
+        with self.subTest("invalid b'msg_type'"):
+            with self.assertRaises(ValueError):
+                messages.parse(
+                    metadata_message(bencoding.encode({b"msg_type": 3, b"piece": 0}))
+                )
