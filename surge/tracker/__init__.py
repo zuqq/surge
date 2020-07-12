@@ -103,8 +103,28 @@ class UDPTrackerConnection(actor.Actor):
         return f"<{class_name} object at {address} with url={repr(url)}>"
 
     async def _main(self, params):
+        loop = asyncio.get_running_loop()
         while True:
-            response = await _udp.request(self.url, params)
+            _, protocol = await loop.create_datagram_endpoint(
+                functools.partial(_udp.Protocol),
+                remote_addr=(self.url.hostname, self.url.port),
+            )
+            try:
+                transducer = _udp.udp(params)
+                received = None
+                while True:
+                    message, timeout = transducer.send(received)
+                    received = None
+                    protocol.write(message)
+                    try:
+                        received = await asyncio.wait_for(protocol.read(), timeout)
+                    except asyncio.TimeoutError:
+                        pass
+            except StopIteration as e:
+                response = e.value
+            finally:
+                await protocol.close()
+
             logging.info("%r received %r peers", self, len(response.peers))
             for peer in response.peers:
                 await self.parent.put(peer)

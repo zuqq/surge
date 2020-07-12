@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import dataclasses
+import enum
 import functools
 import secrets
 import struct
@@ -38,7 +39,7 @@ from . import _metadata
 
 class Request:
     def to_bytes(self) -> bytes:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
 
 class ConnectRequest(Request):
@@ -97,7 +98,7 @@ class AnnounceRequest(Request):
 class Response:
     @classmethod
     def from_bytes(cls, data: bytes) -> Response:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
 
 class ConnectResponse(Response):
@@ -138,7 +139,7 @@ def parse(data: bytes) -> Response:
 # Protocol ---------------------------------------------------------------------
 
 
-class _BaseProtocol(asyncio.DatagramProtocol):
+class Protocol(asyncio.DatagramProtocol):
     def __init__(self):
         super().__init__()
 
@@ -162,16 +163,16 @@ class _BaseProtocol(asyncio.DatagramProtocol):
         else:
             waiter.set_exception(exc)
 
-    async def _read(self):
+    async def read(self) -> Response:
         if self._exception is not None:
             raise self._exception
         if not self._queue:
             waiter = asyncio.get_running_loop().create_future()
             self._waiter = waiter
             await waiter
-        return self._queue.popleft()
+        return parse(self._queue.popleft())
 
-    def _write(self, message):
+    def write(self, message: Request):
         # There's no flow control for writes because we only send two datagrams
         # (plus retransmits, but those use exponential backoff).
         self._transport.sendto(message.to_bytes())
@@ -206,48 +207,30 @@ class _BaseProtocol(asyncio.DatagramProtocol):
         self._wake_up(exc)
 
 
-class Protocol(_BaseProtocol):
-    def __init__(self, params: _metadata.Parameters):
-        super().__init__()
-
-        self._params = params
-
-    async def _connect(self, n):
-        if n >= 9:
-            raise ConnectionError("Maximal number of retries reached.")
-        transaction_id = secrets.token_bytes(4)
-        self._write(ConnectRequest(transaction_id))
-        try:
-            raw_response = await asyncio.wait_for(self._read(), 15 * 2 ** n)
-        except asyncio.TimeoutError:
-            return await self._connect(n + 1)
-        else:
-            connection_id = parse(raw_response).connection_id
-            recv_time = time.monotonic()
-            return await self._announce(transaction_id, connection_id, n, recv_time)
-
-    async def _announce(self, transaction_id, connection_id, n, recv_time):
-        if n >= 9:
-            raise ConnectionError("Maximal number of retries reached.")
-        self._write(AnnounceRequest(transaction_id, connection_id, self._params))
-        try:
-            raw_response = await asyncio.wait_for(self._read(), 15 * 2 ** n)
-        except asyncio.TimeoutError:
-            if time.monotonic() - recv_time >= 60:
-                return await self._connect(n + 1)
-            return await self._announce(transaction_id, connection_id, n + 1, recv_time)
-        else:
-            return parse(raw_response).response
-
-    async def request(self) -> _metadata.Response:
-        return await self._connect(0)
+# Transducer -------------------------------------------------------------------
 
 
-async def request(url: urllib.parse.ParseResult, params: _metadata.Parameters):
-    _, protocol = await asyncio.get_running_loop().create_datagram_endpoint(
-        functools.partial(Protocol, params), remote_addr=(url.hostname, url.port)
-    )
-    try:
-        return await protocol.request()
-    finally:
-        await protocol.close()
+class State(enum.IntEnum):
+    CONNECT = 0
+    ANNOUNCE = 1
+
+
+def udp(params: _metadata.Parameters):
+    state = State.CONNECT
+    for n in range(9):
+        if state is State.CONNECT:
+            transaction_id = secrets.token_bytes(4)
+            received = yield (ConnectRequest(transaction_id), 15 * 2 ** n)
+            if isinstance(received, ConnectResponse):
+                connection_id = received.connection_id
+                # TODO: Pass in the time.
+                connection_time = time.monotonic()
+                state = State.ANNOUNCE
+        if state is State.ANNOUNCE:
+            message = AnnounceRequest(transaction_id, connection_id, params)
+            received = yield (message, 15 * 2 ** n)
+            if isinstance(received, AnnounceResponse):
+                return received.response
+            if time.monotonic() - connection_time >= 60:
+                state = State.CONNECT
+    raise ConnectionError("Maximal number of retries reached.")

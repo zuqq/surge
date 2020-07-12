@@ -3,6 +3,7 @@ import unittest
 
 from surge import bencoding
 from surge import metadata
+from surge import tracker
 
 
 class Example(unittest.TestCase):
@@ -27,3 +28,4 @@ class Example(unittest.TestCase):
             )
         ]
         cls.data = [b"s"]
+        cls.params = tracker.Parameters(cls.info_hash)
