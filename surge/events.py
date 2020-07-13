@@ -1,6 +1,7 @@
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Union
 
 import dataclasses
+import enum
 
 from . import messages
 from . import metadata
@@ -40,85 +41,53 @@ class NeedMessage:
 # Transducer -------------------------------------------------------------------
 
 
-class _State:
-    def __init__(self, name):
-        self._name = name
-
-    def __repr__(self):
-        return self._name
+class ConnectionState(enum.IntEnum):
+    CHOKED = 0
+    INTERESTED = 1
+    UNCHOKED = 2
 
 
-_CLOSED = _State("CLOSED")
-_OPEN = _State("OPEN")
-_WAITING = _State("WAITING")
-_CHOKED = _State("CHOKED")
-_INTERESTED = _State("INTERESTED")
-_UNCHOKED = _State("UNCHOKED")
+def base(pieces, info_hash, peer_id, available):
+    received = yield Send(messages.Handshake(info_hash, peer_id))
+    received = yield NeedMessage()
+    if not isinstance(received, messages.Handshake):
+        raise ConnectionError("Expected handshake.")
+    if received.info_hash != info_hash:
+        raise ConnectionError("Wrong info_hash.")
+
+    while True:
+        received = yield NeedMessage()
+        if isinstance(received, messages.Bitfield):
+            break
+    available.update(received.available(pieces))
+
+    state = ConnectionState.CHOKED
+    event = None
+    while True:
+        if event is None:
+            if state is ConnectionState.CHOKED:
+                state = ConnectionState.INTERESTED
+                event = Send(messages.Interested())
+            elif state is ConnectionState.INTERESTED:
+                event = NeedMessage()
+            elif state is ConnectionState.UNCHOKED:
+                event = Request()
+
+        received = yield event
+        event = None
+
+        if isinstance(received, messages.Choke):
+            state = ConnectionState.CHOKED
+            event = Receive(received)
+        elif isinstance(received, messages.Unchoke):
+            state = ConnectionState.UNCHOKED
+        elif isinstance(received, messages.Have):
+            available.add(received.piece(pieces))
+        elif isinstance(received, messages.Block):
+            event = Receive(received)
 
 
-class Transducer:
-    def __init__(
-            self,
-            pieces: Sequence[metadata.Piece],
-            info_hash: bytes,
-            peer_id: bytes):
-        self.available: Set[metadata.Piece] = set()  # Pieces that the peer has.
-        self._pieces = pieces
-        self._info_hash = info_hash
-        self._peer_id = peer_id
-        self._state = _CLOSED
-
-        # Maps `(state, message_type)` to `(callback, relay, new_state)`, where
-        # `relay` is a boolean indicating whether or not to relay the message to
-        # the caller. If a pair `(state, message_type)` does not appear here,
-        # then it is a no-op.
-        self._receive = {
-            (_UNCHOKED, messages.Choke): (None, True, _CHOKED),
-            (_CHOKED, messages.Unchoke): (None, False, _UNCHOKED),
-            (_INTERESTED, messages.Unchoke): (None, False, _UNCHOKED),
-            (_CHOKED, messages.Have): (self._on_have, False, _CHOKED),
-            (_UNCHOKED, messages.Have): (self._on_have, False, _UNCHOKED),
-            (_WAITING, messages.Bitfield): (self._on_bitfield, False, _CHOKED),
-            (_CHOKED, messages.Block): (None, True, _CHOKED),
-            (_UNCHOKED, messages.Block): (None, True, _UNCHOKED),
-            (_OPEN, messages.Handshake): (self._on_handshake, False, _WAITING),
-        }
-
-    def _on_have(self, message):
-        self.available.add(message.piece(self._pieces))
-
-    def _on_bitfield(self, message):
-        self.available = message.available(self._pieces)
-
-    def _on_handshake(self, message):
-        if message.info_hash != self._info_hash:
-            raise ConnectionError("Peer's info_hash doesn't match.")
-
-    def send(self, message) -> Union[Send, Receive, Request, NeedMessage]:
-        if message is not None:
-            callback, relay, self._state = self._receive.get(
-                (self._state, type(message)), (None, False, self._state)
-            )
-            if callback is not None:
-                callback(message)
-            if relay:
-                return Receive(message)
-
-        if self._state is _CLOSED:
-            self._state = _OPEN
-            return Send(messages.Handshake(self._info_hash, self._peer_id))
-
-        if self._state is _CHOKED:
-            self._state = _INTERESTED
-            return Send(messages.Interested())
-
-        if self._state is _UNCHOKED:
-            return Request()
-
-        return NeedMessage()
-
-
-# State ------------------------------------------------------------------------
+# DownloadState ----------------------------------------------------------------
 
 
 class Progress:
@@ -141,32 +110,36 @@ class Progress:
         self._data[block.begin : block.begin + block.length] = data
 
 
-class State(Transducer):
-    """A subclass of `Transducer` that knows how to downloads pieces."""
-
-    def __init__(
-            self,
-            pieces: Sequence[metadata.Piece],
-            info_hash: bytes,
-            peer_id: bytes,
-            max_requests: int):
-        super().__init__(pieces, info_hash, peer_id)
-
-        self.should_request = True  # Are there more blocks to request?
+class DownloadState:
+    def __init__(self, pieces, max_requests):
+        self.available: Set[metadata.Piece] = set()
+        self.requesting = True  # Are there more blocks to request?
+        self._pieces = pieces
         self._max_requests = max_requests
         self._progress: Dict[metadata.Piece, Progress] = {}
         self._stack: List[metadata.Block] = []
         self._requested: Set[metadata.Block] = set()
 
-    def _on_choke(self):
-        in_progress = tuple(self._progress)
-        self._progress.clear()
-        self._stack.clear()
-        self._requested.clear()
-        for piece in in_progress:
-            self.send_piece(piece)
+    @property
+    def can_request(self):
+        return self.requesting and len(self._requested) < self._max_requests
 
-    def _on_block(self, message) -> Optional[Result]:
+    def add_piece(self, piece):
+        blocks = tuple(metadata.blocks(piece))
+        self._progress[piece] = Progress(piece, blocks)
+        self._stack.extend(reversed(blocks))
+
+    def cancel_piece(self, piece):
+        self._progress.pop(piece)
+        self._requested = {b for b in self._requested if b.piece != piece}
+        self._stack = [b for b in self._stack if b.piece != piece]
+
+    def get_block(self):
+        block = self._stack.pop()
+        self._requested.add(block)
+        return block
+
+    def on_block(self, message):
         block = message.block(self._pieces)
         if block not in self._requested:
             return None
@@ -179,39 +152,37 @@ class State(Transducer):
         data = self._progress.pop(piece).data
         if metadata.valid_piece(piece, data):
             return Result(piece, data)
-        raise ConnectionError("Invalid data.")
+        raise ValueError("Invalid data.")
 
-    def send(self, message) -> Union[Send, Result, NeedPiece, NeedMessage]:
-        while True:
-            event = super().send(message)
-            message = None
-            if isinstance(event, Send):
-                return event
-            if isinstance(event, Receive):
-                received = event.message
-                if isinstance(received, messages.Choke):
-                    self._on_choke()
-                elif isinstance(received, messages.Block):
-                    result = self._on_block(received)
-                    if result is not None:
-                        return result
-            elif (isinstance(event, Request)
-                  and self.should_request
-                  and len(self._requested) < self._max_requests):
-                if not self._stack:
-                    return NeedPiece()
-                block = self._stack.pop()
-                self._requested.add(block)
-                return Send(messages.Request.from_block(block))
+    def on_choke(self):
+        in_progress = tuple(self._progress)
+        self._progress.clear()
+        self._stack.clear()
+        self._requested.clear()
+        for piece in in_progress:
+            self.add_piece(piece)
+
+
+def next_event(state, transducer, message):
+    while True:
+        event = transducer.send(message)
+        message = None
+        if isinstance(event, Send):
+            return event
+        elif isinstance(event, Receive):
+            received = event.message
+            if isinstance(received, messages.Choke):
+                state.on_choke()
+            elif isinstance(received, messages.Block):
+                result = state.on_block(received)
+                if result is not None:
+                    return result
+        elif isinstance(event, Request) and state.can_request:
+            try:
+                block = state.get_block()
+            except IndexError:
+                return NeedPiece()
             else:
-                return NeedMessage()
-
-    def send_piece(self, piece: metadata.Piece):
-        blocks = tuple(metadata.blocks(piece))
-        self._progress[piece] = Progress(piece, blocks)
-        self._stack.extend(reversed(blocks))
-
-    def cancel_piece(self, piece: metadata.Piece):
-        self._progress.pop(piece)
-        self._requested = {b for b in self._requested if b.piece != piece}
-        self._stack = [b for b in self._stack if b.piece != piece]
+                return Send(messages.Request.from_block(block))
+        else:
+            return NeedMessage()

@@ -150,31 +150,33 @@ class Node(Actor):
             peer: tracker.Peer,
             max_requests: int):
         super().__init__(parent)
-        self._coros.add(self._main())
+        self._coros.add(self._main(pieces, info_hash, peer_id))
 
         self.peer = peer
         self.downloading: Set[metadata.Piece] = set()
-        self._state = events.State(pieces, info_hash, peer_id, max_requests)
+        self._state = events.DownloadState(pieces, max_requests)
 
     def __repr__(self):
         class_name = self.__module__ + '.' + self.__class__.__qualname__
         peer = dataclasses.astuple(self.peer)
         return f"<{class_name} with peer={peer}>"
 
-    async def _main(self):
+    async def _main(self, pieces, info_hash, peer_id):
         async with Stream(self.peer) as stream:
             state = self._state
+            transducer = events.base(pieces, info_hash, peer_id, state.available)
+            next_event = functools.partial(events.next_event, state, transducer)
 
             # Unroll the first two iterations of the loop because handshake
             # messages don't have a length prefix.
-            event = state.send(None)
+            event = next_event(None)
             await stream.write(event.message)
 
-            event = state.send(None)
+            event = next_event(None)
             message = await stream.read_handshake()
 
             while True:
-                event = state.send(message)
+                event = next_event(message)
                 message = None
                 if isinstance(event, events.Send):
                     await stream.write(event.message)
@@ -184,10 +186,10 @@ class Node(Actor):
                 elif isinstance(event, events.NeedPiece):
                     piece = self.parent.get_nowait(self)
                     if piece is None:
-                        state.should_request = False
+                        state.requesting = False
                     else:
                         self.downloading.add(piece)
-                        state.send_piece(piece)
+                        state.add_piece(piece)
                 elif isinstance(event, events.NeedMessage):
                     message = await asyncio.wait_for(stream.read(), 5)
 
