@@ -3,9 +3,9 @@ import functools
 import struct
 import unittest
 
-from surge import events
 from surge import messages
 from surge import metadata
+from surge import protocol
 
 from ._example import Example
 
@@ -16,11 +16,11 @@ class StateTest(Example):
 
     def test_piece_download(self):
         info_hash = self.info_hash
-        state = events.DownloadState(self.pieces, 50)
-        transducer = events.base(self.pieces, info_hash, self.peer_id, state.available)
-        next_event = functools.partial(events.next_event, state, transducer)
+        state = protocol.DownloadState(self.pieces, 50)
+        transducer = protocol.base(self.pieces, info_hash, self.peer_id, state.available)
+        next_event = functools.partial(protocol.next_event, state, transducer)
         # Queue for outgoing messages. We process them whenever `state.send`
-        # returns `events.NeedMessage`.
+        # returns `protocol.NeedMessage`.
         queue = collections.deque()
         piece = self.pieces[0]
         data = self.data[0]
@@ -30,18 +30,18 @@ class StateTest(Example):
         # Unroll the first couple of iterations of the loop because the
         # handshake and bitfield are only sent once.
         event = next_event(None)
-        self.assertIsInstance(event, events.Send)
+        self.assertIsInstance(event, protocol.Send)
         sent = event.message
         self.assertIsInstance(sent, messages.Handshake)
 
         event = next_event(None)
-        self.assertIsInstance(event, events.NeedMessage)
+        self.assertIsInstance(event, protocol.NeedMessage)
 
         event = next_event(messages.Handshake(self.info_hash, self.other_peer_id))
-        self.assertIsInstance(event, events.NeedMessage)
+        self.assertIsInstance(event, protocol.NeedMessage)
 
         event = next_event(messages.Bitfield.from_indices({0}, len(self.pieces)))
-        self.assertIsInstance(event, events.Send)
+        self.assertIsInstance(event, protocol.Send)
         sent = event.message
         self.assertIsInstance(sent, messages.Interested)
         message = messages.Unchoke()
@@ -49,17 +49,17 @@ class StateTest(Example):
         while True:
             event = next_event(message)
             message = None
-            if isinstance(event, events.Send):
+            if isinstance(event, protocol.Send):
                 queue.append(event.message)
-            elif isinstance(event, events.Result):
+            elif isinstance(event, protocol.Result):
                 break
-            elif isinstance(event, events.NeedPiece):
+            elif isinstance(event, protocol.NeedPiece):
                 if not sent_piece:
                     state.add_piece(piece)
                     sent_piece = True
                 else:
                     state.requesting = False
-            elif isinstance(event, events.NeedMessage):
+            elif isinstance(event, protocol.NeedMessage):
                 while queue:
                     sent = queue.popleft()
                     if isinstance(sent, messages.Request):

@@ -8,8 +8,8 @@ import dataclasses
 import functools
 import random
 
-from . import events
 from . import metadata
+from . import protocol
 from . import tracker
 from .actor import Actor
 from .stream import Stream
@@ -154,7 +154,7 @@ class Node(Actor):
 
         self.peer = peer
         self.downloading: Set[metadata.Piece] = set()
-        self._state = events.DownloadState(pieces, max_requests)
+        self._state = protocol.DownloadState(pieces, max_requests)
 
     def __repr__(self):
         class_name = self.__module__ + '.' + self.__class__.__qualname__
@@ -164,8 +164,8 @@ class Node(Actor):
     async def _main(self, pieces, info_hash, peer_id):
         async with Stream(self.peer) as stream:
             state = self._state
-            transducer = events.base(pieces, info_hash, peer_id, state.available)
-            next_event = functools.partial(events.next_event, state, transducer)
+            transducer = protocol.base(pieces, info_hash, peer_id, state.available)
+            next_event = functools.partial(protocol.next_event, state, transducer)
 
             # Unroll the first two iterations of the loop because handshake
             # messages don't have a length prefix.
@@ -178,19 +178,19 @@ class Node(Actor):
             while True:
                 event = next_event(message)
                 message = None
-                if isinstance(event, events.Send):
+                if isinstance(event, protocol.Send):
                     await stream.write(event.message)
-                elif isinstance(event, events.Result):
+                elif isinstance(event, protocol.Result):
                     self.downloading.remove(event.piece)
                     await self.parent.put(self, event.piece, event.data)
-                elif isinstance(event, events.NeedPiece):
+                elif isinstance(event, protocol.NeedPiece):
                     piece = self.parent.get_nowait(self)
                     if piece is None:
                         state.requesting = False
                     else:
                         self.downloading.add(piece)
                         state.add_piece(piece)
-                elif isinstance(event, events.NeedMessage):
+                elif isinstance(event, protocol.NeedMessage):
                     message = await asyncio.wait_for(stream.read(), 5)
 
     @property

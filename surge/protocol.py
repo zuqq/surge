@@ -182,7 +182,6 @@ def next_event(state, transducer, message):
                 block = state.get_block()
             except IndexError:
                 return NeedPiece()
-            else:
-                return Send(messages.Request.from_block(block))
+            return Send(messages.Request.from_block(block))
         else:
             return NeedMessage()
