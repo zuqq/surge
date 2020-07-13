@@ -107,7 +107,7 @@ def mex(info_hash: bytes, peer_id: bytes):
 
 async def download(announce_list, params, max_peers):
     async with Root(announce_list, params, max_peers) as root:
-        return await root
+        return await root.result
 
 
 class Root(Actor):
@@ -121,12 +121,9 @@ class Root(Actor):
         self.children.add(peer_queue)
         self._coros.add(self._main(params, peer_queue))
 
+        self.result = asyncio.get_event_loop().create_future()
         self._announce_list = announce_list
         self._slots = asyncio.Semaphore(max_peers)
-        self._waiter = asyncio.get_event_loop().create_future()
-
-    def __await__(self):
-        return self._waiter.__await__()
 
     async def _main(self, params, peer_queue):
         while True:
@@ -141,8 +138,8 @@ class Root(Actor):
             super()._on_child_crash(child)
 
     def done(self, raw_info: bytes):
-        if not self._waiter.done():
-            self._waiter.set_result(assemble(self._announce_list, raw_info))
+        if not self.result.done():
+            self.result.set_result(assemble(self._announce_list, raw_info))
 
 
 class Node(Actor):

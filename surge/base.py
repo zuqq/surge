@@ -12,6 +12,7 @@ from . import metadata
 from . import protocol
 from . import tracker
 from .actor import Actor
+from .channel import Channel
 from .stream import Stream
 
 
@@ -52,7 +53,7 @@ async def download(
         chunks = metadata.piece_to_chunks(meta.pieces, meta.files)
         loop = asyncio.get_running_loop()
         folder = meta.folder
-        async for piece, data in root:
+        async for piece, data in root.results:
             for chunk in chunks[piece]:
                 await loop.run_in_executor(
                     None, functools.partial(metadata.write_chunk, folder, chunk, data)
@@ -78,18 +79,10 @@ class Root(Actor):
         )
 
         self.missing = missing
-        self._queue = asyncio.Queue(max_peers)  # type: ignore
+        self.results = Channel(max_peers)
         self._slots = asyncio.Semaphore(max_peers)
         self._downloading: DefaultDict[metadata.Piece, Set[Node]]
         self._downloading = collections.defaultdict(set)
-
-    def __aiter__(self):
-        return self
-
-    async def __anext__(self):
-        if (item := await self._queue.get()) is None:
-            raise StopAsyncIteration
-        return item
 
     async def _main(self, pieces, info_hash, peer_id, max_requests):
         while True:
@@ -135,9 +128,9 @@ class Root(Actor):
         self._downloading[piece].remove(node)
         for child in self._downloading.pop(piece):
             child.cancel_piece(piece)
-        await self._queue.put((piece, data))
+        await self.results.put((piece, data))
         if not self.missing:
-            await self._queue.put(None)
+            await self.results.close()
 
 
 class Node(Actor):
