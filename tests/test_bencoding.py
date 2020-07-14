@@ -3,7 +3,7 @@ import unittest
 from surge import bencoding
 
 
-class BencodingTest(unittest.TestCase):
+class TestBencoding(unittest.TestCase):
     # Examples from BEP 3.
     valid = [
         (b"i3e", 3),

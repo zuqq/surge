@@ -3,7 +3,7 @@ import unittest
 from surge import magnet
 
 
-class ParseTest(unittest.TestCase):
+class TestMagnet(unittest.TestCase):
     def test_parse(self):
         with self.subTest("valid"):
             self.assertEqual(

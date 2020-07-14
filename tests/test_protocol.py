@@ -10,7 +10,7 @@ from surge import protocol
 from ._example import Example
 
 
-class StateTest(Example):
+class TestProtocol(Example):
     # Identifier for the peer.
     other_peer_id = b"\xbe\xbb\xe9R\t\xcb!\xffu\xd1\x10\xc3X\\\x05\xab\x945\xee\x9a"
 

@@ -1,11 +1,12 @@
 import unittest
 
-from ._example import Example
 from surge.tracker import _metadata
 from surge.tracker import _udp
 
+from ._example import Example
 
-class UDPTest(Example):
+
+class TestUDP(Example):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()

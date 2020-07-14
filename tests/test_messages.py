@@ -8,7 +8,7 @@ from surge import messages
 from ._example import Example
 
 
-class HandshakeTest(Example):
+class TestHandshake(Example):
     format = ">B19sQ20s20s"
     pstrlen = 19
     pstr = b"BitTorrent protocol"
@@ -47,7 +47,7 @@ class HandshakeTest(Example):
         self.assertTrue(reserved & (1 << 20))
 
 
-class KeepaliveTest(unittest.TestCase):
+class TestKeepalive(unittest.TestCase):
     reference = struct.pack(">L", 0)
 
     def test_to_bytes(self):
@@ -57,7 +57,7 @@ class KeepaliveTest(unittest.TestCase):
         self.assertIsInstance(messages.parse(self.reference), messages.Keepalive)
 
 
-class ChokeTest(unittest.TestCase):
+class TestChoke(unittest.TestCase):
     reference = struct.pack(">LB", 1, 0)
 
     def test_to_bytes(self):
@@ -67,22 +67,22 @@ class ChokeTest(unittest.TestCase):
         self.assertIsInstance(messages.parse(self.reference), messages.Choke)
 
 
-class UnchokeTest(unittest.TestCase):
+class TestUnchoke(unittest.TestCase):
     def test_to_bytes(self):
         self.assertEqual(messages.Unchoke().to_bytes(), struct.pack(">LB", 1, 1))
 
 
-class InterestedTest(unittest.TestCase):
+class TestInterested(unittest.TestCase):
     def test_to_bytes(self):
         self.assertEqual(messages.Interested().to_bytes(), struct.pack(">LB", 1, 2))
 
 
-class NotInterestedTest(unittest.TestCase):
+class TestInterested(unittest.TestCase):
     def test_to_bytes(self):
         self.assertEqual(messages.NotInterested().to_bytes(), struct.pack(">LB", 1, 3))
 
 
-class HaveTest(Example):
+class TestHave(Example):
     reference = struct.pack(">LBL", 5, 4, 0)
 
     def test_to_bytes(self):
@@ -95,7 +95,7 @@ class HaveTest(Example):
         self.assertEqual(messages.Have(0).piece(self.pieces), self.pieces[0])
 
 
-class BitfieldTest(Example):
+class TestBitfield(Example):
     reference = struct.pack(">LBB", 2, 5, 1 << 7)
 
     def test_to_bytes(self):
@@ -111,7 +111,7 @@ class BitfieldTest(Example):
         )
 
 
-class RequestTest(Example):
+class TestRequest(Example):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -132,7 +132,7 @@ class RequestTest(Example):
         )
 
 
-class BlockTest(Example):
+class TestBlock(Example):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -159,7 +159,7 @@ def metadata_message(payload):
     return struct.pack(f">LBB{len(payload)}s", 1 + 1 + len(payload), 20, 3, payload)
 
 
-class ExtensionProtocolTest(Example):
+class ProtocolExtensionTest(Example):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -231,7 +231,7 @@ class ExtensionProtocolTest(Example):
             self.assertEqual(message.index, 0)
 
 
-class ParseTest(unittest.TestCase):
+class TestParse(unittest.TestCase):
     def test_missing_prefix(self):
         with self.assertRaises(ValueError):
             messages.parse(struct.pack(">B", 0))
