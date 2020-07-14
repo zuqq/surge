@@ -115,7 +115,6 @@ class RequestTest(Example):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-
         block, *_ = metadata.blocks(cls.pieces[0])
         cls.block = block
         cls.reference = struct.pack(
@@ -137,7 +136,6 @@ class BlockTest(Example):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-
         block, *_ = metadata.blocks(cls.pieces[0])
         cls.block = block
         cls.block_data = cls.data[0][block.begin : block.begin + block.length]
@@ -162,6 +160,11 @@ def metadata_message(payload):
 
 
 class ExtensionProtocolTest(Example):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.metadata_size = len(cls.raw_info)
+
     def test_extension_handshake(self):
         with self.subTest("to_bytes"):
             message = messages.extension_handshake().to_bytes()

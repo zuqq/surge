@@ -15,9 +15,10 @@ class StateTest(Example):
     other_peer_id = b"\xbe\xbb\xe9R\t\xcb!\xffu\xd1\x10\xc3X\\\x05\xab\x945\xee\x9a"
 
     def test_piece_download(self):
-        info_hash = self.info_hash
         state = protocol.DownloadState(self.pieces, 50)
-        transducer = protocol.base(self.pieces, info_hash, self.peer_id, state.available)
+        transducer = protocol.base(
+            self.pieces, self.info_hash, self.peer_id, state.available
+        )
         next_event = functools.partial(protocol.next_event, state, transducer)
         # Queue for outgoing messages. We process them whenever `state.send`
         # returns `protocol.NeedMessage`.
