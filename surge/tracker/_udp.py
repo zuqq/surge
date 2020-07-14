@@ -64,33 +64,21 @@ class AnnounceRequest(Request):
         self.params = params
 
     def to_bytes(self) -> bytes:
-        ps = dataclasses.asdict(self.params)
-        ps.update(
-            {
-                "connection_id": self.connection_id,
-                "value": self.value,
-                "transaction_id": self.transaction_id,
-                "event": 0,
-                "ip": 0,
-                "key": secrets.token_bytes(4),
-                "num_want": -1,
-            }
-        )
         return struct.pack(
             ">8sl4s20s20sqqqlL4slH",
-            ps["connection_id"],
-            ps["value"],
-            ps["transaction_id"],
-            ps["info_hash"],
-            ps["peer_id"],
-            ps["downloaded"],
-            ps["left"],
-            ps["uploaded"],
-            ps["event"],
-            ps["ip"],
-            ps["key"],
-            ps["num_want"],
-            ps["port"],
+            self.connection_id,
+            self.value,
+            self.transaction_id,
+            self.params.info_hash,
+            self.params.peer_id,
+            self.params.downloaded,
+            self.params.left,
+            self.params.uploaded,
+            0,
+            0,
+            secrets.token_bytes(4),
+            -1,
+            self.params.port,
         )
 
 
