@@ -4,6 +4,7 @@ import asyncio
 import dataclasses
 import functools
 import logging
+import time
 import urllib.parse
 
 import aiohttp
@@ -111,15 +112,14 @@ class UDPTrackerConnection(actor.Actor):
             )
             try:
                 transducer = _udp.udp(params)
-                received = None
+                message, timeout = transducer.send(None)
                 while True:
-                    message, timeout = transducer.send(received)
-                    received = None
                     protocol.write(message)
                     try:
                         received = await asyncio.wait_for(protocol.read(), timeout)
                     except asyncio.TimeoutError:
-                        pass
+                        received = None
+                    message, timeout = transducer.send((received, time.monotonic()))
             except StopIteration as e:
                 response = e.value
             finally:

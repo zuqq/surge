@@ -28,7 +28,6 @@ import enum
 import functools
 import secrets
 import struct
-import time
 import urllib
 
 from . import _metadata
@@ -147,8 +146,6 @@ class Protocol(asyncio.DatagramProtocol):
         self._closed = asyncio.get_event_loop().create_future()
         self._exception = None
 
-        # If this limit is ever hit, something went very wrong: we only expect
-        # two datagrams from the tracker!
         self._queue = collections.deque(maxlen=10)
         self._waiter = None
 
@@ -173,8 +170,7 @@ class Protocol(asyncio.DatagramProtocol):
         return parse(self._queue.popleft())
 
     def write(self, message: Request):
-        # There's no flow control for writes because we only send two datagrams
-        # (plus retransmits, but those use exponential backoff).
+        # I'm omitting flow control because every write is followed by a read.
         self._transport.sendto(message.to_bytes())
 
     async def close(self):
@@ -220,17 +216,16 @@ def udp(params: _metadata.Parameters):
     for n in range(9):
         if state is State.CONNECT:
             transaction_id = secrets.token_bytes(4)
-            received = yield (ConnectRequest(transaction_id), 15 * 2 ** n)
+            (received, time) = yield (ConnectRequest(transaction_id), 15 * 2 ** n)
             if isinstance(received, ConnectResponse):
                 connection_id = received.connection_id
-                # TODO: Pass in the time.
-                connection_time = time.monotonic()
+                connection_time = time
                 state = State.ANNOUNCE
         if state is State.ANNOUNCE:
             message = AnnounceRequest(transaction_id, connection_id, params)
-            received = yield (message, 15 * 2 ** n)
+            (received, time) = yield (message, 15 * 2 ** n)
             if isinstance(received, AnnounceResponse):
                 return received.response
-            if time.monotonic() - connection_time >= 60:
+            if time - connection_time >= 60:
                 state = State.CONNECT
     raise ConnectionError("Maximal number of retries reached.")
