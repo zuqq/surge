@@ -24,8 +24,10 @@ class Handshake(Message):
         self.metadata_size = metadata_size
 
     def to_bytes(self) -> bytes:
-        # TODO: Add `self.metadata_size` if it's not `None`.
-        payload = bencoding.encode({b"m": {b"ut_metadata": self.ut_metadata}})
+        d = {b"m": {b"ut_metadata": self.ut_metadata}}
+        if self.metadata_size is not None:
+            d[b"metadata_size"] = self.metadata_size
+        payload = bencoding.encode(d)
         return struct.pack(f">B{len(payload)}s", self.value, payload)
 
     @classmethod
