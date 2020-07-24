@@ -18,17 +18,13 @@ class TestMex(Example):
         self.assertIsInstance(sent, messages.Handshake)
 
         sent = transducer.send(messages.Handshake(self.info_hash, self.other_peer_id))
-        self.assertIsInstance(sent, messages.ExtensionProtocol)
-        self.assertIsInstance(sent.extension_message, messages.ExtensionHandshake)
+        self.assertIsInstance(sent, messages.ExtensionHandshake)
 
         sent = transducer.send(messages.ExtensionHandshake(3, metadata_size))
         with self.assertRaises(StopIteration) as cm:
             for i in range((metadata_size + piece_length - 1) // piece_length):
-                self.assertIsInstance(sent, messages.ExtensionProtocol)
-                self.assertIsInstance(sent.extension_message, messages.MetadataProtocol)
-                metadata_message = sent.extension_message.metadata_message
-                self.assertIsInstance(metadata_message, messages.MetadataRequest)
-                self.assertEqual(metadata_message.index, i)
+                self.assertIsInstance(sent, messages.MetadataRequest)
+                self.assertEqual(sent.index, i)
                 sent = transducer.send(
                     messages.MetadataData(
                         i,

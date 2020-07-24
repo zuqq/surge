@@ -68,7 +68,7 @@ def mex(info_hash: bytes, peer_id: bytes):
     if received.info_hash != info_hash:
         raise ValueError("Wrong 'info_hash'.")
 
-    message = messages.extension_handshake()
+    message = messages.ExtensionHandshake()
     while True:
         received = yield message
         message = None
@@ -85,7 +85,7 @@ def mex(info_hash: bytes, peer_id: bytes):
     piece_length = 2 ** 14
     pieces = []
     for i in range((metadata_size + piece_length - 1) // piece_length):
-        message = messages.metadata_request(i, ut_metadata)
+        message = messages.MetadataRequest(i, ut_metadata)
         while True:
             received = yield message
             message = None

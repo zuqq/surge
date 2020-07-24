@@ -1,10 +1,9 @@
 from __future__ import annotations
-from typing import Dict, Sequence, Set, Tuple, Type, Union
+from typing import Dict, Optional, Sequence, Set, Tuple, Type, Union
 
 import struct
 
-from . import _extension
-from . import _metadata
+from .. import bencoding
 from .. import metadata
 
 
@@ -36,11 +35,8 @@ class Handshake(Message):
     reserved = 0
 
     def __init__(
-            self,
-            info_hash: bytes,
-            peer_id: bytes,
-            *,
-            extension_protocol: bool = False):
+        self, info_hash: bytes, peer_id: bytes, *, extension_protocol: bool = False
+    ):
         self.info_hash = info_hash
         self.peer_id = peer_id
         if extension_protocol:
@@ -199,9 +195,8 @@ class Block(Message):
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Block:
-        _, _, index, begin, data = struct.unpack(
-            f">LBLL{len(data) - 4 - 1 - 4 - 4}s", data
-        )
+        # TODO: Don't shadow `data`!
+        _, _, index, begin, data = struct.unpack(f">LBLL{len(data) - 13}s", data)
         return cls(index, begin, data)
 
     def block(self, pieces: Sequence[metadata.Piece]) -> metadata.Block:
@@ -218,27 +213,144 @@ class Port(Message):
     value = 9
 
 
+# Extension protocol -----------------------------------------------------------
+
+
 @register
 class ExtensionProtocol(Message):
     value = 20
 
-    def __init__(self, extension_message: _extension.Message):
-        self.extension_message = extension_message
-
     def to_bytes(self) -> bytes:
-        payload = self.extension_message.to_bytes()
-        n = len(payload)
-        return struct.pack(f">LB{n}s", n + 1, self.value, payload)
+        raise NotImplementedError  # pragma: no cover
 
     @classmethod
     def from_bytes(cls, data: bytes) -> ExtensionProtocol:
-        return cls(_extension.parse(data[5:]))
+        if data[5] == ExtensionHandshake.extension_value:
+            return ExtensionHandshake.from_bytes(data)
+        if data[5] == MetadataProtocol.extension_value:
+            return MetadataProtocol.from_bytes(data)
+        raise ValueError("Unknown extension protocol identifier.")
+
+
+class ExtensionHandshake(ExtensionProtocol):
+    extension_value = 0
+
+    def __init__(self, ut_metadata: int = 3, metadata_size: Optional[int] = None):
+        self.ut_metadata = ut_metadata
+        self.metadata_size = metadata_size
+
+    def to_bytes(self) -> bytes:
+        d = {b"m": {b"ut_metadata": self.ut_metadata}}
+        if self.metadata_size is not None:
+            d[b"metadata_size"] = self.metadata_size
+        payload = bencoding.encode(d)
+        n = len(payload)
+        return struct.pack(
+            f">LBB{n}s", n + 2, self.value, self.extension_value, payload
+        )
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> ExtensionHandshake:
+        d = bencoding.decode(data[6:])
+        return cls(d[b"m"][b"ut_metadata"], d[b"metadata_size"])
+
+
+# Metadata protocol ------------------------------------------------------------
+
+
+class MetadataProtocol(ExtensionProtocol):
+    extension_value = 3
+
+    def __init__(self, ut_metadata: int = 3):
+        self.extension_value = ut_metadata
+
+    def to_bytes(self) -> bytes:
+        raise NotImplementedError  # pragma: no cover
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> MetadataProtocol:
+        i, d = bencoding.decode_from(data, 6)
+        if b"msg_type" not in d:
+            raise ValueError("Missing key b'msg_type'.")
+        metadata_value = d[b"msg_type"]
+        if b"piece" not in d:
+            raise ValueError("Missing key b'piece'.")
+        index = d[b"piece"]
+        if metadata_value == MetadataRequest.metadata_value:
+            return MetadataRequest(index)
+        if metadata_value == MetadataData.metadata_value:
+            if b"total_size" not in d:
+                raise ValueError("Missing key b'total_size'.")
+            return MetadataData(index, d[b"total_size"], data[i:])
+        if metadata_value == MetadataReject.metadata_value:
+            return MetadataReject(index)
+        raise ValueError("Invalid value for b'msg_type'.")
+
+
+class MetadataRequest(MetadataProtocol):
+    metadata_value = 0
+
+    def __init__(self, index: int, ut_metadata: int = 3):
+        super().__init__(ut_metadata)
+        self.index = index
+
+    def to_bytes(self) -> bytes:
+        payload = bencoding.encode(
+            {b"msg_type": self.metadata_value, b"piece": self.index}
+        )
+        n = len(payload)
+        return struct.pack(
+            f">LBB{n}s", n + 2, self.value, self.extension_value, payload
+        )
+
+
+class MetadataData(MetadataProtocol):
+    metadata_value = 1
+
+    def __init__(self, index: int, total_size: int, data: bytes, ut_metadata: int = 3):
+        super().__init__(ut_metadata)
+        self.index = index
+        self.total_size = total_size
+        self.data = data
+
+    def to_bytes(self) -> bytes:
+        d = {
+            b"msg_type": self.metadata_value,
+            b"piece": self.index,
+            b"total_size": self.total_size,
+        }
+        payload = bencoding.encode(d) + self.data
+        n = len(payload)
+        return struct.pack(
+            f">LBB{n}s", n + 2, self.value, self.extension_value, payload
+        )
+
+
+class MetadataReject(MetadataProtocol):
+    metadata_value = 2
+
+    def __init__(self, index: int, ut_metadata: int = 3):
+        super().__init__(ut_metadata)
+        self.index = index
+
+    def to_bytes(self) -> bytes:
+        payload = bencoding.encode(
+            {b"msg_type": self.metadata_value, b"piece": self.index}
+        )
+        n = len(payload)
+        return struct.pack(
+            f">LBB{n}s", n + 2, self.value, self.extension_value, payload
+        )
 
 
 # Parser -----------------------------------------------------------------------
 
 
-def parse(data: bytes) -> Union[Message, _extension.Message, _metadata.Message]:
+def parse_handshake(data: bytes) -> Handshake:
+    return Handshake.from_bytes(data)
+
+
+def parse(data: bytes) -> Message:
     n = int.from_bytes(data[:4], "big")
     if len(data) != 4 + n:
         raise ValueError("Incorrect length prefix.")
@@ -248,15 +360,4 @@ def parse(data: bytes) -> Union[Message, _extension.Message, _metadata.Message]:
         return Keepalive()
     except KeyError:
         raise ValueError("Unknown message identifier.")
-    message = cls.from_bytes(data)
-
-    if cls is not ExtensionProtocol:
-        return message
-
-    # The extension protocol contains nested messages. We unpack them because
-    # that makes implementing the protocol state machine more convenient.
-    extension_message = message.extension_message  # type: ignore
-    if isinstance(extension_message, _extension.Handshake):
-        return extension_message
-    if isinstance(extension_message, _extension.Metadata):
-        return extension_message.metadata_message
+    return cls.from_bytes(data)
