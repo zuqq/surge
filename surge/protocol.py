@@ -51,9 +51,9 @@ def base(pieces, info_hash, peer_id, available):
     received = yield Send(messages.Handshake(info_hash, peer_id))
     received = yield NeedMessage()
     if not isinstance(received, messages.Handshake):
-        raise ConnectionError("Expected handshake.")
+        raise TypeError("Expected handshake.")
     if received.info_hash != info_hash:
-        raise ConnectionError("Wrong info_hash.")
+        raise ValueError("Wrong 'info_hash'.")
 
     # Wait for the peer to send us its bitfield. This is not mandated by the
     # specification, but makes requesting pieces later much easier.

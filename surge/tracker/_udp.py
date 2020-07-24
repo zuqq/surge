@@ -199,6 +199,10 @@ class State(enum.IntEnum):
     ANNOUNCE = 1
 
 
+class TimeoutError(Exception):
+    pass
+
+
 def udp(params: _metadata.Parameters):
     state = State.CONNECT
     for n in range(9):
@@ -216,4 +220,4 @@ def udp(params: _metadata.Parameters):
                 return received.response
             if time - connection_time >= 60:
                 state = State.CONNECT
-    raise ConnectionError("Maximal number of retries reached.")
+    raise TimeoutError("Maximal number of retries reached.")

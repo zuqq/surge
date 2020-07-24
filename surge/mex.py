@@ -64,9 +64,9 @@ def assemble(announce_list: Iterable[str], raw_info: bytes) -> bytes:
 def mex(info_hash: bytes, peer_id: bytes):
     received = yield messages.Handshake(info_hash, peer_id, extension_protocol=True)
     if not isinstance(received, messages.Handshake):
-        raise ConnectionError("Expected handshake.")
+        raise TypeError("Expected handshake.")
     if received.info_hash != info_hash:
-        raise ConnectionError("Wrong info_hash.")
+        raise ValueError("Wrong 'info_hash'.")
 
     message = messages.extension_handshake()
     while True:
@@ -100,7 +100,7 @@ def mex(info_hash: bytes, peer_id: bytes):
     raw_info = b"".join(pieces)
     if valid_info(info_hash, raw_info):
         return raw_info
-    raise ConnectionError("Invalid data.")
+    raise ValueError("Invalid data.")
 
 
 # Actors -----------------------------------------------------------------------
