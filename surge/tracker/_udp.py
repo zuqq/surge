@@ -204,14 +204,14 @@ def udp(params: _metadata.Parameters):
     for n in range(9):
         if state is State.CONNECT:
             transaction_id = secrets.token_bytes(4)
-            (received, time) = yield (ConnectRequest(transaction_id), 15 * 2 ** n)
+            received, time = yield (ConnectRequest(transaction_id), 15 * 2 ** n)
             if isinstance(received, ConnectResponse):
                 connection_id = received.connection_id
                 connection_time = time
                 state = State.ANNOUNCE
         if state is State.ANNOUNCE:
             message = AnnounceRequest(transaction_id, connection_id, params)
-            (received, time) = yield (message, 15 * 2 ** n)
+            received, time = yield (message, 15 * 2 ** n)
             if isinstance(received, AnnounceResponse):
                 return received.response
             if time - connection_time >= 60:

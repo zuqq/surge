@@ -55,11 +55,13 @@ def base(pieces, info_hash, peer_id, available):
     if received.info_hash != info_hash:
         raise ConnectionError("Wrong info_hash.")
 
+    # Wait for the peer to send us its bitfield. This is not mandated by the
+    # specification, but makes requesting pieces later much easier.
     while True:
         received = yield NeedMessage()
         if isinstance(received, messages.Bitfield):
+            available.update(received.available(pieces))
             break
-    available.update(received.available(pieces))
 
     state = ConnectionState.CHOKED
     event = None

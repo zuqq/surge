@@ -43,7 +43,6 @@ class TestHandshake(Example):
             self.info_hash, self.peer_id, extension_protocol=True
         )
         _, _, reserved, _, _ = struct.unpack(self.format, message.to_bytes())
-
         self.assertTrue(reserved & (1 << 20))
 
 

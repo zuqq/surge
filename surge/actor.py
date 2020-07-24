@@ -33,6 +33,8 @@ class Actor:
         self._tasks = {asyncio.create_task(coro) for coro in self._coros}
         try:
             await asyncio.gather(*self._tasks)
+        # It's okay to catch `Exception` here because `asyncio.CancelledError`
+        # derives directly from `BaseException` in Python 3.8.
         except Exception as e:
             if self.running:
                 logging.warning("%r crashed with %r", self, e)

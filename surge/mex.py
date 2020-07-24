@@ -73,9 +73,9 @@ def mex(info_hash: bytes, peer_id: bytes):
         received = yield message
         message = None
         if isinstance(received, messages.ExtensionHandshake):
+            ut_metadata = received.ut_metadata
+            metadata_size = received.metadata_size
             break
-    ut_metadata = received.ut_metadata
-    metadata_size = received.metadata_size
 
     # The metadata is partitioned into pieces of size `2 ** 14`, except for the
     # last piece which may be smaller. The peer knows this partition, so we only
@@ -90,11 +90,12 @@ def mex(info_hash: bytes, peer_id: bytes):
             received = yield message
             message = None
             if isinstance(received, messages.MetadataData):
+                # We assume that the peer sends us data for the piece that we
+                # just requested; if not, the result of the transaction will be
+                # invalid. This assumption is reasonable because we request one
+                # piece at a time.
+                pieces.append(received.data)
                 break
-        # This assumes that the peer sends us the correct piece; if not, the
-        # resulting data will be invalid. This should be fine, because we only
-        # request a single piece at a time.
-        pieces.append(received.data)
 
     raw_info = b"".join(pieces)
     if valid_info(info_hash, raw_info):

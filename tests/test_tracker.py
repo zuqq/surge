@@ -23,7 +23,7 @@ class TestUDP(Example):
         interval = 1800
         peers = [_metadata.Peer("127.0.0.1", 6969)]
         with self.assertRaises(StopIteration) as cm:
-            message, _ = transducer.send(
+            transducer.send(
                 (_udp.AnnounceResponse(_metadata.Response(interval, peers)), 1)
             )
         response = cm.exception.value

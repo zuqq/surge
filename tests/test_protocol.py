@@ -20,13 +20,6 @@ class TestProtocol(Example):
             self.pieces, self.info_hash, self.peer_id, state.available
         )
         next_event = functools.partial(protocol.next_event, state, transducer)
-        # Queue for outgoing messages. We process them whenever `state.send`
-        # returns `protocol.NeedMessage`.
-        queue = collections.deque()
-        piece = self.pieces[0]
-        data = self.data[0]
-        # Flag to make sure that we only download one piece.
-        sent_piece = False
 
         # Unroll the first couple of iterations of the loop because the
         # handshake and bitfield are only sent once.
@@ -47,22 +40,26 @@ class TestProtocol(Example):
         self.assertIsInstance(sent, messages.Interested)
         message = messages.Unchoke()
 
+        outbox = collections.deque()
+        piece = self.pieces[0]
+        data = self.data[0]
+        added_piece = False
         while True:
             event = next_event(message)
             message = None
             if isinstance(event, protocol.Send):
-                queue.append(event.message)
+                outbox.append(event.message)
             elif isinstance(event, protocol.Result):
                 break
             elif isinstance(event, protocol.NeedPiece):
-                if not sent_piece:
+                if not added_piece:
                     state.add_piece(piece)
-                    sent_piece = True
+                    added_piece = True
                 else:
                     state.requesting = False
             elif isinstance(event, protocol.NeedMessage):
-                while queue:
-                    sent = queue.popleft()
+                while outbox:
+                    sent = outbox.popleft()
                     if isinstance(sent, messages.Request):
                         block = sent.block(self.pieces)
                         self.assertEqual(block.piece, piece)
