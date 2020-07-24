@@ -169,5 +169,5 @@ class Node(Actor):
                     if message is not None:
                         await stream.write(message)
                     received = await asyncio.wait_for(stream.read(), 5)
-            except StopIteration as e:
-                self.parent.done(e.value)
+            except StopIteration as exc:
+                self.parent.done(exc.value)

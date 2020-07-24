@@ -120,8 +120,8 @@ class UDPTrackerConnection(actor.Actor):
                     except asyncio.TimeoutError:
                         received = None
                     message, timeout = transducer.send((received, time.monotonic()))
-            except StopIteration as e:
-                response = e.value
+            except StopIteration as exc:
+                response = exc.value
             finally:
                 await protocol.close()
 

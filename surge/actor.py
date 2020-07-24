@@ -35,9 +35,9 @@ class Actor:
             await asyncio.gather(*self._tasks)
         # It's okay to catch `Exception` here because `asyncio.CancelledError`
         # derives directly from `BaseException` in Python 3.8.
-        except Exception as e:
+        except Exception as exc:
             if self.running:
-                logging.warning("%r crashed with %r", self, e)
+                logging.warning("%r crashed with %r", self, exc)
                 if self.parent is not None:
                     self.parent.report_crash(self)
 

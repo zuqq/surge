@@ -36,8 +36,8 @@ def decode_from(bs, start):
     try:
         token = bs[start]
     # These are the exceptions that should be raised by `__getitem__`.
-    except (TypeError, IndexError, KeyError) as e:
-        raise ValueError(bs[start:]) from e
+    except (TypeError, IndexError, KeyError) as exc:
+        raise ValueError(bs[start:]) from exc
     if token == ord("i"):
         return _int(bs, start)
     if token == ord("l"):
