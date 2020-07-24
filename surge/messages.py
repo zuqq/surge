@@ -3,8 +3,8 @@ from typing import Dict, Optional, Sequence, Set, Tuple, Type, Union
 
 import struct
 
-from .. import bencoding
-from .. import metadata
+from . import bencoding
+from . import metadata
 
 
 # Base class -------------------------------------------------------------------
