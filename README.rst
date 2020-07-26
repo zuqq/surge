@@ -13,11 +13,10 @@ installing these dependencies is to use `poetry`_. Run
 
 .. code-block::
 
-    poetry install --no-dev
+    poetry install
 
 in the root folder, which automatically gathers the dependencies from the
-provided ``pyproject.toml``. The flag ``--no-dev`` instructs poetry not to
-install the additional packages that are required to run the tests.
+provided ``pyproject.toml``.
 
 .. _aiohttp: https://pypi.org/project/aiohttp/
 .. _docopt: https://pypi.org/project/docopt/
@@ -37,7 +36,7 @@ appropriate environment it can be run as ``python -m surge``.
     $ python -m surge --file debian.torrent
     Reading metadata from debian.torrent.
     Building the file tree...Done.
-    Downloading from 34 peers: 1340/1340 pieces [#################################]
+    Progress: 1340/1340 pieces.
 
 **Help page:**
 
@@ -48,18 +47,19 @@ appropriate environment it can be run as ``python -m surge``.
 
     Usage:
         __main__.py (-h | --help)
-        __main__.py [--folder FOLDER] [--resume] [--peers PEERS] [--log LOG]
+        __main__.py [--folder FOLDER] [--resume] [--log LOG]
+                    [--peers PEERS] [--requests REQUESTS]
                     (--file FILE | --magnet MAGNET)
 
     Options:
         -h, --help          Show this screen.
         --folder FOLDER     Destination folder
         --resume            Resume the download.
-        --peers PEERS       Maximal number of peers [default: 50].
         --log LOG           Log file.
-        --file FILE         Torrent file.
+        --peers PEERS       Maximal number of peers [default: 50].
+        --requests REQUEST  Maximal number of requests [default: 50].
+        --file PATH         Torrent file.
         --magnet MAGNET     Magnet link.
-
 
 Architecture
 ------------
