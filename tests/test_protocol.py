@@ -25,8 +25,7 @@ class TestProtocol(Example):
         # handshake and bitfield are only sent once.
         event = next_event(None)
         self.assertIsInstance(event, protocol.Send)
-        sent = event.message
-        self.assertIsInstance(sent, messages.Handshake)
+        self.assertIsInstance(event.message, messages.Handshake)
 
         event = next_event(None)
         self.assertIsInstance(event, protocol.NeedMessage)
@@ -36,14 +35,13 @@ class TestProtocol(Example):
 
         event = next_event(messages.Bitfield.from_indices({0}, len(self.pieces)))
         self.assertIsInstance(event, protocol.Send)
-        sent = event.message
-        self.assertIsInstance(sent, messages.Interested)
-        message = messages.Unchoke()
+        self.assertIsInstance(event.message, messages.Interested)
 
         outbox = collections.deque()
         piece = self.pieces[0]
         data = self.data[0]
         added_piece = False
+        message = messages.Unchoke()
         while True:
             event = next_event(message)
             message = None

@@ -48,7 +48,8 @@ class ConnectionState(enum.IntEnum):
 
 
 def base(pieces, info_hash, peer_id, available):
-    received = yield Send(messages.Handshake(info_hash, peer_id))
+    yield Send(messages.Handshake(info_hash, peer_id))
+
     received = yield NeedMessage()
     if not isinstance(received, messages.Handshake):
         raise TypeError("Expected handshake.")
