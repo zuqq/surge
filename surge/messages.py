@@ -35,8 +35,11 @@ class Handshake(Message):
     reserved = 0
 
     def __init__(
-        self, info_hash: bytes, peer_id: bytes, *, extension_protocol: bool = False
-    ):
+            self,
+            info_hash: bytes,
+            peer_id: bytes,
+            *,
+            extension_protocol: bool = False):
         self.info_hash = info_hash
         self.peer_id = peer_id
         if extension_protocol:
@@ -128,7 +131,7 @@ class Bitfield(Message):
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Bitfield:
-        _, _, payload = struct.unpack(f">LB{len(data) - 4 - 1}s", data)
+        _, _, payload = struct.unpack(f">LB{len(data) - 5}s", data)
         return cls(payload)
 
     @classmethod
