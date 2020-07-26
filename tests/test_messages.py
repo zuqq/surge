@@ -24,7 +24,7 @@ class TestHandshake(Example):
         self.assertEqual(peer_id, self.peer_id)
 
     def test_from_bytes(self):
-        message = messages.Handshake.from_bytes(
+        message = messages.parse_handshake(
             struct.pack(
                 self.format,
                 self.pstrlen,

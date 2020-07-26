@@ -23,7 +23,7 @@ class Stream:
         return False
 
     async def read_handshake(self) -> messages.Handshake:
-        return messages.Handshake.from_bytes(await self._reader.readexactly(68))
+        return messages.parse_handshake(await self._reader.readexactly(68))
 
     async def read(self) -> messages.Message:
         prefix = await self._reader.readexactly(4)
