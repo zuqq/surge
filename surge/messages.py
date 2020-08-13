@@ -322,10 +322,16 @@ class MetadataData(MetadataProtocol):
             b"piece": self.index,
             b"total_size": self.total_size,
         }
-        payload = bencoding.encode(d) + self.data
-        n = len(payload)
+        payload = bencoding.encode(d)
+        m = len(payload)
+        n = len(self.data)
         return struct.pack(
-            f">LBB{n}s", n + 2, self.value, self.extension_value, payload
+            f">LBB{m}s{n}s",
+            m + n + 2,
+            self.value,
+            self.extension_value,
+            payload,
+            self.data,
         )
 
 
