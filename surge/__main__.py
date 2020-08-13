@@ -23,6 +23,7 @@ from typing import Dict
 import asyncio
 import logging
 import os
+import sys
 
 from docopt import docopt
 
@@ -96,4 +97,7 @@ def main(args: Dict[str, str]):
 
 
 if __name__ == "__main__":
-    main(docopt(__doc__))
+    try:
+        main(docopt(__doc__))
+    except KeyboardInterrupt:
+        sys.exit(130)
