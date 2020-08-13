@@ -1,4 +1,4 @@
-"""Recursive descent parser for bencoding."""
+"""Recursive descent parser for BEncoding."""
 
 
 def _int(bs, start):
@@ -50,7 +50,7 @@ def decode_from(bs, start):
 
 
 def decode(bs):
-    """Return the Python object corresponding to the bencoded object `bs`.
+    """Return the Python object corresponding to the encoded value `bs`.
 
     Raise `ValueError` if `bs` is not valid BEncoding.
     """
@@ -61,8 +61,8 @@ def decode(bs):
 
 
 def raw_val(bs, key):
-    """Return the bencoded value corresponding to `key` in the bencoded
-    dictionary `bs`.
+    """Return the raw (i.e., encoded) value corresponding to `key` in the
+    encoded dictionary `bs`.
 
     Raise `KeyError` if `key` is not a key of `bs`.
     """
