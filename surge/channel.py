@@ -2,6 +2,11 @@ import asyncio
 
 
 class Channel(asyncio.Queue):
+    """A subclass of `asyncio.Queue` supporting the async iterator protocol.
+
+    Note that this class is only safe to use as a unidirectional channel with
+    one producer and one consumer.
+    """
     def __init__(self, maxsize: int = 0):
         super().__init__(maxsize)
         self._sentinel = object()
@@ -15,4 +20,5 @@ class Channel(asyncio.Queue):
         return item
 
     async def close(self):
+        # TODO: Actually close the channel.
         await self.put(self._sentinel)

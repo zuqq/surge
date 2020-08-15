@@ -1,4 +1,4 @@
-"""Recursive descent parser for BEncoding."""
+"""Functions for converting to and from BEncoding."""
 
 
 def _int(bs, start):
