@@ -1,3 +1,22 @@
+"""BitTorrent message types and parser.
+
+Every messages falls into one of three categories:
+- messages belonging to the base protocol [BEP 0003];
+- messages belonging to the extension protocol [BEP 0010];
+- messages belonging to the metadata exchange protocol [BEP 0009].
+
+These categories correspond to the classes `Message`, `ExtensionProtocol`,
+and `MetadataProtocol`.
+
+Among the messages belonging to the base protocol, `Handshake` is special: it
+possesses neither length prefix nor identifier byte and must therefore be
+treated separately when parsing.
+
+[BEP 0003]: http://bittorrent.org/beps/bep_0003.html
+[BEP 0010]: http://bittorrent.org/beps/bep_0010.html
+[BEP 0009]: http://bittorrent.org/beps/bep_0009.html
+"""
+
 from __future__ import annotations
 from typing import Dict, Optional, Sequence, Set, Tuple, Type, Union
 

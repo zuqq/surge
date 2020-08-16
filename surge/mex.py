@@ -1,4 +1,8 @@
-"""Metadata Exchange Protocol (BEP 9)
+"""Implementation of the metadata exchange protocol.
+
+Details on the protocol can be found in the [specification][0]. It uses the
+extension protocol to transmit its messages as part of a normal BitTorrent
+connection.
 
 Minimal message flow:
 
@@ -19,8 +23,7 @@ Minimal message flow:
      |------------------------->|
      |           ...            |
 
-After exchanging handshakes, the peer might send us BitTorrent messages that are
-irrelevant to this particular protocol; such messages are simply ignored.
+[0]: http://bittorrent.org/beps/bep_0009.html
 """
 
 from typing import Iterable

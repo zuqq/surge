@@ -1,4 +1,9 @@
-"""Functions for converting to and from BEncoding."""
+"""Functions for converting to and from BEncoding.
+
+BEncoding is defined in the [BitTorrent specification][0].
+
+[0]: http://bittorrent.org/beps/bep_0003.html
+"""
 
 
 def _int(bs, start):

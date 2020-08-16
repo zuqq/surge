@@ -7,6 +7,23 @@ import logging
 
 
 class Actor:
+    """Sets of coroutines with support for message passing and error handling.
+
+    `Actor`s form a directed graph whose structure is stored in the attributes
+    `parent` and `children`.
+
+    The principal purpose of an `Actor` is to run the coroutines contained in
+    `_coros`. In doing so, it may spawn children and pass messages to its parent
+    and children. Messages are to be implemented as methods of the receiving
+    class.
+
+    `Actor`s are controlled via the methods `start` and `stop`; starting or
+    stopping an `Actor` does the same to all of its children.
+
+    If one of its coroutines raises an `Exception`, the `Actor` notifies its
+    parent; the parent then shuts down the affected `Actor`. Restart strategies
+    can be added to subclasses by overriding `_supervise`.
+    """
     def __init__(self, parent: Optional[Actor] = None):
         self.parent = parent
         self.children: Set[Actor] = set()
@@ -52,6 +69,7 @@ class Actor:
             self._on_child_crash(child)
 
     async def start(self):
+        """First start `self`, then all of its children."""
         # This method is async because it requires a running event loop.
         if self.running:
             return
@@ -66,6 +84,7 @@ class Actor:
         await child.start()
 
     def report_crash(self, child: Actor):
+        """Report to `self` that `child` crashed."""
         self._crashes.put_nowait(child)
 
     async def stop(self):

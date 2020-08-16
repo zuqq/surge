@@ -1,4 +1,8 @@
-"""UDP Tracker Protocol (BEP 15)
+"""Implementation of the UDP tracker protocol.
+
+Details on the protocol can be found in the [specification][0]. It is a simple
+stop-and-wait protocol on top of UDP, with exponential backoff in the
+retransmission mechanism.
 
 Minimal message flow:
 
@@ -12,11 +16,7 @@ Minimal message flow:
      |     AnnounceResponse     |
      |<-------------------------|
 
-Retransmission:
-
-If the tracker doesn't respond to a request within `15 * 2 ** n` seconds, where
-`n` starts at `0` and is incremented every time this happens, then the request
-is retransmitted; if `n` reaches `9`, we give up.
+[0]: http://bittorrent.org/beps/bep_0015.html
 """
 
 from __future__ import annotations
