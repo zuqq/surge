@@ -150,7 +150,7 @@ class Node(Actor):
         self._state = protocol.DownloadState(pieces, max_requests)
 
     def __repr__(self):
-        class_name = self.__module__ + '.' + self.__class__.__qualname__
+        class_name = self.__module__ + "." + self.__class__.__qualname__
         peer = dataclasses.astuple(self.peer)
         return f"<{class_name} with peer={peer}>"
 

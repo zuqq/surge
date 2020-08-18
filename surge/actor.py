@@ -24,6 +24,7 @@ class Actor:
     parent; the parent then shuts down the affected `Actor`. Restart strategies
     can be added to subclasses by overriding `_supervise`.
     """
+
     def __init__(self, parent: Optional[Actor] = None):
         self.parent = parent
         self.children: Set[Actor] = set()
@@ -35,7 +36,7 @@ class Actor:
 
         # This queue is unbounded because the actor is supposed to control the
         # number of children it spawns (and thereby the number of concurrent
-        # crashes that can occur).
+        # crashes that can occur).
         self._crashes = asyncio.Queue()  # type: ignore
 
     async def __aenter__(self):

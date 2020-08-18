@@ -7,6 +7,7 @@ class Channel(asyncio.Queue):
     Note that this class is only safe to use as a unidirectional channel with
     one producer and one consumer.
     """
+
     def __init__(self, maxsize: int = 0):
         super().__init__(maxsize)
         self._sentinel = object()

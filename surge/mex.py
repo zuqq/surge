@@ -1,8 +1,7 @@
 """Implementation of the metadata exchange protocol.
 
 Details on the protocol can be found in the [specification][0]. It uses the
-extension protocol to transmit its messages as part of a normal BitTorrent
-connection.
+extension protocol to transmit its messages as part of a BitTorrent connection.
 
 Minimal message flow:
 
@@ -154,7 +153,7 @@ class Node(Actor):
         self.peer = peer
 
     def __repr__(self):
-        class_name = self.__module__ + '.' + self.__class__.__qualname__
+        class_name = self.__module__ + "." + self.__class__.__qualname__
         peer = dataclasses.astuple(self.peer)
         return f"<{class_name} with peer={peer}>"
 
