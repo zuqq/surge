@@ -1,5 +1,3 @@
-import unittest
-
 from surge.tracker import _metadata
 from surge.tracker import _udp
 
@@ -16,10 +14,13 @@ class TestUDP(Example):
     def test_successful_transaction(self):
         # Successful transaction, with a one second delay between the answers.
         transducer = _udp.udp(self.params)
+
         message, _ = transducer.send(None)
         self.assertIsInstance(message, _udp.ConnectRequest)
+
         message, _ = transducer.send((_udp.ConnectResponse(self.connection_id), 0))
         self.assertIsInstance(message, _udp.AnnounceRequest)
+
         interval = 1800
         peers = [_metadata.Peer("127.0.0.1", 6969)]
         with self.assertRaises(StopIteration) as cm:
@@ -32,21 +33,27 @@ class TestUDP(Example):
 
     def test_timeout(self):
         transducer = _udp.udp(self.params)
+
         message, timeout = transducer.send(None)
         self.assertIsInstance(message, _udp.ConnectRequest)
+
         time = timeout + 1
-        for i in range(1, 9):
+        for _ in range(1, 9):
             message, timeout = transducer.send((None, time))
             self.assertIsInstance(message, _udp.ConnectRequest)
             time += timeout + 1
+
         with self.assertRaises(_udp.TimeoutError):
             transducer.send((None, time))
 
     def test_connection_id_timeout(self):
         transducer = _udp.udp(self.params)
+
         message, _ = transducer.send(None)
         self.assertIsInstance(message, _udp.ConnectRequest)
+
         message, _ = transducer.send((_udp.ConnectResponse(self.connection_id), 0))
         self.assertIsInstance(message, _udp.AnnounceRequest)
+
         message, _ = transducer.send((None, 60))
         self.assertIsInstance(message, _udp.ConnectRequest)

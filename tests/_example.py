@@ -3,7 +3,6 @@ import unittest
 
 from surge import bencoding
 from surge import metadata
-from surge import tracker
 
 
 class Example(unittest.TestCase):

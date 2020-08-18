@@ -1,10 +1,7 @@
 import collections
 import functools
-import struct
-import unittest
 
 from surge import messages
-from surge import metadata
 from surge import protocol
 
 from ._example import Example
@@ -65,6 +62,5 @@ class TestProtocol(Example):
                             block, data[block.begin : block.begin + block.length]
                         )
                         break
-
         self.assertEqual(event.piece, piece)
         self.assertEqual(event.data, data)

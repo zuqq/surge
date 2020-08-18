@@ -1,5 +1,3 @@
-import unittest
-
 from surge import messages
 from surge import mex
 
