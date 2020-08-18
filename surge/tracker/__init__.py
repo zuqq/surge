@@ -6,8 +6,7 @@ import functools
 import logging
 import time
 import urllib.parse
-
-import aiohttp
+import urllib.request
 
 from . import _udp
 from .. import actor
@@ -52,6 +51,11 @@ class PeerQueue(actor.Actor):
         await self._peers.put(peer)
 
 
+def get(url):
+    with urllib.request.urlopen(url) as f:
+        return f.read()
+
+
 class HTTPTrackerConnection(actor.Actor):
     def __init__(
             self,
@@ -69,14 +73,16 @@ class HTTPTrackerConnection(actor.Actor):
         return f"<{class_name} with url={repr(url)}>"
 
     async def _main(self, params):
+        loop = asyncio.get_running_loop()
         while True:
             ps = urllib.parse.parse_qs(self.url.query)
             ps.update(dataclasses.asdict(params))
-            url = self.url._replace(query=urllib.parse.urlencode(ps))
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url.geturl()) as request:
-                    raw_response = await request.read()
-            d = bencoding.decode(raw_response)
+            q = urllib.parse.urlencode(ps)
+            d = bencoding.decode(
+                await loop.run_in_executor(
+                    None, functools.partial(get, self.url._replace(query=q).geturl())
+                )
+            )
             if b"failure reason" in d:
                 raise ConnectionError(d[b"failure reason"].decode())
             response = Response.from_dict(d)

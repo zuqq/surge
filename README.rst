@@ -8,8 +8,8 @@ Surge is download-only for now.
 Installation
 ------------
 
-Surge requires Python 3.8 with `aiohttp`_ and `docopt`_. The recommended way of
-installing these dependencies is to use `poetry`_. Run
+Surge requires Python 3.8 with `docopt`_. The recommended way of installing these
+dependencies is to use `poetry`_. Run
 
 .. code-block::
 
@@ -18,7 +18,6 @@ installing these dependencies is to use `poetry`_. Run
 in the root folder, which automatically gathers the dependencies from the
 provided ``pyproject.toml``.
 
-.. _aiohttp: https://pypi.org/project/aiohttp/
 .. _docopt: https://pypi.org/project/docopt/
 .. _poetry: https://python-poetry.org/
 
