@@ -1,7 +1,9 @@
 """Implementation of the metadata exchange protocol.
 
-Details on the protocol can be found in the [specification][0]. It uses the
-extension protocol to transmit its messages as part of a BitTorrent connection.
+Specification: [BEP 0009]
+
+The metadata exchange protocol uses the extension protocol to transmit its
+messages as part of a BitTorrent connection.
 
 Minimal message flow:
 
@@ -22,7 +24,7 @@ Minimal message flow:
      |------------------------->|
      |           ...            |
 
-[0]: http://bittorrent.org/beps/bep_0009.html
+[BEP 0009]: http://bittorrent.org/beps/bep_0009.html
 """
 
 from typing import Iterable

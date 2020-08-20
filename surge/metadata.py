@@ -1,3 +1,11 @@
+"""Functions and types for interpreting `.torrent` files.
+
+Specification: [BEP 0003], [BEP 0012]
+
+[BEP 0003]: http://bittorrent.org/beps/bep_0003.html
+[BEP 0012]: http://bittorrent.org/beps/bep_0010.html
+"""
+
 from __future__ import annotations
 from typing import Any, Dict, Generator, Iterable, List, Sequence
 
@@ -12,7 +20,7 @@ from . import bencoding
 class File:
     begin: int
     length: int
-    path: str
+    path: str  # TODO: Use `pathlib` instead?
 
     @classmethod
     def from_dict(cls, begin: int, d: Dict[bytes, Any]) -> File:
@@ -127,6 +135,12 @@ class Metadata:
 
     @classmethod
     def from_bytes(cls, raw_meta: bytes) -> Metadata:
+        """Parse a `.torrent` file.
+
+        Supports files with multiple trackers, as specified in [BEP 0012].
+
+        [BEP 0012]: http://bittorrent.org/beps/bep_0012.html
+        """
         d = bencoding.decode(raw_meta)
 
         announce_list = []

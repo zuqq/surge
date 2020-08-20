@@ -30,6 +30,13 @@ from . import metadata
 
 
 class Message:
+    """Base class for BitTorrent messages.
+
+    Messages are (de-)serialized using `struct`. The format string is stored in
+    the attribute `format`, while `fields` stores the names of the attributes
+    holding the data.
+    """
+
     format = ""
     fields: Tuple[str, ...] = ()
 
@@ -240,6 +247,8 @@ class Port(Message):
 
 @register
 class ExtensionProtocol(Message):
+    """Base class for messages belonging to the extension protocol."""
+
     value = 20
 
     def to_bytes(self) -> bytes:
@@ -281,6 +290,8 @@ class ExtensionHandshake(ExtensionProtocol):
 
 
 class MetadataProtocol(ExtensionProtocol):
+    """Base class for messages belonging to the metadata exchange protocol."""
+
     extension_value = 3
 
     def __init__(self, ut_metadata: int = 3):
@@ -375,10 +386,15 @@ class MetadataReject(MetadataProtocol):
 
 
 def parse_handshake(data: bytes) -> Handshake:
+    """Parse a BitTorrent handshake."""
     return Handshake.from_bytes(data)
 
 
 def parse(data: bytes) -> Message:
+    """Parse a BitTorrent message.
+
+    Raise `ValueError` if `data` is not a valid BitTorrent message.
+    """
     n = int.from_bytes(data[:4], "big")
     if len(data) != 4 + n:
         raise ValueError("Incorrect length prefix.")

@@ -1,8 +1,9 @@
 """Implementation of the UDP tracker protocol.
 
-Details on the protocol can be found in the [specification][0]. It is a simple
-stop-and-wait protocol on top of UDP, with exponential backoff in the
-retransmission mechanism.
+Specification: [BEP 0015]
+
+The UDP tracker protocol is a simple stop-and-wait protocol built on top of UDP,
+with a custom retransmission mechanism that uses exponential backoff.
 
 Minimal message flow:
 
@@ -16,7 +17,7 @@ Minimal message flow:
      |     AnnounceResponse     |
      |<-------------------------|
 
-[0]: http://bittorrent.org/beps/bep_0015.html
+[BEP 0015]: http://bittorrent.org/beps/bep_0015.html
 """
 
 from __future__ import annotations
