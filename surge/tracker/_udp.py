@@ -2,10 +2,11 @@
 
 Specification: [BEP 0015]
 
-The UDP tracker protocol is a simple stop-and-wait protocol built on top of UDP,
-with a custom retransmission mechanism that uses exponential backoff.
+The UDP tracker protocol is a lightweight alternative to the original HTTP-based
+way of communicating with trackers. It is a simple two-step protocol built on
+top of UDP, with a custom retransmission mechanism using exponential backoff.
 
-Minimal message flow:
+Typical message flow:
 
     Us                       Tracker
      |      ConnectRequest      |

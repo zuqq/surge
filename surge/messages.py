@@ -1,6 +1,6 @@
 """BitTorrent message types and parser.
 
-Every messages falls into one of three categories:
+Every BitTorrent message falls into one of three categories:
 - messages belonging to the base protocol [BEP 0003];
 - messages belonging to the extension protocol [BEP 0010];
 - messages belonging to the metadata exchange protocol [BEP 0009].

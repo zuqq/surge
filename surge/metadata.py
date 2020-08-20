@@ -2,6 +2,12 @@
 
 Specification: [BEP 0003], [BEP 0012]
 
+A `.torrent` file contains tracker URLs and file metadata. For transmission,
+files are concatenated and split into equally sized pieces; the pieces' SHA-1
+digest is used to verify downloaded data. In order to keep `.torrent` files
+small, pieces are typically relatively large; the actual transmission unit is a
+block consisting of 16 KB.
+
 [BEP 0003]: http://bittorrent.org/beps/bep_0003.html
 [BEP 0012]: http://bittorrent.org/beps/bep_0010.html
 """
@@ -18,6 +24,8 @@ from . import bencoding
 
 @dataclasses.dataclass(eq=True, frozen=True)
 class File:
+    """File metadata."""
+
     begin: int
     length: int
     path: str  # TODO: Use `pathlib` instead?
@@ -30,6 +38,11 @@ class File:
 
 
 def build_file_tree(folder: str, files: Iterable[File]):
+    """Create the files that don't exist and truncate the ones that do.
+
+    Existing files need to be truncated because later writes only happen inside
+    of the boundaries defined by the `File` instance.
+    """
     for file in files:
         path = os.path.join(folder, file.path)
         tail, _ = os.path.split(path)
@@ -41,6 +54,8 @@ def build_file_tree(folder: str, files: Iterable[File]):
 
 @dataclasses.dataclass(eq=True, frozen=True)
 class Piece:
+    """Piece metadata."""
+
     index: int
     begin: int
     length: int
@@ -48,6 +63,7 @@ class Piece:
 
 
 def valid_piece(piece: Piece, data: bytes) -> bool:
+    """Check whether `data`'s SHA-1 digest is equal to `piece.hash`."""
     return hashlib.sha1(data).digest() == piece.hash
 
 
@@ -55,6 +71,7 @@ def available_pieces(
         pieces: Sequence[Piece],
         folder: str,
         files: Sequence[File]) -> Generator[Piece, None, None]:
+    """Yield all pieces whose SHA-1 digest is correct."""
     chunks = piece_to_chunks(pieces, files)
     for piece in pieces:
         data = []
@@ -83,6 +100,7 @@ class Chunk:
 def piece_to_chunks(
         pieces: Sequence[Piece],
         files: Sequence[File]) -> Dict[Piece, List[Chunk]]:
+    """Map pieces to their chunks."""
     result = {piece: [] for piece in pieces}
     i = 0
     j = 0
@@ -104,6 +122,7 @@ def piece_to_chunks(
 
 
 def write_chunk(folder: str, chunk: Chunk, data: bytes):
+    """Write `chunk` to the file system."""
     path = os.path.join(folder, chunk.file.path)
     with open(path, "rb+") as f:
         f.seek(chunk.begin - chunk.file.begin)
@@ -113,12 +132,15 @@ def write_chunk(folder: str, chunk: Chunk, data: bytes):
 
 @dataclasses.dataclass(eq=True, frozen=True)
 class Block:
+    """Block metadata."""
+
     piece: Piece
     begin: int
     length: int
 
 
 def blocks(piece: Piece) -> Generator[Block, None, None]:
+    """Yields `piece`'s `Block`s."""
     block_size = 2 ** 14
     for begin in range(0, piece.length, block_size):
         yield Block(piece, begin, min(block_size, piece.length - begin))
@@ -126,6 +148,13 @@ def blocks(piece: Piece) -> Generator[Block, None, None]:
 
 @dataclasses.dataclass
 class Metadata:
+    """The information contained in a `.torrent` file.
+
+    Supports files with multiple trackers, as specified in [BEP 0012].
+
+    [BEP 0012]: http://bittorrent.org/beps/bep_0012.html
+    """
+
     announce_list: List[str]
     length: int
     piece_length: int
@@ -135,12 +164,7 @@ class Metadata:
 
     @classmethod
     def from_bytes(cls, raw_meta: bytes) -> Metadata:
-        """Parse a `.torrent` file.
-
-        Supports files with multiple trackers, as specified in [BEP 0012].
-
-        [BEP 0012]: http://bittorrent.org/beps/bep_0012.html
-        """
+        """Parse a `.torrent` file."""
         d = bencoding.decode(raw_meta)
 
         announce_list = []

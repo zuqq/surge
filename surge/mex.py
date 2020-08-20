@@ -2,10 +2,11 @@
 
 Specification: [BEP 0009]
 
-The metadata exchange protocol uses the extension protocol to transmit its
-messages as part of a BitTorrent connection.
+The metadata exchange protocol facilities metadata exchange between peers. It
+uses the extension protocol to transmit its messages as part of a BitTorrent
+connection.
 
-Minimal message flow:
+Typical message flow:
 
     Us                         Peer
      |        Handshake         |
