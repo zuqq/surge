@@ -68,7 +68,7 @@ class HTTPTrackerConnection(actor.Actor):
         self.url = url
 
     def __repr__(self):
-        class_name = self.__module__ + '.' + self.__class__.__qualname__
+        class_name = self.__module__ + "." + self.__class__.__qualname__
         url = self.url.geturl()
         return f"<{class_name} with url={repr(url)}>"
 
@@ -104,7 +104,7 @@ class UDPTrackerConnection(actor.Actor):
         self.url = url
 
     def __repr__(self):
-        class_name = self.__module__ + '.' + self.__class__.__qualname__
+        class_name = self.__module__ + "." + self.__class__.__qualname__
         address = hex(id(self))
         url = self.url.geturl()
         return f"<{class_name} object at {address} with url={repr(url)}>"
