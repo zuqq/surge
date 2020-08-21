@@ -18,7 +18,7 @@ treated separately when parsing.
 """
 
 from __future__ import annotations
-from typing import Dict, Optional, Sequence, Set, Tuple, Type, Union
+from typing import Dict, Optional, Sequence, Set, Tuple, Union
 
 import struct
 
@@ -86,15 +86,6 @@ class Keepalive(Message):
 # Messages with identifier byte ------------------------------------------------
 
 
-registry: Dict[int, Type[Message]] = {}
-
-
-def register(cls: Type[Message]) -> Type[Message]:
-    registry[cls.value] = cls  # type: ignore
-    return cls
-
-
-@register
 class Choke(Message):
     format = ">LB"
     fields = ("prefix", "value")
@@ -102,7 +93,6 @@ class Choke(Message):
     value = 0
 
 
-@register
 class Unchoke(Message):
     format = ">LB"
     fields = ("prefix", "value")
@@ -110,7 +100,6 @@ class Unchoke(Message):
     value = 1
 
 
-@register
 class Interested(Message):
     format = ">LB"
     fields = ("prefix", "value")
@@ -118,7 +107,6 @@ class Interested(Message):
     value = 2
 
 
-@register
 class NotInterested(Message):
     format = ">LB"
     fields = ("prefix", "value")
@@ -126,7 +114,6 @@ class NotInterested(Message):
     value = 3
 
 
-@register
 class Have(Message):
     format = ">LBL"
     fields = ("prefix", "value", "index")
@@ -145,7 +132,6 @@ class Have(Message):
         return pieces[self.index]
 
 
-@register
 class Bitfield(Message):
     fields = ("prefix", "value", "payload")
     value = 5
@@ -181,7 +167,6 @@ class Bitfield(Message):
         return result
 
 
-@register
 class Request(Message):
     format = ">LBLLL"
     fields = ("prefix", "value", "index", "begin", "length")
@@ -206,7 +191,6 @@ class Request(Message):
         return metadata.Block(pieces[self.index], self.begin, self.length)
 
 
-@register
 class Block(Message):
     fields = ("prefix", "value", "index", "begin", "data")
     value = 7
@@ -232,12 +216,10 @@ class Block(Message):
         return metadata.Block(pieces[self.index], self.begin, len(self.data))
 
 
-@register
 class Cancel(Message):
     value = 8
 
 
-@register
 class Port(Message):
     value = 9
 
@@ -245,7 +227,6 @@ class Port(Message):
 # Extension protocol -----------------------------------------------------------
 
 
-@register
 class ExtensionProtocol(Message):
     """Base class for messages belonging to the extension protocol."""
 
@@ -385,6 +366,21 @@ class MetadataReject(MetadataProtocol):
 # Parser -----------------------------------------------------------------------
 
 
+message_type = {
+    0: Choke,
+    1: Unchoke,
+    2: Interested,
+    3: NotInterested,
+    4: Have,
+    5: Bitfield,
+    6: Request,
+    7: Block,
+    8: Cancel,
+    9: Port,
+    20: ExtensionProtocol,
+}
+
+
 def parse_handshake(data: bytes) -> Handshake:
     """Parse a BitTorrent handshake."""
     return Handshake.from_bytes(data)
@@ -399,7 +395,7 @@ def parse(data: bytes) -> Message:
     if len(data) != 4 + n:
         raise ValueError("Incorrect length prefix.")
     try:
-        cls = registry[data[4]]
+        cls = message_type[data[4]]
     except IndexError:
         return Keepalive()
     except KeyError:
