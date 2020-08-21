@@ -5,17 +5,16 @@ from ._example import Example
 
 
 class TestMex(Example):
-    other_peer_id = b"\xbe\xbb\xe9R\t\xcb!\xffu\xd1\x10\xc3X\\\x05\xab\x945\xee\x9a"
-
     def test_mex(self):
         metadata_size = len(self.raw_info)
         piece_length = 2 ** 14
+        other_peer_id = b"\xbe\xbb\xe9R\t\xcb!\xffu\xd1\x10\xc3X\\\x05\xab\x945\xee\x9a"
         transducer = mex.mex(self.info_hash, self.peer_id)
 
         sent = transducer.send(None)
         self.assertIsInstance(sent, messages.Handshake)
 
-        sent = transducer.send(messages.Handshake(self.info_hash, self.other_peer_id))
+        sent = transducer.send(messages.Handshake(self.info_hash, other_peer_id))
         self.assertIsInstance(sent, messages.ExtensionHandshake)
 
         sent = transducer.send(messages.ExtensionHandshake(3, metadata_size))
