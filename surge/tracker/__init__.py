@@ -77,10 +77,12 @@ class HTTPTrackerConnection(actor.Actor):
         while True:
             ps = urllib.parse.parse_qs(self.url.query)
             ps.update(dataclasses.asdict(params))
-            q = urllib.parse.urlencode(ps)
             d = bencoding.decode(
                 await loop.run_in_executor(
-                    None, functools.partial(get, self.url._replace(query=q).geturl())
+                    None,
+                    functools.partial(
+                        get, self.url._replace(query=urllib.parse.urlencode(ps)).geturl()
+                    ),
                 )
             )
             if b"failure reason" in d:
