@@ -16,21 +16,21 @@ class TestBencoding(unittest.TestCase):
 
     def test_decode(self):
         for x, y in self.valid:
-            with self.subTest(x=x, y=y):
+            with self.subTest(x):
                 self.assertEqual(bencoding.decode(x), y)
 
         for x in [b"", b"ie", b"iae", b"dde", b"2:abc", b"s"]:
-            with self.subTest(x=x):
+            with self.subTest(x):
                 with self.assertRaises(ValueError):
                     bencoding.decode(x)
 
     def test_encode(self):
         for x, y in self.valid:
-            with self.subTest(x=x, y=y):
+            with self.subTest(y):
                 self.assertEqual(bencoding.encode(y), x)
 
         for y in [None, "utf-8", 1.0, (0, 1), {0: 1}]:
-            with self.subTest(y=y):
+            with self.subTest(y):
                 with self.assertRaises(TypeError):
                     bencoding.encode(y)
 
@@ -42,9 +42,9 @@ class TestBencoding(unittest.TestCase):
         ]
 
         for x, k, v in examples:
-            with self.subTest(x=x, k=k, v=v):
+            with self.subTest(f"Get {k} from {x}."):
                 self.assertEqual(bencoding.raw_val(x, k), v)
 
-        with self.subTest("KeyError"):
+        with self.subTest("KeyError is raised."):
             with self.assertRaises(KeyError):
                 bencoding.raw_val(b"d4:spaml1:a1:bee", b"eggs")

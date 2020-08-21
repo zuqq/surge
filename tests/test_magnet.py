@@ -27,6 +27,6 @@ class TestMagnet(unittest.TestCase):
         ]
 
         for s in invalid:
-            with self.subTest(s=s):
+            with self.subTest(s):
                 with self.assertRaises(ValueError):
                     magnet.parse(s)
