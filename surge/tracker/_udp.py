@@ -196,30 +196,25 @@ class Protocol(asyncio.DatagramProtocol):
 # Transducer -------------------------------------------------------------------
 
 
-class State(enum.IntEnum):
-    CONNECT = 0
-    ANNOUNCE = 1
-
-
 class TimeoutError(Exception):
     pass
 
 
 def udp(params: _metadata.Parameters):
-    state = State.CONNECT
+    connected = False
     for n in range(9):
-        if state is State.CONNECT:
+        if not connected:
             transaction_id = secrets.token_bytes(4)
             received, time = yield (ConnectRequest(transaction_id), 15 * 2 ** n)
             if isinstance(received, ConnectResponse):
+                connected = True
                 connection_id = received.connection_id
                 connection_time = time
-                state = State.ANNOUNCE
-        if state is State.ANNOUNCE:
+        if connected:
             message = AnnounceRequest(transaction_id, connection_id, params)
             received, time = yield (message, 15 * 2 ** n)
             if isinstance(received, AnnounceResponse):
                 return received.response
             if time - connection_time >= 60:
-                state = State.CONNECT
+                connected = False
     raise TimeoutError("Maximal number of retries reached.")
