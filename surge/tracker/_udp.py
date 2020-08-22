@@ -22,6 +22,7 @@ Typical message flow:
 """
 
 from __future__ import annotations
+from typing import Union
 
 import asyncio
 import collections
@@ -38,12 +39,7 @@ from . import _metadata
 # Messages ---------------------------------------------------------------------
 
 
-class Request:
-    def to_bytes(self) -> bytes:
-        raise NotImplementedError  # pragma: no cover
-
-
-class ConnectRequest(Request):
+class ConnectRequest:
     value = 0
 
     def __init__(self, transaction_id: bytes):
@@ -53,7 +49,7 @@ class ConnectRequest(Request):
         return struct.pack(">ql4s", 0x41727101980, self.value, self.transaction_id)
 
 
-class AnnounceRequest(Request):
+class AnnounceRequest:
     value = 1
 
     def __init__(
@@ -84,13 +80,7 @@ class AnnounceRequest(Request):
         )
 
 
-class Response:
-    @classmethod
-    def from_bytes(cls, data: bytes) -> Response:
-        raise NotImplementedError  # pragma: no cover
-
-
-class ConnectResponse(Response):
+class ConnectResponse:
     value = 0
 
     def __init__(self, connection_id: bytes):
@@ -102,7 +92,7 @@ class ConnectResponse(Response):
         return cls(connection_id)
 
 
-class AnnounceResponse(Response):
+class AnnounceResponse:
     value = 1
 
     def __init__(self, response: _metadata.Response):
@@ -114,7 +104,7 @@ class AnnounceResponse(Response):
         return cls(_metadata.Response.from_bytes(interval, data[20:]))
 
 
-def parse(data: bytes) -> Response:
+def parse(data: bytes) -> Union[ConnectResponse, AnnounceResponse]:
     if len(data) < 4:
         raise ValueError("Not enough bytes.")
     value = int.from_bytes(data[:4], "big")
@@ -128,6 +118,7 @@ def parse(data: bytes) -> Response:
 # Protocol ---------------------------------------------------------------------
 
 
+# TODO: Implement the async context manager protocol.
 class Protocol(asyncio.DatagramProtocol):
     def __init__(self):
         super().__init__()
@@ -150,7 +141,7 @@ class Protocol(asyncio.DatagramProtocol):
         else:
             waiter.set_exception(exc)
 
-    async def read(self) -> Response:
+    async def read(self) -> Union[ConnectResponse, AnnounceResponse]:
         if self._exception is not None:
             raise self._exception
         if not self._queue:
@@ -159,7 +150,7 @@ class Protocol(asyncio.DatagramProtocol):
             await waiter
         return parse(self._queue.popleft())
 
-    def write(self, message: Request):
+    def write(self, message: Union[ConnectRequest, AnnounceRequest]):
         # I'm omitting flow control because every write is followed by a read.
         self._transport.sendto(message.to_bytes())
 
@@ -200,6 +191,7 @@ class TimeoutError(Exception):
     pass
 
 
+# TODO: Instead of sending `None` if a timeout happens, thrown an exception.
 def udp(params: _metadata.Parameters):
     connected = False
     for n in range(9):
