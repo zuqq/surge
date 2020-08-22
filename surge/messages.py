@@ -197,7 +197,7 @@ class Block(Message):
 
     def __init__(self, index: int, begin: int, data: bytes):
         self.format = f">LBLL{len(data)}s"
-        self.prefix = 13 + len(data)
+        self.prefix = 9 + len(data)
         self.index = index
         self.begin = begin
         self.data = data

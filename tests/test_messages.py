@@ -87,8 +87,8 @@ class TestHave(Example):
     def test_to_bytes(self):
         self.assertEqual(messages.Have(0).to_bytes(), self.reference)
 
-    def test_from_bytes(self):
-        self.assertEqual(messages.Have.from_bytes(self.reference).index, 0)
+    def test_parse(self):
+        self.assertEqual(messages.parse(self.reference).index, 0)
 
     def test_piece(self):
         self.assertEqual(messages.Have(0).piece(self.pieces), self.pieces[0])
@@ -103,10 +103,9 @@ class TestBitfield(Example):
             self.reference,
         )
 
-    def test_from_bytes(self):
+    def test_parse(self):
         self.assertEqual(
-            messages.Bitfield.from_bytes(self.reference).available(self.pieces),
-            {self.pieces[0]},
+            messages.parse(self.reference).available(self.pieces), {self.pieces[0]},
         )
 
 
@@ -126,9 +125,7 @@ class TestRequest(Example):
         )
 
     def test_block(self):
-        self.assertEqual(
-            messages.Request.from_bytes(self.reference).block(self.pieces), self.block
-        )
+        self.assertEqual(messages.parse(self.reference).block(self.pieces), self.block)
 
 
 class TestBlock(Example):
@@ -138,8 +135,9 @@ class TestBlock(Example):
         block, *_ = metadata.blocks(cls.pieces[0])
         cls.block = block
         cls.block_data = cls.data[0][block.begin : block.begin + block.length]
+        n = len(cls.block_data)
         cls.reference = struct.pack(
-            ">LBLL1s", 14, 7, block.piece.index, block.begin, cls.block_data
+            f">LBLL{n}s", n + 9, 7, block.piece.index, block.begin, cls.block_data
         )
 
     def test_to_bytes(self):
@@ -149,9 +147,7 @@ class TestBlock(Example):
         )
 
     def test_block(self):
-        self.assertEqual(
-            messages.Block.from_bytes(self.reference).block(self.pieces), self.block
-        )
+        self.assertEqual(messages.parse(self.reference).block(self.pieces), self.block)
 
 
 class ProtocolExtensionTest(Example):
@@ -171,7 +167,7 @@ class ProtocolExtensionTest(Example):
                 self.ut_metadata, self.metadata_size
             ).to_bytes()
             _, value, extension_value, payload = struct.unpack(
-                f">LBB{len(message) - 4 - 1 - 1}s", message
+                f">LBB{len(message) - 6}s", message
             )
             self.assertEqual(value, 20)
             self.assertEqual(extension_value, 0)
@@ -186,9 +182,8 @@ class ProtocolExtensionTest(Example):
                     b"metadata_size": self.metadata_size,
                 }
             )
-            reference = struct.pack(
-                f">LBB{len(payload)}s", 1 + 1 + len(payload), 20, 0, payload
-            )
+            n = len(payload)
+            reference = struct.pack(f">LBB{n}s", n + 2, 20, 0, payload)
             message = messages.parse(reference)
             self.assertIsInstance(message, messages.ExtensionHandshake)
             self.assertEqual(message.ut_metadata, self.ut_metadata)
