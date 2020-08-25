@@ -1,4 +1,4 @@
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Union
+from typing import Dict, Generator, Iterable, List, Optional, Sequence, Set, Union
 
 import dataclasses
 import enum
@@ -11,17 +11,8 @@ from . import metadata
 
 
 @dataclasses.dataclass
-class Receive:
+class Write:
     message: messages.Message
-
-
-@dataclasses.dataclass
-class Send:
-    message: messages.Message
-
-
-class Request:
-    pass
 
 
 @dataclasses.dataclass
@@ -30,7 +21,7 @@ class Result:
     data: bytes
 
 
-class NeedPiece:
+class NeedHandshake:
     pass
 
 
@@ -38,59 +29,14 @@ class NeedMessage:
     pass
 
 
-# Transducer -------------------------------------------------------------------
+class NeedPiece:
+    pass
 
 
-class ConnectionState(enum.IntEnum):
-    CHOKED = 0
-    INTERESTED = 1
-    UNCHOKED = 2
+Event = Union[Write, Result, NeedHandshake, NeedMessage, NeedPiece]
 
 
-def base(pieces, info_hash, peer_id, available):
-    yield Send(messages.Handshake(info_hash, peer_id))
-
-    received = yield NeedMessage()
-    if not isinstance(received, messages.Handshake):
-        raise TypeError("Expected handshake.")
-    if received.info_hash != info_hash:
-        raise ValueError("Wrong 'info_hash'.")
-
-    # Wait for the peer to send us its bitfield. This is not mandated by the
-    # specification, but makes requesting pieces later much easier.
-    while True:
-        received = yield NeedMessage()
-        if isinstance(received, messages.Bitfield):
-            available.update(received.available(pieces))
-            break
-
-    state = ConnectionState.CHOKED
-    event = None
-    while True:
-        if event is None:
-            if state is ConnectionState.CHOKED:
-                state = ConnectionState.INTERESTED
-                event = Send(messages.Interested())
-            elif state is ConnectionState.INTERESTED:
-                event = NeedMessage()
-            elif state is ConnectionState.UNCHOKED:
-                event = Request()
-
-        received = yield event
-        event = None
-
-        if isinstance(received, messages.Choke):
-            state = ConnectionState.CHOKED
-            event = Receive(received)
-        elif isinstance(received, messages.Unchoke):
-            state = ConnectionState.UNCHOKED
-        elif isinstance(received, messages.Have):
-            available.add(received.piece(pieces))
-        elif isinstance(received, messages.Block):
-            event = Receive(received)
-
-
-# DownloadState ----------------------------------------------------------------
+# State ------------------------------------------------------------------------
 
 
 class Progress:
@@ -113,43 +59,48 @@ class Progress:
         self._data[block.begin : block.begin + block.length] = data
 
 
-class DownloadState:
-    def __init__(self, pieces, max_requests):
-        self.available: Set[metadata.Piece] = set()
-        self.requesting = True  # Are there more blocks to request?
-        self._pieces = pieces
+class State:
+    def __init__(self, max_requests: int):
         self._max_requests = max_requests
+
         self._progress: Dict[metadata.Piece, Progress] = {}
         self._stack: List[metadata.Block] = []
         self._requested: Set[metadata.Block] = set()
+
+        self.available: Set[metadata.Piece] = set()
+        self.requesting = True
 
     @property
     def can_request(self):
         return self.requesting and len(self._requested) < self._max_requests
 
-    def add_piece(self, piece):
+    def add_piece(self, piece: metadata.Piece):
         blocks = tuple(metadata.blocks(piece))
         self._progress[piece] = Progress(piece, blocks)
         self._stack.extend(reversed(blocks))
 
-    def cancel_piece(self, piece):
+    def cancel_piece(self, piece: metadata.Piece):
         self._progress.pop(piece)
-        self._requested = {b for b in self._requested if b.piece != piece}
-        self._stack = [b for b in self._stack if b.piece != piece]
+        p = lambda block: block.piece != piece
+        self._requested = set(filter(p, self._requested))
+        self._stack = list(filter(p, self._stack))
 
     def get_block(self):
+        """"Return a fresh block.
+
+        Raise `IndexError` if there are no blocks available.
+        """
         block = self._stack.pop()
         self._requested.add(block)
         return block
 
-    def on_block(self, message):
-        block = message.block(self._pieces)
+    def on_block(self, block: metadata.Block, data: bytes) -> Optional[Result]:
         if block not in self._requested:
             return None
         self._requested.remove(block)
         piece = block.piece
         progress = self._progress[piece]
-        progress.add(block, message.data)
+        progress.add(block, data)
         if not progress.done:
             return None
         data = self._progress.pop(piece).data
@@ -166,25 +117,53 @@ class DownloadState:
             self.add_piece(piece)
 
 
-def next_event(state, transducer, message):
+# Transducer -------------------------------------------------------------------
+
+
+_State = enum.Enum("_State", "CHOKED INTERESTED UNCHOKED")
+
+
+def base(
+        pieces: Sequence[metadata.Piece],
+        info_hash: bytes,
+        peer_id: bytes,
+        state: State) -> Generator[Event, Optional[messages.Message], None]:
+    yield Write(messages.Handshake(info_hash, peer_id))
+
+    received = yield NeedHandshake()
+    if received.info_hash != info_hash:
+        raise ValueError("Wrong 'info_hash'.")
+
+    # Wait for the peer to send us its bitfield. This is not mandated by the
+    # specification, but makes requesting pieces later much easier.
     while True:
-        event = transducer.send(message)
-        message = None
-        if isinstance(event, Send):
-            return event
-        elif isinstance(event, Receive):
-            received = event.message
-            if isinstance(received, messages.Choke):
-                state.on_choke()
-            elif isinstance(received, messages.Block):
-                result = state.on_block(received)
-                if result is not None:
-                    return result
-        elif isinstance(event, Request) and state.can_request:
+        received = yield NeedMessage()
+        if isinstance(received, messages.Bitfield):
+            state.available.update(received.available(pieces))
+            break
+
+    _state = _State.CHOKED
+    while True:
+        event = NeedMessage()
+        if _state is _State.CHOKED:
+            _state = _State.INTERESTED
+            event = Write(messages.Interested())
+        elif _state is _State.UNCHOKED and state.can_request:
             try:
                 block = state.get_block()
             except IndexError:
-                return NeedPiece()
-            return Send(messages.Request.from_block(block))
-        else:
-            return NeedMessage()
+                event = NeedPiece()
+            else:
+                event = Write(messages.Request.from_block(block))
+        received = yield event
+        if isinstance(received, messages.Choke):
+            _state = _State.CHOKED
+            state.on_choke()
+        elif isinstance(received, messages.Unchoke):
+            _state = _State.UNCHOKED
+        elif isinstance(received, messages.Have):
+            state.available.add(received.piece(pieces))
+        elif isinstance(received, messages.Block):
+            result = state.on_block(received.block(pieces), received.data)
+            if result is not None:
+                yield result

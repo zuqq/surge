@@ -147,7 +147,7 @@ class Node(Actor):
 
         self.peer = peer
         self.downloading: Set[metadata.Piece] = set()
-        self._state = protocol.DownloadState(pieces, max_requests)
+        self._state = protocol.State(max_requests)
 
     def __repr__(self):
         class_name = self.__module__ + "." + self.__class__.__qualname__
@@ -156,33 +156,24 @@ class Node(Actor):
 
     async def _main(self, pieces, info_hash, peer_id):
         async with Stream(self.peer) as stream:
-            state = self._state
-            transducer = protocol.base(pieces, info_hash, peer_id, state.available)
-            next_event = functools.partial(protocol.next_event, state, transducer)
-
-            # Unroll the first two iterations of the loop because handshake
-            # messages don't have a length prefix.
-            event = next_event(None)
-            await stream.write(event.message)
-
-            event = next_event(None)
-            message = await stream.read_handshake()
-
+            transducer = protocol.base(pieces, info_hash, peer_id, self._state)
+            message = None
             while True:
-                event = next_event(message)
+                event = transducer.send(message)
                 message = None
-                if isinstance(event, protocol.Send):
+                if isinstance(event, protocol.Write):
                     await stream.write(event.message)
                 elif isinstance(event, protocol.Result):
                     self.downloading.remove(event.piece)
                     await self.parent.put(self, event.piece, event.data)
                 elif isinstance(event, protocol.NeedPiece):
-                    piece = self.parent.get_nowait(self)
-                    if piece is None:
-                        state.requesting = False
+                    if (piece := self.parent.get_nowait(self)) is None:
+                        self._state.requesting = False
                     else:
                         self.downloading.add(piece)
-                        state.add_piece(piece)
+                        self._state.add_piece(piece)
+                elif isinstance(event, protocol.NeedHandshake):
+                    message = await asyncio.wait_for(stream.read_handshake(), 5)
                 elif isinstance(event, protocol.NeedMessage):
                     message = await asyncio.wait_for(stream.read(), 5)
 
