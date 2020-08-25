@@ -66,8 +66,7 @@ def decode(bs):
 
 
 def raw_val(bs, key):
-    """Return the raw (i.e., encoded) value corresponding to `key` in the
-    encoded dictionary `bs`.
+    """Return the value associated with `key` in the encoded dictionary `bs`.
 
     Raise `KeyError` if `key` is not a key of `bs`.
     """
@@ -107,7 +106,7 @@ def _encode_str(bs):
 
 
 def encode(obj):
-    """Encode `obj` in BEncoding.
+    """Return the encoded value corresponding to `obj`.
 
     Raise `TypeError` if `obj` is not representable in BEncoding.
     """

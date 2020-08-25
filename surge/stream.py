@@ -1,3 +1,5 @@
+from typing import Optional
+
 import asyncio
 
 from . import messages
@@ -13,9 +15,11 @@ class Stream:
     """
 
     def __init__(self, peer: tracker.Peer):
+        # I don't inject the reader and writer because they don't support the
+        # async context manager protocol.
         self._peer = peer
-        self._reader = None
-        self._writer = None
+        self._reader: Optional[asyncio.StreamReader] = None
+        self._writer: Optional[asyncio.StreamWriter] = None
 
     async def __aenter__(self):
         self._reader, self._writer = await asyncio.open_connection(
@@ -24,7 +28,9 @@ class Stream:
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
-        await self.close()
+        if self._writer is not None:
+            self._writer.close()
+            await self._writer.wait_closed()
         return False
 
     async def read_handshake(self) -> messages.Handshake:
@@ -38,7 +44,3 @@ class Stream:
     async def write(self, message: messages.Message):
         self._writer.write(message.to_bytes())
         await self._writer.drain()
-
-    async def close(self):
-        self._writer.close()
-        await self._writer.wait_closed()

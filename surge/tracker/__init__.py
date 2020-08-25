@@ -77,6 +77,8 @@ class HTTPTrackerConnection(actor.Actor):
         while True:
             ps = urllib.parse.parse_qs(self.url.query)
             ps.update(dataclasses.asdict(params))
+            # I'm running a synchronous HTTP client in a separate thread here
+            # because HTTP requests only happen sporadically.
             d = bencoding.decode(
                 await loop.run_in_executor(
                     None,

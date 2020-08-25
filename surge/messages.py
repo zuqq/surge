@@ -18,7 +18,7 @@ treated separately when parsing.
 """
 
 from __future__ import annotations
-from typing import Dict, Optional, Sequence, Set, Tuple, Union
+from typing import Dict, Optional, Sequence, Set, Tuple, Type, Union
 
 import struct
 
@@ -183,7 +183,7 @@ class Request(Message):
         return cls(block.piece.index, block.begin, block.length)
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> Block:
+    def from_bytes(cls, data: bytes) -> Request:
         _, _, index, begin, length = struct.unpack(cls.format, data)
         return cls(index, begin, length)
 
@@ -366,6 +366,7 @@ class MetadataReject(MetadataProtocol):
 # Parser -----------------------------------------------------------------------
 
 
+message_type: Dict[int, Type[Message]]
 message_type = {
     0: Choke,
     1: Unchoke,

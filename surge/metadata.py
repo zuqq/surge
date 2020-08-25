@@ -175,8 +175,8 @@ class Metadata:
                 for raw_announce in tier:
                     announce_list.append(raw_announce.decode())
         elif b"announce" in d:
-            # According to BEP 12, "announce" should be ignored if
-            # "announce-list" is present.
+            # According to BEP 12, `b"announce"` should be ignored if
+            # `b"announce-list"` is present.
             announce_list.append(d[b"announce"].decode())
 
         info = d[b"info"]
