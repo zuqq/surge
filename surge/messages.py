@@ -147,8 +147,8 @@ class Bitfield(Message):
         return cls(payload)
 
     @classmethod
-    def from_indices(cls, indices: Set[int], total: int) -> Bitfield:
-        result = bytearray(total)
+    def from_indices(cls, indices: Set[int], length: int) -> Bitfield:
+        result = bytearray(length)
         for i in indices:
             result[i // 8] |= 1 << (7 - i % 8)
         return cls(bytes(result))
