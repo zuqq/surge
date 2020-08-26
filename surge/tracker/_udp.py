@@ -193,7 +193,7 @@ class ProtocolError(Exception):
 
 def udp(
     params: _metadata.Parameters,
-) -> Generator[Tuple[Request, int], Optional[Response], _metadata.Response]:
+) -> Generator[Tuple[Request, int], Tuple[Optional[Response], int], _metadata.Response]:
     connected = False
     for n in range(9):
         if not connected:

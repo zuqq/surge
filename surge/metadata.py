@@ -100,6 +100,7 @@ def piece_to_chunks(
     pieces: Sequence[Piece], files: Sequence[File]
 ) -> Dict[Piece, List[Chunk]]:
     """Map pieces to their chunks."""
+    result: Dict[Piece, List[Chunk]]
     result = {piece: [] for piece in pieces}
     i = 0
     j = 0

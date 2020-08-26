@@ -34,13 +34,19 @@ class Stream:
         return False
 
     async def read_handshake(self) -> messages.Handshake:
+        if self._reader is None:
+            raise ValueError("Reading from closed stream.")
         return messages.parse_handshake(await self._reader.readexactly(68))
 
     async def read(self) -> messages.Message:
+        if self._reader is None:
+            raise ValueError("Reading from closed stream.")
         prefix = await self._reader.readexactly(4)
         data = await self._reader.readexactly(int.from_bytes(prefix, "big"))
         return messages.parse(prefix + data)
 
     async def write(self, message: messages.Message):
+        if self._writer is None:
+            raise ValueError("Writing to closed stream.")
         self._writer.write(message.to_bytes())
         await self._writer.drain()

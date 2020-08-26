@@ -128,6 +128,8 @@ def base(
 ) -> Generator[Event, Optional[messages.Message], None]:
     yield Write(messages.Handshake(info_hash, peer_id))
     received = yield NeedHandshake()
+    if not isinstance(received, messages.Handshake):
+        raise TypeError("Expected handshake.")
     if received.info_hash != info_hash:
         raise ValueError("Wrong 'info_hash'.")
 
@@ -141,6 +143,7 @@ def base(
 
     _state = _State.CHOKED
     while True:
+        event: Event
         event = NeedMessage()
         if _state is _State.CHOKED:
             _state = _State.INTERESTED

@@ -87,6 +87,8 @@ def mex(
 ) -> Generator[Event, Optional[messages.Message], bytes]:
     yield Write(messages.Handshake(info_hash, peer_id, extension_protocol=True))
     received = yield NeedHandshake()
+    if not isinstance(received, messages.Handshake):
+        raise TypeError("Expected handshake.")
     if received.info_hash != info_hash:
         raise ValueError("Wrong 'info_hash'.")
 
@@ -105,7 +107,7 @@ def mex(
     # is fast enough.
     piece_length = 2 ** 14
     pieces = []
-    for i in range((metadata_size + piece_length - 1) // piece_length):
+    for i in range((metadata_size + piece_length - 1) // piece_length):  # type: ignore
         yield Write(messages.MetadataRequest(i, ut_metadata))
         while True:
             received = yield NeedMessage()

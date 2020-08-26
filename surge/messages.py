@@ -249,6 +249,7 @@ class ExtensionHandshake(ExtensionProtocol):
         self.metadata_size = metadata_size
 
     def to_bytes(self) -> bytes:
+        d: Dict[bytes, Union[Dict[bytes, int], int]]
         d = {b"m": {b"ut_metadata": self.ut_metadata}}
         if self.metadata_size is not None:
             d[b"metadata_size"] = self.metadata_size
