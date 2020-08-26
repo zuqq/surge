@@ -43,7 +43,7 @@ class TestUDP(Example):
             self.assertIsInstance(message, _udp.ConnectRequest)
             time += timeout + 1
 
-        with self.assertRaises(_udp.TimeoutError):
+        with self.assertRaises(_udp.ProtocolError):
             transducer.send((None, time))
 
     def test_connection_id_timeout(self):

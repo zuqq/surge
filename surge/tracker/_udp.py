@@ -22,16 +22,12 @@ Typical message flow:
 """
 
 from __future__ import annotations
-from typing import Union
+from typing import Generator, Optional, Tuple, Union
 
 import asyncio
 import collections
-import dataclasses
-import enum
-import functools
 import secrets
 import struct
-import urllib
 
 from . import _metadata
 
@@ -78,6 +74,9 @@ class AnnounceRequest:
         )
 
 
+Request = Union[ConnectRequest, AnnounceRequest]
+
+
 class ConnectResponse:
     value = 0
 
@@ -102,7 +101,10 @@ class AnnounceResponse:
         return cls(_metadata.Response.from_bytes(interval, data[20:]))
 
 
-def parse(data: bytes) -> Union[ConnectResponse, AnnounceResponse]:
+Response = Union[ConnectResponse, AnnounceResponse]
+
+
+def parse(data: bytes) -> Response:
     if len(data) < 4:
         raise ValueError("Not enough bytes.")
     value = int.from_bytes(data[:4], "big")
@@ -139,7 +141,7 @@ class Protocol(asyncio.DatagramProtocol):
         else:
             waiter.set_exception(exc)
 
-    async def read(self) -> Union[ConnectResponse, AnnounceResponse]:
+    async def read(self) -> Response:
         if self._exception is not None:
             raise self._exception
         if not self._queue:
@@ -148,7 +150,7 @@ class Protocol(asyncio.DatagramProtocol):
             await waiter
         return parse(self._queue.popleft())
 
-    def write(self, message: Union[ConnectRequest, AnnounceRequest]):
+    def write(self, message: Request):
         # I'm omitting flow control because every write is followed by a read.
         self._transport.sendto(message.to_bytes())
 
@@ -185,12 +187,13 @@ class Protocol(asyncio.DatagramProtocol):
 # Transducer -------------------------------------------------------------------
 
 
-class TimeoutError(Exception):
+class ProtocolError(Exception):
     pass
 
 
-# TODO: Instead of sending `None` if a timeout happens, thrown an exception.
-def udp(params: _metadata.Parameters):
+def udp(
+    params: _metadata.Parameters,
+) -> Generator[Tuple[Request, int], Optional[Response], _metadata.Response]:
     connected = False
     for n in range(9):
         if not connected:
@@ -207,4 +210,4 @@ def udp(params: _metadata.Parameters):
                 return received.response
             if time - connection_time >= 60:
                 connected = False
-    raise TimeoutError("Maximal number of retries reached.")
+    raise ProtocolError("Maximal number of retries reached.")
