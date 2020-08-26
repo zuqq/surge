@@ -28,7 +28,7 @@ Typical message flow:
 [BEP 0009]: http://bittorrent.org/beps/bep_0009.html
 """
 
-from typing import Iterable
+from typing import Generator, Iterable, Optional, Union
 
 import asyncio
 import dataclasses
@@ -66,17 +66,33 @@ def assemble(announce_list: Iterable[str], raw_info: bytes) -> bytes:
 # Protocol ---------------------------------------------------------------------
 
 
-def mex(info_hash: bytes, peer_id: bytes):
-    received = yield messages.Handshake(info_hash, peer_id, extension_protocol=True)
-    if not isinstance(received, messages.Handshake):
-        raise TypeError("Expected handshake.")
+@dataclasses.dataclass
+class Write:
+    message: messages.Message
+
+
+class NeedHandshake:
+    pass
+
+
+class NeedMessage:
+    pass
+
+
+Event = Union[Write, NeedHandshake, NeedMessage]
+
+
+def mex(
+        info_hash: bytes,
+        peer_id: bytes) -> Generator[Event, Optional[messages.Message], bytes]:
+    yield Write(messages.Handshake(info_hash, peer_id, extension_protocol=True))
+    received = yield NeedHandshake()
     if received.info_hash != info_hash:
         raise ValueError("Wrong 'info_hash'.")
 
-    message = messages.ExtensionHandshake()
+    yield Write(messages.ExtensionHandshake())
     while True:
-        received = yield message
-        message = None
+        received = yield NeedMessage()
         if isinstance(received, messages.ExtensionHandshake):
             ut_metadata = received.ut_metadata
             metadata_size = received.metadata_size
@@ -90,10 +106,9 @@ def mex(info_hash: bytes, peer_id: bytes):
     piece_length = 2 ** 14
     pieces = []
     for i in range((metadata_size + piece_length - 1) // piece_length):
-        message = messages.MetadataRequest(i, ut_metadata)
+        yield Write(messages.MetadataRequest(i, ut_metadata))
         while True:
-            received = yield message
-            message = None
+            received = yield NeedMessage()
             if isinstance(received, messages.MetadataData):
                 # We assume that the peer sends us data for the piece that we
                 # just requested; if not, the result of the transaction will be
@@ -162,17 +177,17 @@ class Node(Actor):
 
     async def _main(self, info_hash, peer_id):
         async with Stream(self.peer) as stream:
-            state = mex(info_hash, peer_id)
-
-            message = state.send(None)
-            await stream.write(message)
-            received = await stream.read_handshake()
-
+            transducer = mex(info_hash, peer_id)
             try:
+                message = None
                 while True:
-                    message = state.send(received)
-                    if message is not None:
-                        await stream.write(message)
-                    received = await asyncio.wait_for(stream.read(), 5)
+                    event = transducer.send(message)
+                    message = None
+                    if isinstance(event, Write):
+                        await stream.write(event.message)
+                    elif isinstance(event, NeedHandshake):
+                        message = await asyncio.wait_for(stream.read_handshake(), 5)
+                    elif isinstance(event, NeedMessage):
+                        message = await asyncio.wait_for(stream.read(), 5)
             except StopIteration as exc:
                 self.parent.done(exc.value)

@@ -1,3 +1,5 @@
+import collections
+
 from surge import messages
 from surge import mex
 
@@ -6,27 +8,42 @@ from ._example import Example
 
 class TestMex(Example):
     def test_mex(self):
-        metadata_size = len(self.raw_info)
-        piece_length = 2 ** 14
         other_peer_id = b"\xbe\xbb\xe9R\t\xcb!\xffu\xd1\x10\xc3X\\\x05\xab\x945\xee\x9a"
         transducer = mex.mex(self.info_hash, self.peer_id)
 
-        sent = transducer.send(None)
-        self.assertIsInstance(sent, messages.Handshake)
+        event = transducer.send(None)
+        self.assertIsInstance(event, mex.Write)
+        self.assertIsInstance(event.message, messages.Handshake)
 
-        sent = transducer.send(messages.Handshake(self.info_hash, other_peer_id))
-        self.assertIsInstance(sent, messages.ExtensionHandshake)
+        event = transducer.send(None)
+        self.assertIsInstance(event, mex.NeedHandshake)
 
-        sent = transducer.send(messages.ExtensionHandshake(3, metadata_size))
+        event = transducer.send(messages.Handshake(self.info_hash, other_peer_id))
+        self.assertIsInstance(event, mex.Write)
+        self.assertIsInstance(event.message, messages.ExtensionHandshake)
+        ut_metadata = event.message.ut_metadata
+
+        event = transducer.send(None)
+        self.assertIsInstance(event, mex.NeedMessage)
+
+        outbox = collections.deque()
+        message = messages.ExtensionHandshake(3, len(self.raw_info))
         with self.assertRaises(StopIteration) as cm:
-            for i in range((metadata_size + piece_length - 1) // piece_length):
-                self.assertIsInstance(sent, messages.MetadataRequest)
-                self.assertEqual(sent.index, i)
-                sent = transducer.send(
-                    messages.MetadataData(
-                        i,
-                        metadata_size,
-                        self.raw_info[i * piece_length : (i + 1) * piece_length],
-                    )
-                )
+            while True:
+                event = transducer.send(message)
+                message = None
+                if isinstance(event, mex.Write):
+                    if isinstance(event.message, messages.MetadataRequest):
+                        i = event.message.index
+                        outbox.append(
+                            messages.MetadataData(
+                                i,
+                                len(self.raw_info),
+                                self.raw_info[i * 2 ** 14 : (i + 1) * 2 ** 14],
+                                ut_metadata,
+                            )
+                        )
+                elif isinstance(event, mex.NeedMessage):
+                    if outbox:
+                        message = outbox.popleft()
         self.assertEqual(cm.exception.value, self.raw_info)
