@@ -68,9 +68,8 @@ def valid_piece(piece: Piece, data: bytes) -> bool:
 
 
 def available_pieces(
-        pieces: Sequence[Piece],
-        folder: str,
-        files: Sequence[File]) -> Generator[Piece, None, None]:
+    pieces: Sequence[Piece], folder: str, files: Sequence[File]
+) -> Generator[Piece, None, None]:
     """Yield all pieces whose SHA-1 digest is correct."""
     chunks = piece_to_chunks(pieces, files)
     for piece in pieces:
@@ -98,8 +97,8 @@ class Chunk:
 
 
 def piece_to_chunks(
-        pieces: Sequence[Piece],
-        files: Sequence[File]) -> Dict[Piece, List[Chunk]]:
+    pieces: Sequence[Piece], files: Sequence[File]
+) -> Dict[Piece, List[Chunk]]:
     """Map pieces to their chunks."""
     result = {piece: [] for piece in pieces}
     i = 0

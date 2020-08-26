@@ -124,10 +124,8 @@ _State = enum.Enum("_State", "CHOKED INTERESTED UNCHOKED")
 
 
 def base(
-        pieces: Sequence[metadata.Piece],
-        info_hash: bytes,
-        peer_id: bytes,
-        state: State) -> Generator[Event, Optional[messages.Message], None]:
+    pieces: Sequence[metadata.Piece], info_hash: bytes, peer_id: bytes, state: State
+) -> Generator[Event, Optional[messages.Message], None]:
     yield Write(messages.Handshake(info_hash, peer_id))
 
     received = yield NeedHandshake()

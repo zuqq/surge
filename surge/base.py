@@ -43,11 +43,12 @@ async def print_progress(pieces: Sequence[metadata.Piece], root: Root):
 
 
 async def download(
-        meta: metadata.Metadata,
-        params: tracker.Parameters,
-        missing: Set[metadata.Piece],
-        max_peers: int,
-        max_requests: int):
+    meta: metadata.Metadata,
+    params: tracker.Parameters,
+    missing: Set[metadata.Piece],
+    max_peers: int,
+    max_requests: int,
+):
     async with Root(meta, params, missing, max_peers, max_requests) as root:
         printer = asyncio.create_task(print_progress(meta.pieces, root))
         chunks = metadata.piece_to_chunks(meta.pieces, meta.files)
@@ -65,12 +66,13 @@ async def download(
 
 class Root(Actor):
     def __init__(
-            self,
-            meta: metadata.Metadata,
-            params: tracker.Parameters,
-            missing: Set[metadata.Piece],
-            max_peers: int,
-            max_requests: int):
+        self,
+        meta: metadata.Metadata,
+        params: tracker.Parameters,
+        missing: Set[metadata.Piece],
+        max_peers: int,
+        max_requests: int,
+    ):
         super().__init__()
         self._peer_queue = tracker.PeerQueue(self, meta.announce_list, params)
         self.children.add(self._peer_queue)
@@ -135,13 +137,14 @@ class Root(Actor):
 
 class Node(Actor):
     def __init__(
-            self,
-            parent: Root,
-            pieces: Sequence[metadata.Piece],
-            info_hash: bytes,
-            peer_id: bytes,
-            peer: tracker.Peer,
-            max_requests: int):
+        self,
+        parent: Root,
+        pieces: Sequence[metadata.Piece],
+        info_hash: bytes,
+        peer_id: bytes,
+        peer: tracker.Peer,
+        max_requests: int,
+    ):
         super().__init__(parent)
         self._coros.add(self._main(pieces, info_hash, peer_id))
 

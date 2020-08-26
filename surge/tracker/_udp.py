@@ -53,10 +53,8 @@ class AnnounceRequest:
     value = 1
 
     def __init__(
-            self,
-            transaction_id: bytes,
-            connection_id: bytes,
-            params: _metadata.Parameters):
+        self, transaction_id: bytes, connection_id: bytes, params: _metadata.Parameters
+    ):
         self.transaction_id = transaction_id
         self.connection_id = connection_id
         self.params = params

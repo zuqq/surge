@@ -19,10 +19,11 @@ __all__ = ("Parameters", "Peer", "PeerQueue")
 
 class PeerQueue(actor.Actor):
     def __init__(
-            self,
-            parent: Optional[actor.Actor],
-            announce_list: Iterable[str],
-            params: Parameters):
+        self,
+        parent: Optional[actor.Actor],
+        announce_list: Iterable[str],
+        params: Parameters,
+    ):
         super().__init__(parent)
 
         for announce in announce_list:
@@ -58,10 +59,8 @@ def get(url):
 
 class HTTPTrackerConnection(actor.Actor):
     def __init__(
-            self,
-            parent: PeerQueue,
-            url: urllib.parse.ParseResult,
-            params: Parameters):
+        self, parent: PeerQueue, url: urllib.parse.ParseResult, params: Parameters
+    ):
         super().__init__(parent)
         self._coros.add(self._main(params))
 
@@ -83,7 +82,8 @@ class HTTPTrackerConnection(actor.Actor):
                 await loop.run_in_executor(
                     None,
                     functools.partial(
-                        get, self.url._replace(query=urllib.parse.urlencode(ps)).geturl()
+                        get,
+                        self.url._replace(query=urllib.parse.urlencode(ps)).geturl(),
                     ),
                 )
             )
@@ -98,10 +98,8 @@ class HTTPTrackerConnection(actor.Actor):
 
 class UDPTrackerConnection(actor.Actor):
     def __init__(
-            self,
-            parent: PeerQueue,
-            url: urllib.parse.ParseResult,
-            params: Parameters):
+        self, parent: PeerQueue, url: urllib.parse.ParseResult, params: Parameters
+    ):
         super().__init__(parent)
         self._coros.add(self._main(params))
 

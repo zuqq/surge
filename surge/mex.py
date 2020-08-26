@@ -83,8 +83,8 @@ Event = Union[Write, NeedHandshake, NeedMessage]
 
 
 def mex(
-        info_hash: bytes,
-        peer_id: bytes) -> Generator[Event, Optional[messages.Message], bytes]:
+    info_hash: bytes, peer_id: bytes
+) -> Generator[Event, Optional[messages.Message], bytes]:
     yield Write(messages.Handshake(info_hash, peer_id, extension_protocol=True))
     received = yield NeedHandshake()
     if received.info_hash != info_hash:
@@ -133,10 +133,8 @@ async def download(announce_list, params, max_peers):
 
 class Root(Actor):
     def __init__(
-            self,
-            announce_list: Iterable[str],
-            params: tracker.Parameters,
-            max_peers: int):
+        self, announce_list: Iterable[str], params: tracker.Parameters, max_peers: int
+    ):
         super().__init__()
         peer_queue = tracker.PeerQueue(self, announce_list, params)
         self.children.add(peer_queue)
