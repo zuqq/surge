@@ -25,7 +25,7 @@ import logging
 import os
 import sys
 
-from docopt import docopt
+from docopt import docopt  # type: ignore
 
 from . import base
 from . import magnet
