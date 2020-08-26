@@ -116,7 +116,6 @@ def mex(
                 # piece at a time.
                 pieces.append(received.data)
                 break
-
     raw_info = b"".join(pieces)
     if valid_info(info_hash, raw_info):
         return raw_info

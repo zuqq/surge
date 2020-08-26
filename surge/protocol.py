@@ -127,7 +127,6 @@ def base(
     pieces: Sequence[metadata.Piece], info_hash: bytes, peer_id: bytes, state: State
 ) -> Generator[Event, Optional[messages.Message], None]:
     yield Write(messages.Handshake(info_hash, peer_id))
-
     received = yield NeedHandshake()
     if received.info_hash != info_hash:
         raise ValueError("Wrong 'info_hash'.")

@@ -25,7 +25,6 @@ class PeerQueue(actor.Actor):
         params: Parameters,
     ):
         super().__init__(parent)
-
         for announce in announce_list:
             url = urllib.parse.urlparse(announce)
             if url.scheme in ("http", "https"):
@@ -132,7 +131,6 @@ class UDPTrackerConnection(actor.Actor):
                 response = exc.value
             finally:
                 await protocol.close()
-
             # pylint: disable=no-member
             logging.info("%r received %r peers", self, len(response.peers))
             for peer in response.peers:
