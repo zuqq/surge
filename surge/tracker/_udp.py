@@ -24,15 +24,10 @@ Typical message flow:
 from __future__ import annotations
 from typing import Generator, Optional, Tuple, Union
 
-import asyncio
-import collections
 import secrets
 import struct
 
 from . import _metadata
-
-
-# Messages ---------------------------------------------------------------------
 
 
 class ConnectRequest:
@@ -115,90 +110,21 @@ def parse(data: bytes) -> Response:
     raise ValueError("Unkown message identifier.")
 
 
-# Protocol ---------------------------------------------------------------------
-
-
-# TODO: Implement the async context manager protocol.
-class Protocol(asyncio.DatagramProtocol):
-    def __init__(self):
-        super().__init__()
-
-        self._transport = None
-        self._closed = asyncio.get_event_loop().create_future()
-        self._exception = None
-
-        self._queue = collections.deque(maxlen=10)
-        self._waiter = None
-
-    def _wake_up(self, exc=None):
-        if (waiter := self._waiter) is None:
-            return
-        self._waiter = None
-        if waiter.done():
-            return
-        if exc is None:
-            waiter.set_result(None)
-        else:
-            waiter.set_exception(exc)
-
-    async def read(self) -> Response:
-        if self._exception is not None:
-            raise self._exception
-        if not self._queue:
-            waiter = asyncio.get_running_loop().create_future()
-            self._waiter = waiter
-            await waiter
-        return parse(self._queue.popleft())
-
-    def write(self, message: Request):
-        # I'm omitting flow control because every write is followed by a read.
-        self._transport.sendto(message.to_bytes())
-
-    async def close(self):
-        self._transport.close()
-        await self._closed
-
-    # asyncio.BaseProtocol
-
-    def connection_made(self, transport):
-        self._transport = transport
-
-    def connection_lost(self, exc):
-        if not self._transport.is_closing():
-            if exc is None:
-                peer = self._transport.get_extra_info("peername")
-                exc = ConnectionError(f"Unexpected EOF {peer}.")
-            self._exception = exc
-            self._wake_up(exc)
-        if not self._closed.done():
-            self._closed.set_result(None)
-
-    # asyncio.DatagramProtocol
-
-    def datagram_received(self, data, addr):
-        self._queue.append(data)
-        self._wake_up()
-
-    def error_received(self, exc):
-        self._exception = exc
-        self._wake_up(exc)
-
-
-# Transducer -------------------------------------------------------------------
-
-
 class ProtocolError(Exception):
     pass
 
 
 def udp(
     params: _metadata.Parameters,
-) -> Generator[Tuple[Request, int], Tuple[Optional[Response], int], _metadata.Response]:
+) -> Generator[
+    Tuple[Request, int], Tuple[Optional[Response], int], _metadata.Response,
+]:
     connected = False
     for n in range(9):
         if not connected:
             transaction_id = secrets.token_bytes(4)
-            received, time = yield (ConnectRequest(transaction_id), 15 * 2 ** n)
+            message = ConnectRequest(transaction_id)
+            received, time = yield (message, 15 * 2 ** n)
             if isinstance(received, ConnectResponse):
                 connected = True
                 connection_id = received.connection_id

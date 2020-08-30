@@ -1,6 +1,7 @@
 from typing import Iterable, Optional, Set
 
 import asyncio
+import collections
 import dataclasses
 import functools
 import http.client
@@ -101,6 +102,72 @@ class HTTPTrackerConnection(actor.Actor):
             await asyncio.sleep(response.interval)
 
 
+# TODO: Implement the async context manager protocol.
+class UDPTrackerProtocol(asyncio.DatagramProtocol):
+    def __init__(self):
+        super().__init__()
+
+        self._transport = None
+        self._closed = asyncio.get_event_loop().create_future()
+        self._exception = None
+
+        self._queue = collections.deque(maxlen=10)
+        self._waiter = None
+
+    def _wake_up(self, exc=None):
+        if (waiter := self._waiter) is None:
+            return
+        self._waiter = None
+        if waiter.done():
+            return
+        if exc is None:
+            waiter.set_result(None)
+        else:
+            waiter.set_exception(exc)
+
+    async def read(self) -> _udp.Response:
+        if self._exception is not None:
+            raise self._exception
+        if not self._queue:
+            waiter = asyncio.get_running_loop().create_future()
+            self._waiter = waiter
+            await waiter
+        return _udp.parse(self._queue.popleft())
+
+    def write(self, message: _udp.Request):
+        # I'm omitting flow control because every write is followed by a read.
+        self._transport.sendto(message.to_bytes())
+
+    async def close(self):
+        self._transport.close()
+        await self._closed
+
+    # asyncio.BaseProtocol
+
+    def connection_made(self, transport):
+        self._transport = transport
+
+    def connection_lost(self, exc):
+        if not self._transport.is_closing():
+            if exc is None:
+                peer = self._transport.get_extra_info("peername")
+                exc = ConnectionError(f"Unexpected EOF {peer}.")
+            self._exception = exc
+            self._wake_up(exc)
+        if not self._closed.done():
+            self._closed.set_result(None)
+
+    # asyncio.DatagramProtocol
+
+    def datagram_received(self, data, addr):
+        self._queue.append(data)
+        self._wake_up()
+
+    def error_received(self, exc):
+        self._exception = exc
+        self._wake_up(exc)
+
+
 class UDPTrackerConnection(actor.Actor):
     def __init__(
         self, parent: PeerQueue, url: urllib.parse.ParseResult, params: Parameters
@@ -120,7 +187,7 @@ class UDPTrackerConnection(actor.Actor):
         loop = asyncio.get_running_loop()
         while True:
             _, protocol = await loop.create_datagram_endpoint(
-                functools.partial(_udp.Protocol),
+                functools.partial(UDPTrackerProtocol),
                 remote_addr=(self.url.hostname, self.url.port),
             )
             try:
