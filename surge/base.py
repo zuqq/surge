@@ -176,9 +176,9 @@ class Node(Actor):
                         self.downloading.add(piece)
                         self._state.add_piece(piece)
                 elif isinstance(event, protocol.NeedHandshake):
-                    message = await asyncio.wait_for(stream.read_handshake(), 5)
+                    message = await asyncio.wait_for(stream.read_handshake(), 30)
                 elif isinstance(event, protocol.NeedMessage):
-                    message = await asyncio.wait_for(stream.read(), 5)
+                    message = await asyncio.wait_for(stream.read(), 30)
 
     @property
     def available(self):

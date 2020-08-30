@@ -185,8 +185,8 @@ class Node(Actor):
                     if isinstance(event, Write):
                         await stream.write(event.message)
                     elif isinstance(event, NeedHandshake):
-                        message = await asyncio.wait_for(stream.read_handshake(), 5)
+                        message = await asyncio.wait_for(stream.read_handshake(), 30)
                     elif isinstance(event, NeedMessage):
-                        message = await asyncio.wait_for(stream.read(), 5)
+                        message = await asyncio.wait_for(stream.read(), 30)
             except StopIteration as exc:
                 self.parent.done(exc.value)
