@@ -137,8 +137,7 @@ def base(
 
     _state = _State.CHOKED
     while True:
-        event: Event
-        event = NeedMessage()
+        event: Event = NeedMessage()
         if _state is _State.CHOKED:
             _state = _State.INTERESTED
             event = Write(messages.Interested())
