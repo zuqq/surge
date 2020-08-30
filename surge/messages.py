@@ -26,9 +26,6 @@ from . import bencoding
 from . import metadata
 
 
-# Base class -------------------------------------------------------------------
-
-
 class Message:
     """Base class for BitTorrent messages.
 
@@ -47,9 +44,6 @@ class Message:
     def from_bytes(cls, data: bytes) -> Message:
         # Default implementation for messages that are ignored.
         return cls()
-
-
-# Messages without identifier byte ---------------------------------------------
 
 
 class Handshake(Message):
@@ -78,9 +72,6 @@ class Keepalive(Message):
     format = ">L"
     fields = ("prefix",)
     prefix = 0
-
-
-# Messages with identifier byte ------------------------------------------------
 
 
 class Choke(Message):
@@ -221,9 +212,6 @@ class Port(Message):
     value = 9
 
 
-# Extension protocol -----------------------------------------------------------
-
-
 class ExtensionProtocol(Message):
     """Base class for messages belonging to the extension protocol."""
 
@@ -263,9 +251,6 @@ class ExtensionHandshake(ExtensionProtocol):
     def from_bytes(cls, data: bytes) -> ExtensionHandshake:
         d = bencoding.decode(data[6:])
         return cls(d[b"m"][b"ut_metadata"], d[b"metadata_size"])
-
-
-# Metadata protocol ------------------------------------------------------------
 
 
 class MetadataProtocol(ExtensionProtocol):
@@ -361,7 +346,9 @@ class MetadataReject(MetadataProtocol):
         )
 
 
-# Parser -----------------------------------------------------------------------
+def parse_handshake(data: bytes) -> Handshake:
+    """Parse a BitTorrent handshake."""
+    return Handshake.from_bytes(data)
 
 
 message_type: Dict[int, Type[Message]]
@@ -378,11 +365,6 @@ message_type = {
     9: Port,
     20: ExtensionProtocol,
 }
-
-
-def parse_handshake(data: bytes) -> Handshake:
-    """Parse a BitTorrent handshake."""
-    return Handshake.from_bytes(data)
 
 
 def parse(data: bytes) -> Message:

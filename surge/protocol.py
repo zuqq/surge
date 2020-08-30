@@ -7,9 +7,6 @@ from . import messages
 from . import metadata
 
 
-# Events -----------------------------------------------------------------------
-
-
 @dataclasses.dataclass
 class Write:
     message: messages.Message
@@ -34,9 +31,6 @@ class NeedPiece:
 
 
 Event = Union[Write, Result, NeedHandshake, NeedMessage, NeedPiece]
-
-
-# State ------------------------------------------------------------------------
 
 
 class Progress:
@@ -118,9 +112,6 @@ class State:
         self._requested.clear()
         for piece in in_progress:
             self.add_piece(piece)
-
-
-# Transducer -------------------------------------------------------------------
 
 
 _State = enum.Enum("_State", "CHOKED INTERESTED UNCHOKED")
