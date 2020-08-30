@@ -3,10 +3,10 @@ from typing import Iterable, Optional, Set
 import asyncio
 import dataclasses
 import functools
+import http.client
 import logging
 import time
 import urllib.parse
-import urllib.request
 
 from . import _udp
 from .. import actor
@@ -51,9 +51,21 @@ class PeerQueue(actor.Actor):
         await self._peers.put(peer)
 
 
-def get(url):
-    with urllib.request.urlopen(url) as f:
-        return f.read()
+def get(url, params):
+    q = urllib.parse.parse_qs(url.query)
+    q.update(dataclasses.asdict(params))
+    path = url._replace(scheme="", netloc="", query=urllib.parse.urlencode(q)).geturl()
+    if url.scheme == "http":
+        conn = http.client.HTTPConnection(url.netloc, timeout=30)
+    elif url.scheme == "https":
+        conn = http.client.HTTPSConnection(url.netloc, timeout=30)
+    else:
+        raise ValueError("Wrong scheme.")
+    try:
+        conn.request("GET", path)
+        return conn.getresponse().read()
+    finally:
+        conn.close()
 
 
 class HTTPTrackerConnection(actor.Actor):
@@ -73,17 +85,11 @@ class HTTPTrackerConnection(actor.Actor):
     async def _main(self, params):
         loop = asyncio.get_running_loop()
         while True:
-            ps = urllib.parse.parse_qs(self.url.query)
-            ps.update(dataclasses.asdict(params))
             # I'm running a synchronous HTTP client in a separate thread here
             # because HTTP requests only happen sporadically.
             d = bencoding.decode(
                 await loop.run_in_executor(
-                    None,
-                    functools.partial(
-                        get,
-                        self.url._replace(query=urllib.parse.urlencode(ps)).geturl(),
-                    ),
+                    None, functools.partial(get, self.url, params)
                 )
             )
             if b"failure reason" in d:
