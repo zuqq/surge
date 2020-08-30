@@ -81,9 +81,12 @@ class State:
 
     def cancel_piece(self, piece: metadata.Piece):
         self._progress.pop(piece)
-        p = lambda block: block.piece != piece
-        self._requested = set(filter(p, self._requested))
-        self._stack = list(filter(p, self._stack))
+
+        def predicate(block):
+            return block.piece != piece
+
+        self._requested = set(filter(predicate, self._requested))
+        self._stack = list(filter(predicate, self._stack))
 
     def get_block(self):
         """"Return a fresh block.
