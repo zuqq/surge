@@ -114,7 +114,7 @@ class State:
             self.add_piece(piece)
 
 
-_State = enum.Enum("_State", "CHOKED INTERESTED UNCHOKED")
+Flow = enum.Enum("Flow", "CHOKED INTERESTED UNCHOKED")
 
 
 def base(
@@ -135,13 +135,13 @@ def base(
             state.available.update(received.available(pieces))
             break
 
-    _state = _State.CHOKED
+    flow = Flow.CHOKED
     while True:
         event: Event = NeedMessage()
-        if _state is _State.CHOKED:
-            _state = _State.INTERESTED
+        if flow is Flow.CHOKED:
+            flow = Flow.INTERESTED
             event = Write(messages.Interested())
-        elif _state is _State.UNCHOKED and state.can_request:
+        elif flow is Flow.UNCHOKED and state.can_request:
             try:
                 block = state.get_block()
             except IndexError:
@@ -150,10 +150,10 @@ def base(
                 event = Write(messages.Request.from_block(block))
         received = yield event
         if isinstance(received, messages.Choke):
-            _state = _State.CHOKED
+            flow = Flow.CHOKED
             state.on_choke()
         elif isinstance(received, messages.Unchoke):
-            _state = _State.UNCHOKED
+            flow = Flow.UNCHOKED
         elif isinstance(received, messages.Have):
             state.available.add(received.piece(pieces))
         elif isinstance(received, messages.Block):
