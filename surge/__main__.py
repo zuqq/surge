@@ -27,10 +27,10 @@ import sys
 
 from docopt import docopt  # type: ignore
 
-from . import base
 from . import magnet
 from . import metadata
 from . import mex
+from . import protocol
 from . import tracker
 
 
@@ -92,7 +92,7 @@ def main(args: Dict[str, str]):
         print("Nothing to do.")
     else:
         loop.run_until_complete(
-            base.download(meta, params, missing, max_peers, max_requests)
+            protocol.download(meta, params, missing, max_peers, max_requests)
         )
 
 

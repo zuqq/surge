@@ -1,7 +1,7 @@
 import collections
 
 from surge import messages
-from surge import protocol
+from surge import _transducer
 
 from ._example import Example
 
@@ -9,18 +9,18 @@ from ._example import Example
 class TestProtocol(Example):
     def test_piece_download(self):
         other_peer_id = b"\xbe\xbb\xe9R\t\xcb!\xffu\xd1\x10\xc3X\\\x05\xab\x945\xee\x9a"
-        state = protocol.State(50)
-        transducer = protocol.base(self.pieces, self.info_hash, self.peer_id, state)
+        state = _transducer.State(50)
+        transducer = _transducer.base(self.pieces, self.info_hash, self.peer_id, state)
 
         event = transducer.send(None)
-        self.assertIsInstance(event, protocol.Write)
+        self.assertIsInstance(event, _transducer.Write)
         self.assertIsInstance(event.message, messages.Handshake)
 
         event = transducer.send(None)
-        self.assertIsInstance(event, protocol.NeedHandshake)
+        self.assertIsInstance(event, _transducer.NeedHandshake)
 
         event = transducer.send(messages.Handshake(self.info_hash, other_peer_id))
-        self.assertIsInstance(event, protocol.NeedMessage)
+        self.assertIsInstance(event, _transducer.NeedMessage)
 
         outbox = collections.deque()
         piece = self.pieces[0]
@@ -30,7 +30,7 @@ class TestProtocol(Example):
         while True:
             event = transducer.send(message)
             message = None
-            if isinstance(event, protocol.Write):
+            if isinstance(event, _transducer.Write):
                 if isinstance(event.message, messages.Interested):
                     outbox.append(messages.Unchoke())
                 elif isinstance(event.message, messages.Request):
@@ -41,14 +41,14 @@ class TestProtocol(Example):
                             block, data[block.begin : block.begin + block.length]
                         )
                     )
-            elif isinstance(event, protocol.Result):
+            elif isinstance(event, _transducer.Result):
                 break
-            elif isinstance(event, protocol.NeedPiece):
+            elif isinstance(event, _transducer.NeedPiece):
                 if to_download:
                     state.add_piece(to_download.pop())
                 else:
                     state.requesting = False
-            elif isinstance(event, protocol.NeedMessage):
+            elif isinstance(event, _transducer.NeedMessage):
                 if outbox:
                     message = outbox.popleft()
         self.assertEqual(event.piece, piece)
