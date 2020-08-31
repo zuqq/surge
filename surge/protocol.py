@@ -54,6 +54,9 @@ async def download(
         chunks = metadata.piece_to_chunks(meta.pieces, meta.files)
         loop = asyncio.get_running_loop()
         folder = meta.folder
+        await loop.run_in_executor(
+            None, functools.partial(metadata.build_file_tree, folder, meta.files)
+        )
         async for piece, data in root.results:
             for chunk in chunks[piece]:
                 await loop.run_in_executor(

@@ -76,10 +76,6 @@ def main(args: Dict[str, str]):
         meta.folder = os.path.join(folder, meta.folder)
         print(f"Downloading to {meta.folder}.")
 
-    print("Building the file tree...", end="", flush=True)
-    metadata.build_file_tree(meta.folder, meta.files)
-    print("Done.")
-
     missing = set(meta.pieces)
 
     if args["--resume"]:
