@@ -127,10 +127,13 @@ def base(
     if received.info_hash != info_hash:
         raise ValueError("Wrong 'info_hash'.")
 
-    # Wait for the peer to send us its bitfield. This is not mandated by the
-    # specification, but makes requesting pieces later much easier.
+    # Wait for the peer to tell us which pieces it has. This is not mandated by
+    # the specification, but makes requesting pieces much easier.
     while True:
         received = yield NeedMessage()
+        if isinstance(received, messages.Have):
+            state.available.add(received.piece(pieces))
+            break
         if isinstance(received, messages.Bitfield):
             state.available.update(received.available(pieces))
             break
