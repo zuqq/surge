@@ -1,4 +1,4 @@
-Surge
+surge
 =====
 
 Surge is a client for the BitTorrent network, built on top of Python's
