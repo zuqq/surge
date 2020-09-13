@@ -379,6 +379,6 @@ def parse(data: bytes) -> Message:
         cls = message_type[data[4]]
     except IndexError:
         return Keepalive()
-    except KeyError:
-        raise ValueError("Unknown message identifier.")
+    except KeyError as exc:
+        raise ValueError("Unknown message identifier.") from exc
     return cls.from_bytes(data)

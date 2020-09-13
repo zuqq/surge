@@ -23,6 +23,7 @@ def _list(bs, start):
 
 
 def _dict(bs, start):
+    # TODO: The specification only allows dictionaries with sorted keys!
     result = {}
     start += 1
     while bs[start] != ord("e"):

@@ -1,3 +1,10 @@
+"""Magnet URI parser.
+
+Specification: [BEP 009]
+
+[BEP 009]: http://www.bittorrent.org/beps/bep_0009.html
+"""
+
 from typing import List, Tuple
 
 import urllib.parse

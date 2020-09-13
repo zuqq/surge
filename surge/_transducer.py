@@ -114,7 +114,12 @@ class State:
             self.add_piece(piece)
 
 
-Flow = enum.Enum("Flow", "CHOKED INTERESTED UNCHOKED")
+class Flow(enum.IntEnum):
+    """Additional state that indicates whether we are allowed to request."""
+
+    CHOKED = 0
+    INTERESTED = 1
+    UNCHOKED = 2
 
 
 def base(

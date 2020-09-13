@@ -10,8 +10,8 @@ class Stream:
     """A stream interface for BitTorrent connections.
 
     This class wraps `asyncio.StreamReader` and `asyncio.StreamWriter`; instead
-    of bytes, it reads and writes BitTorrent messages. It also features an async
-    `close` method and support for the async context manager protocol.
+    of bytes, it reads and writes BitTorrent messages. It also features support
+    for the async context manager protocol.
     """
 
     def __init__(self, peer: tracker.Peer):
