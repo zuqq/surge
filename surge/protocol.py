@@ -33,7 +33,7 @@ async def print_progress(pieces: Sequence[metadata.Piece], root: Root):
                 end=".",
                 flush=True,
             )
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
     except asyncio.CancelledError:
         if not root.missing:
             # Print one last time, so that the final terminal output reflects
