@@ -85,7 +85,7 @@ def _encode_int(n):
     return b"i" + str(n).encode("ascii") + b"e"
 
 
-def _encode_list(l):
+def _encode_list(l):  # noqa: E741
     result = [b"l"]
     for obj in l:
         result.append(encode(obj))

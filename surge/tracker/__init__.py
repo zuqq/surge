@@ -204,7 +204,6 @@ class UDPTrackerConnection(actor.Actor):
                 response = exc.value
             finally:
                 await protocol.close()
-            # pylint: disable=no-member
             logging.info("%r received %r peers", self, len(response.peers))
             for peer in response.peers:
                 await self.parent.put(peer)
