@@ -34,7 +34,7 @@ from . import protocol
 from . import tracker
 
 
-def main(args: Dict[str, str]):
+def main(args: Dict[str, str]) -> None:
     loop = asyncio.get_event_loop()
 
     max_peers = int(args["--peers"])

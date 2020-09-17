@@ -69,7 +69,7 @@ class Actor:
             self.children.remove(child)
             self._on_child_crash(child)
 
-    async def start(self):
+    async def start(self) -> None:
         """First start `self`, then all of its children."""
         # This method is async because it requires a running event loop.
         if self.running:
@@ -80,15 +80,15 @@ class Actor:
         for child in self.children:
             await child.start()
 
-    async def spawn_child(self, child: Actor):
+    async def spawn_child(self, child: Actor) -> None:
         self.children.add(child)
         await child.start()
 
-    def report_crash(self, child: Actor):
+    def report_crash(self, child: Actor) -> None:
         """Report to `self` that `child` crashed."""
         self._crashes.put_nowait(child)
 
-    async def stop(self):
+    async def stop(self) -> None:
         """First stop `self`, then all of its children."""
         if not self.running:
             return

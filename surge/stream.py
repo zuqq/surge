@@ -45,7 +45,7 @@ class Stream:
         data = await self._reader.readexactly(int.from_bytes(prefix, "big"))
         return messages.parse(prefix + data)
 
-    async def write(self, message: messages.Message):
+    async def write(self, message: messages.Message) -> None:
         if self._writer is None:
             raise ValueError("Writing to closed stream.")
         self._writer.write(message.to_bytes())

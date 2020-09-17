@@ -16,7 +16,7 @@ from .channel import Channel
 from .stream import Stream
 
 
-async def print_progress(pieces: Sequence[metadata.Piece], root: Root):
+async def print_progress(pieces: Sequence[metadata.Piece], root: Root) -> None:
     total = len(pieces)
     progress_template = "\r\x1b[KProgress: {{}}/{} pieces".format(total)
     connections_template = "({} tracker{}, {} peer{})"
@@ -48,7 +48,7 @@ async def download(
     missing: Set[metadata.Piece],
     max_peers: int,
     max_requests: int,
-):
+) -> None:
     async with Root(meta, params, missing, max_peers, max_requests) as root:
         printer = asyncio.create_task(print_progress(meta.pieces, root))
         chunks = metadata.piece_to_chunks(meta.pieces, meta.files)
@@ -126,7 +126,7 @@ class Root(Actor):
         self._downloading[piece].add(node)
         return piece
 
-    async def put(self, node: Node, piece: metadata.Piece, data: bytes):
+    async def put(self, node: Node, piece: metadata.Piece, data: bytes) -> None:
         if piece not in self._downloading:
             return
         self.missing.remove(piece)
@@ -184,8 +184,8 @@ class Node(Actor):
                     message = await asyncio.wait_for(stream.read(), 30)
 
     @property
-    def available(self):
+    def available(self) -> Set[metadata.Piece]:
         return self._state.available
 
-    def cancel_piece(self, piece: metadata.Piece):
+    def cancel_piece(self, piece: metadata.Piece) -> None:
         self._state.cancel_piece(piece)

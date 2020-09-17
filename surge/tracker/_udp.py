@@ -120,6 +120,7 @@ def udp(
     Tuple[Request, int], Tuple[Optional[Response], int], _metadata.Response,
 ]:
     connected = False
+    message: Request
     for n in range(9):
         if not connected:
             transaction_id = secrets.token_bytes(4)

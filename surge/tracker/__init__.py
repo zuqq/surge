@@ -45,14 +45,14 @@ class PeerQueue(actor.Actor):
         """Return a fresh peer."""
         return await self._peers.get()
 
-    async def put(self, peer: Peer):
+    async def put(self, peer: Peer) -> None:
         if peer in self._seen:
             return
         self._seen.add(peer)
         await self._peers.put(peer)
 
 
-def get(url, params):
+def get(url: urllib.parse.ParseResult, params: Parameters) -> bytes:
     q = urllib.parse.parse_qs(url.query)
     q.update(dataclasses.asdict(params))
     path = url._replace(scheme="", netloc="", query=urllib.parse.urlencode(q)).geturl()
@@ -134,11 +134,11 @@ class UDPTrackerProtocol(asyncio.DatagramProtocol):
             await waiter
         return _udp.parse(self._queue.popleft())
 
-    def write(self, message: _udp.Request):
+    def write(self, message: _udp.Request) -> None:
         # I'm omitting flow control because every write is followed by a read.
         self._transport.sendto(message.to_bytes())
 
-    async def close(self):
+    async def close(self) -> None:
         self._transport.close()
         await self._closed
 

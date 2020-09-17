@@ -48,7 +48,7 @@ class Progress:
     def data(self) -> bytes:
         return bytes(self._data)
 
-    def add(self, block: metadata.Block, data: bytes):
+    def add(self, block: metadata.Block, data: bytes) -> None:
         self._missing.discard(block)
         self._data[block.begin : block.begin + block.length] = data
 
@@ -68,12 +68,12 @@ class State:
     def can_request(self):
         return self.requesting and len(self._requested) < self._max_requests
 
-    def add_piece(self, piece: metadata.Piece):
+    def add_piece(self, piece: metadata.Piece) -> None:
         blocks = tuple(metadata.blocks(piece))
         self._progress[piece] = Progress(piece, blocks)
         self._stack.extend(reversed(blocks))
 
-    def cancel_piece(self, piece: metadata.Piece):
+    def cancel_piece(self, piece: metadata.Piece) -> None:
         self._progress.pop(piece)
 
         def predicate(block):
@@ -82,7 +82,7 @@ class State:
         self._requested = set(filter(predicate, self._requested))
         self._stack = list(filter(predicate, self._stack))
 
-    def get_block(self):
+    def get_block(self) -> metadata.Block:
         """"Return a fresh block.
 
         Raise `IndexError` if there are no blocks available.
@@ -105,7 +105,7 @@ class State:
             return Result(piece, data)
         raise ValueError("Invalid data.")
 
-    def on_choke(self):
+    def on_choke(self) -> None:
         in_progress = tuple(self._progress)
         self._progress.clear()
         self._stack.clear()

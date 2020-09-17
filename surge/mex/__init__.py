@@ -42,7 +42,9 @@ from ..stream import Stream
 __all__ = ("download",)
 
 
-async def download(announce_list, params, max_peers):
+async def download(
+    announce_list: Iterable[str], params: tracker.Parameters, max_peers: int
+) -> bytes:
     async with Root(announce_list, params, max_peers) as root:
         return await root.result
 
@@ -72,7 +74,7 @@ class Root(Actor):
         else:
             super()._on_child_crash(child)
 
-    def done(self, raw_info: bytes):
+    def done(self, raw_info: bytes) -> None:
         if not self.result.done():
             self.result.set_result(_info.assemble(self._announce_list, raw_info))
 

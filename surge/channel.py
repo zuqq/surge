@@ -20,6 +20,6 @@ class Channel(asyncio.Queue):
             raise StopAsyncIteration
         return item
 
-    async def close(self):
+    async def close(self) -> None:
         # TODO: Actually close the channel.
         await self.put(self._sentinel)

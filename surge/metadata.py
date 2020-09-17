@@ -37,7 +37,7 @@ class File:
         return cls(begin, length, path)
 
 
-def build_file_tree(folder: str, files: Iterable[File]):
+def build_file_tree(folder: str, files: Iterable[File]) -> None:
     """Create the files that don't exist and truncate the ones that do.
 
     Existing files need to be truncated because later writes only happen inside
@@ -120,7 +120,7 @@ def piece_to_chunks(
     return result
 
 
-def write_chunk(folder: str, chunk: Chunk, data: bytes):
+def write_chunk(folder: str, chunk: Chunk, data: bytes) -> None:
     """Write `chunk` to the file system."""
     path = os.path.join(folder, chunk.file.path)
     with open(path, "rb+") as f:

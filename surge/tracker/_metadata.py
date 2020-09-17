@@ -1,4 +1,5 @@
-from typing import List
+from __future__ import annotations
+from typing import Any, Dict, List
 
 import dataclasses
 import hashlib
@@ -19,7 +20,7 @@ class Parameters:
     compact: int = 1  # See BEP 23.
 
     @classmethod
-    def from_bytes(cls, raw_meta):
+    def from_bytes(cls, raw_meta: bytes) -> Parameters:
         raw_info = bencoding.raw_val(raw_meta, b"info")
         info_hash = hashlib.sha1(raw_info).digest()
         return cls(info_hash)
@@ -31,11 +32,11 @@ class Peer:
     port: int
 
     @classmethod
-    def from_bytes(cls, bs):
+    def from_bytes(cls, bs: bytes) -> Peer:
         return cls(".".join(str(b) for b in bs[:4]), int.from_bytes(bs[4:], "big"))
 
     @classmethod
-    def from_dict(cls, d):
+    def from_dict(cls, d: Dict[bytes, Any]) -> Peer:
         return cls(d[b"ip"].decode(), d[b"port"])
 
 
@@ -52,11 +53,11 @@ class Response:
     peers: List[Peer]
 
     @classmethod
-    def from_bytes(cls, interval, raw_peers):
+    def from_bytes(cls, interval: int, raw_peers: bytes) -> Response:
         return cls(interval, _parse_peers(raw_peers))
 
     @classmethod
-    def from_dict(cls, resp):
+    def from_dict(cls, resp: Dict[bytes, Any]) -> Response:
         if isinstance(resp[b"peers"], list):
             # Dictionary model, as defined in BEP 3.
             peers = [Peer.from_dict(d) for d in resp[b"peers"]]
