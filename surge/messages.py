@@ -34,11 +34,11 @@ class Message:
     holding the data.
     """
 
-    format = ""
+    formatter = struct.Struct("")
     fields: Tuple[str, ...] = ()
 
     def to_bytes(self) -> bytes:
-        return struct.pack(self.format, *(getattr(self, f) for f in self.fields))
+        return self.formatter.pack(*(getattr(self, f) for f in self.fields))
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Message:
@@ -47,7 +47,7 @@ class Message:
 
 
 class Handshake(Message):
-    format = ">B19sQ20s20s"
+    formatter = struct.Struct(">B19sQ20s20s")
     fields = ("pstrlen", "pstr", "reserved", "info_hash", "peer_id")
 
     pstrlen = 19
@@ -64,46 +64,46 @@ class Handshake(Message):
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Handshake:
-        _, _, _, info_hash, peer_id = struct.unpack(cls.format, data)
+        _, _, _, info_hash, peer_id = cls.formatter.unpack(data)
         return cls(info_hash, peer_id)
 
 
 class Keepalive(Message):
-    format = ">L"
+    formatter = struct.Struct(">L")
     fields = ("prefix",)
     prefix = 0
 
 
 class Choke(Message):
-    format = ">LB"
+    formatter = struct.Struct(">LB")
     fields = ("prefix", "value")
     prefix = 1
     value = 0
 
 
 class Unchoke(Message):
-    format = ">LB"
+    formatter = struct.Struct(">LB")
     fields = ("prefix", "value")
     prefix = 1
     value = 1
 
 
 class Interested(Message):
-    format = ">LB"
+    formatter = struct.Struct(">LB")
     fields = ("prefix", "value")
     prefix = 1
     value = 2
 
 
 class NotInterested(Message):
-    format = ">LB"
+    formatter = struct.Struct(">LB")
     fields = ("prefix", "value")
     prefix = 1
     value = 3
 
 
 class Have(Message):
-    format = ">LBL"
+    formatter = struct.Struct(">LBL")
     fields = ("prefix", "value", "index")
     prefix = 5
     value = 4
@@ -113,7 +113,7 @@ class Have(Message):
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Have:
-        _, _, index = struct.unpack(cls.format, data)
+        _, _, index = cls.formatter.unpack(data)
         return cls(index)
 
     def piece(self, pieces: Sequence[metadata.Piece]) -> metadata.Piece:
@@ -125,7 +125,7 @@ class Bitfield(Message):
     value = 5
 
     def __init__(self, payload: bytes):
-        self.format = f">LB{len(payload)}s"
+        self.formatter = struct.Struct(f">LB{len(payload)}s")
         self.prefix = 1 + len(payload)
         self.payload = payload
 
@@ -156,7 +156,7 @@ class Bitfield(Message):
 
 
 class Request(Message):
-    format = ">LBLLL"
+    formatter = struct.Struct(">LBLLL")
     fields = ("prefix", "value", "index", "begin", "length")
     prefix = 13
     value = 6
@@ -172,7 +172,7 @@ class Request(Message):
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Request:
-        _, _, index, begin, length = struct.unpack(cls.format, data)
+        _, _, index, begin, length = cls.formatter.unpack(data)
         return cls(index, begin, length)
 
     def block(self, pieces: Sequence[metadata.Piece]) -> metadata.Block:
@@ -184,7 +184,7 @@ class Block(Message):
     value = 7
 
     def __init__(self, index: int, begin: int, data: bytes):
-        self.format = f">LBLL{len(data)}s"
+        self.formatter = struct.Struct(f">LBLL{len(data)}s")
         self.prefix = 9 + len(data)
         self.index = index
         self.begin = begin
