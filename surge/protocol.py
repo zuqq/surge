@@ -1,3 +1,18 @@
+"""Actors for the main protocol.
+
+Every torrent download has an actor tree that is grounded in a central `Root`
+instance. That `Root` has two kinds of children: a `PeerQueue` instance
+controlling the tracker connections and a fixed number of `Node` instances that
+connect to peers.
+
+With respect to its `Node`s, the `Root` has three responsibilities: picking
+pieces for them to download, replacing `Node`s that crash (the peer stopped
+responding, sent invalid data, etc.), and collecting the downloaded pieces.
+
+Downloaded pieces are exposed via `Root.results`; the `download` coroutine
+retrieves them from there and writes them to the file system.
+"""
+
 from __future__ import annotations
 from typing import DefaultDict, Optional, Sequence, Set
 
@@ -17,6 +32,7 @@ from .stream import Stream
 
 
 async def print_progress(pieces: Sequence[metadata.Piece], root: Root) -> None:
+    """Periodically poll `root` and print the download progress to stdout."""
     total = len(pieces)
     progress_template = "\r\x1b[KProgress: {{}}/{} pieces".format(total)
     connections_template = "({} tracker{}, {} peer{})"
@@ -49,11 +65,14 @@ async def download(
     max_peers: int,
     max_requests: int,
 ) -> None:
+    """Spin up a `Root` and write downloaded pieces to the file system."""
     async with Root(meta, params, missing, max_peers, max_requests) as root:
         printer = asyncio.create_task(print_progress(meta.pieces, root))
         chunks = metadata.piece_to_chunks(meta.pieces, meta.files)
         loop = asyncio.get_running_loop()
         folder = meta.folder
+        # Delegate to a thread pool because asyncio has no direct support for
+        # asynchronous file system operations.
         await loop.run_in_executor(
             None, functools.partial(metadata.build_file_tree, folder, meta.files)
         )
@@ -68,6 +87,16 @@ async def download(
 
 
 class Root(Actor):
+    """Root of the actor tree.
+    
+    Children are spawned in `_main`, with crashes being handled by the `Actor`
+    interface. In order to obtain pieces to download, `Node`s call `get_nowait`;
+    downloaded pieces are reported via `put`.
+
+    This class also exposes `missing`, `trackers`, and `peers`, which provide
+    information about the download.
+    """
+
     def __init__(
         self,
         meta: metadata.Metadata,
@@ -83,9 +112,21 @@ class Root(Actor):
             self._main(meta.pieces, params.info_hash, params.peer_id, max_requests)
         )
 
+        # The set of pieces that still need to be downloaded.
         self.missing = missing
+        # A `Channel` that holds up to `max_peers` downloaded pieces. If the
+        # channel fills up, `Node`s will hold off on downloading more pieces
+        # until the file system has caught up.
         self.results = Channel(max_peers)
+        # We connect to at most `max_peers` peers at the same time. This
+        # semaphore is a means of communication between the coroutine that
+        # cleans up after crashed `Node`s and the coroutine that spawns new
+        # ones.
         self._slots = asyncio.Semaphore(max_peers)
+        # In endgame mode, multiple `Node`s can be downloading the same piece;
+        # as soon as one finishes downloading that piece, the other `Node`s
+        # need to be notified. Therefore we keep track of which `Node`s are
+        # downloading any given piece.
         self._downloading: DefaultDict[metadata.Piece, Set[Node]]
         self._downloading = collections.defaultdict(set)
 
@@ -109,13 +150,19 @@ class Root(Actor):
 
     @property
     def trackers(self) -> int:
+        """The number of connected trackers."""
         return len(self._peer_queue.children)
 
     @property
     def peers(self) -> int:
+        """The number of connected peers."""
         return max(0, len(self.children) - 1)
 
     def get_nowait(self, node: Node) -> Optional[metadata.Piece]:
+        """Return a fresh piece to download.
+
+        If there are no more pieces to download, return `None`.
+        """
         downloading = set(self._downloading)
         # Strict endgame mode: only send duplicate requests if every missing
         # piece is already being requested from some peer.
@@ -127,6 +174,11 @@ class Root(Actor):
         return piece
 
     async def put(self, node: Node, piece: metadata.Piece, data: bytes) -> None:
+        """Deliver a downloaded piece.
+        
+        If any other nodes are in the process of downloading `piece`, those
+        downloads are canceled.
+        """
         if piece not in self._downloading:
             return
         self.missing.remove(piece)
@@ -139,6 +191,11 @@ class Root(Actor):
 
 
 class Node(Actor):
+    """Download pieces from a single peer.
+    
+    The `Node` crashes if the peer stops responding or sends invalid data.
+    """
+
     def __init__(
         self,
         parent: Root,
@@ -164,6 +221,8 @@ class Node(Actor):
         async with Stream(self.peer) as stream:
             transducer = _transducer.base(pieces, info_hash, peer_id, self._state)
             message = None
+            # Main loop that drives the transducer. See the documentation of the
+            # `_transducer` module for more information.
             while True:
                 event = transducer.send(message)
                 message = None
@@ -185,7 +244,9 @@ class Node(Actor):
 
     @property
     def available(self) -> Set[metadata.Piece]:
+        """The pieces that the peer advertises."""
         return self._state.available
 
     def cancel_piece(self, piece: metadata.Piece) -> None:
+        """Stop downloading `piece`."""
         self._state.cancel_piece(piece)
