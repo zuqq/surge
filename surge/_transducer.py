@@ -1,3 +1,13 @@
+"""State machine of the main protocol.
+
+The state machine consists of the generator function `base` plus the class
+`State` that holds information about open requests; it is a transducer that
+receives `messages.Messages` and yields `Event`s.
+
+`Event`s inform the driver (i.e., the code that advances the generator) what
+action to take next.
+"""
+
 from typing import Dict, Generator, Iterable, List, Optional, Sequence, Set, Union
 
 import dataclasses
@@ -54,13 +64,23 @@ class Progress:
 
 
 class State:
+    """Connection state, especially the parts pertaining to open block request.
+
+    This class is also used to synchronously pass information from the driver
+    to the `base` generator, via the methods `add_piece` and `cancel_piece`.
+    """
+
     def __init__(self, max_requests: int):
+        # Maximal number of outstanding requests.
         self._max_requests = max_requests
 
         self._progress: Dict[metadata.Piece, Progress] = {}
+        # Blocks to request next.
         self._stack: List[metadata.Block] = []
+        # Outstanding requests.
         self._requested: Set[metadata.Block] = set()
 
+        # Pieces that the peer is advertising.
         self.available: Set[metadata.Piece] = set()
         self.requesting = True
 
@@ -69,11 +89,13 @@ class State:
         return self.requesting and len(self._requested) < self._max_requests
 
     def add_piece(self, piece: metadata.Piece) -> None:
+        """Add `piece` to the download queue."""
         blocks = tuple(metadata.blocks(piece))
         self._progress[piece] = Progress(piece, blocks)
         self._stack.extend(reversed(blocks))
 
     def cancel_piece(self, piece: metadata.Piece) -> None:
+        """Cancel `piece`, discarding partial progress."""
         self._progress.pop(piece)
 
         def predicate(block):
@@ -83,7 +105,7 @@ class State:
         self._stack = list(filter(predicate, self._stack))
 
     def get_block(self) -> metadata.Block:
-        """"Return a fresh block.
+        """"Return a fresh block to download.
 
         Raise `IndexError` if there are no blocks available.
         """
@@ -92,6 +114,10 @@ class State:
         return block
 
     def on_block(self, block: metadata.Block, data: bytes) -> Optional[Result]:
+        """Deliver a downloaded block.
+
+        If `block` was the last missing block of its piece, return a `Result`.
+        """
         if block not in self._requested:
             return None
         self._requested.remove(block)
@@ -106,6 +132,7 @@ class State:
         raise ValueError("Invalid data.")
 
     def on_choke(self) -> None:
+        """Cancel all pieces, discarding partial progress."""
         in_progress = tuple(self._progress)
         self._progress.clear()
         self._stack.clear()
@@ -115,7 +142,13 @@ class State:
 
 
 class Flow(enum.IntEnum):
-    """Additional state that indicates whether we are allowed to request."""
+    """Additional state that indicates whether we are allowed to request.
+
+    `CHOKED` is the initial state. We transition from `CHOKED` to `INTERESTED`
+    by sending a `messages.Interested` message to the peer and then to
+    `UNCHOKED` by receiving a `messages.Unchoke` message. The peer will only
+    honor our `messages.Request` messages if we're `UNCHOKED`.
+    """
 
     CHOKED = 0
     INTERESTED = 1
@@ -125,6 +158,8 @@ class Flow(enum.IntEnum):
 def base(
     pieces: Sequence[metadata.Piece], info_hash: bytes, peer_id: bytes, state: State
 ) -> Generator[Event, Optional[messages.Message], None]:
+    """The generator function part of the state machine."""
+    # Two-way handshake.
     yield Write(messages.Handshake(info_hash, peer_id))
     received = yield NeedHandshake()
     if not isinstance(received, messages.Handshake):
@@ -143,6 +178,7 @@ def base(
             state.available.update(received.available(pieces))
             break
 
+    # Main loop.
     flow = Flow.CHOKED
     while True:
         event: Event = NeedMessage()

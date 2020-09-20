@@ -85,7 +85,7 @@ class Actor:
         await child.start()
 
     def report_crash(self, child: Actor) -> None:
-        """Report to `self` that `child` crashed."""
+        """Report that `child` crashed."""
         self._crashes.put_nowait(child)
 
     async def stop(self) -> None:
