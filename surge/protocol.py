@@ -88,7 +88,7 @@ async def download(
 
 class Root(Actor):
     """Root of the actor tree.
-    
+
     Children are spawned in `_main`, with crashes being handled by the `Actor`
     interface. In order to obtain pieces to download, `Node`s call `get_nowait`;
     downloaded pieces are reported via `put`.
@@ -175,7 +175,7 @@ class Root(Actor):
 
     async def put(self, node: Node, piece: metadata.Piece, data: bytes) -> None:
         """Deliver a downloaded piece.
-        
+
         If any other nodes are in the process of downloading `piece`, those
         downloads are canceled.
         """
@@ -192,7 +192,7 @@ class Root(Actor):
 
 class Node(Actor):
     """Download pieces from a single peer.
-    
+
     The `Node` crashes if the peer stops responding or sends invalid data.
     """
 
