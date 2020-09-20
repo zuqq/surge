@@ -1,3 +1,10 @@
+"""Parsers for tracker responses.
+
+Supports compact peer lists as defined in [BEP 0023].
+
+[BEP 0023]: http://www.bittorrent.org/beps/bep_0023.html
+"""
+
 from __future__ import annotations
 from typing import Any, Dict, List
 

@@ -1,3 +1,13 @@
+"""Actors for the tracker protocols.
+
+This package contains support for two protocols: the original tracker protocol
+over HTTP and its UDP-based variant.
+
+An instance of `HTTPTrackerConnection` or `UDPTrackerConnection` represents a
+connection with a single tracker; `PeerQueue` manages multiple connections and
+exposes an `asyncio.Queue`-like interface for the received peers.
+"""
+
 from typing import Iterable, Optional, Set
 
 import asyncio
@@ -53,6 +63,8 @@ class PeerQueue(actor.Actor):
 
 
 def get(url: urllib.parse.ParseResult, params: Parameters) -> bytes:
+    # This uses `http.client` instead of the `urllib.request` wrapper because
+    # the latter is not thread-safe.
     q = urllib.parse.parse_qs(url.query)
     q.update(dataclasses.asdict(params))
     path = url._replace(scheme="", netloc="", query=urllib.parse.urlencode(q)).geturl()

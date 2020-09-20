@@ -119,6 +119,11 @@ def udp(
 ) -> Generator[
     Tuple[Request, int], Tuple[Optional[Response], int], _metadata.Response,
 ]:
+    """State machine for the UDP tracker protocol.
+
+    The state machine is a transducer: it yields pairs consisting of a
+    `Request` plus its timeout and receives timestamped `Response`s.
+    """
     connected = False
     message: Request
     for n in range(9):
