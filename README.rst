@@ -3,7 +3,7 @@ surge
 
 Surge is a client for the BitTorrent network, built on top of Python's
 coroutine-based concurrency model and the asyncio event loop. Please note that
-Surge is download-only for now.
+it is download-only for now.
 
 Installation
 ------------
@@ -109,3 +109,15 @@ unresponsive or malicious peers.
 
 For details about the implementation of the actor model, see the documentation
 of the ``actor`` module.
+
+Protocol implementation
+~~~~~~~~~~~~~~~~~~~~~~~
+
+The protocol is implemented in the spirit of `Sans I/O `_, meaning that its
+state machine is completely independent from any objects performing I/O;
+this enables convenient mock-free unit testing.
+
+The state machine is based on generators functions, which provide a natural way
+to express multiphasic protocols.
+
+.. _`Sans I/O`: https://sans-io.readthedocs.io/
