@@ -2,9 +2,11 @@
 
 Specification: [BEP 0009]
 
-The metadata exchange protocol facilities metadata exchange between peers. It
-uses the extension protocol to transmit its messages as part of a BitTorrent
-connection.
+The metadata exchange protocol is a mechanism to exchange metadata (i.e.,
+.torrent files) with peers. It uses the extension protocol to transmit its
+messages as part of a BitTorrent connection; see `messages.MetadataMessage`.
+Therefore the implementation uses the same approach as that of the main
+protocol.
 
 Typical message flow:
 
@@ -45,11 +47,14 @@ __all__ = ("download",)
 async def download(
     announce_list: Iterable[str], params: tracker.Parameters, max_peers: int
 ) -> bytes:
+    """Spin up a `Root` and download the metadata."""
     async with Root(announce_list, params, max_peers) as root:
         return await root.result
 
 
 class Root(Actor):
+    """Root of the actor tree, similar to the one for the main protocol."""
+
     def __init__(
         self, announce_list: Iterable[str], params: tracker.Parameters, max_peers: int
     ):
@@ -58,6 +63,7 @@ class Root(Actor):
         self.children.add(peer_queue)
         self._coros.add(self._main(params, peer_queue))
 
+        # Future that will hold the metadata.
         self.result = asyncio.get_event_loop().create_future()
         self._announce_list = announce_list
         self._slots = asyncio.Semaphore(max_peers)
@@ -80,6 +86,8 @@ class Root(Actor):
 
 
 class Node(Actor):
+    """Download the metadata from a single peer."""
+
     def __init__(self, parent: Root, params: tracker.Parameters, peer: tracker.Peer):
         super().__init__(parent)
         self._coros.add(self._main(params.info_hash, params.peer_id))

@@ -6,10 +6,12 @@ from .. import bencoding
 
 
 def valid(info_hash: bytes, raw_info: bytes) -> bool:
+    """Check that the `b"info"` value is valid."""
     return hashlib.sha1(raw_info).digest() == info_hash
 
 
 def assemble(announce_list: Iterable[str], raw_info: bytes) -> bytes:
+    """Build the metadata from list of trackers and the `b"info"` value."""
     # We can't just decode and re-encode, because the value associated with
     # the key `b"info"` needs to be preserved exactly.
     return b"".join(

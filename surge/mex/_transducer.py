@@ -1,3 +1,10 @@
+"""State machine for the metadata exchange protocol.
+
+The structure is similar to that of the main protocol. Howeve, because this
+protocol is much simpler, there is no need for a separate `State` object and
+there are fewer types of `Event`s.
+"""
+
 from typing import Generator, Optional, Union
 
 import dataclasses
