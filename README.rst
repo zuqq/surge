@@ -8,7 +8,7 @@ it is download-only for now.
 Installation
 ------------
 
-Surge requires Python 3.8 with `docopt`_. The recommended way of installing these
+Surge requires Python 3.8 and `docopt`_. The recommended way of installing these
 dependencies is to use `poetry`_. Run
 
 .. code-block::
@@ -34,7 +34,6 @@ appropriate environment it can be run as ``python -m surge``.
 
     $ python -m surge --file debian.torrent
     Reading metadata from debian.torrent.
-    Building the file tree...Done.
     Progress: 1340/1340 pieces.
 
 **Help page:**
@@ -103,9 +102,8 @@ Request queuing:
 Actor model
 ~~~~~~~~~~~
 
-Peers are modeled as actors that exchange messages with a central mediator. The
-strong encapsulation provided by this model makes it easy to deal with
-unresponsive or malicious peers.
+Peers are modeled as actors; the strong encapsulation provided by this model
+makes it easy to deal with unresponsive or malicious peers.
 
 For details about the implementation of the actor model, see the documentation
 of the ``actor`` module.
@@ -113,7 +111,7 @@ of the ``actor`` module.
 Protocol implementation
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-The protocol is implemented in the spirit of `Sans I/O `_, meaning that its
+The protocol is implemented in the spirit of `Sans I/O`_, meaning that its
 state machine is completely independent from any objects performing I/O;
 this enables convenient mock-free unit testing.
 
