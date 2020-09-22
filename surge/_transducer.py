@@ -1,12 +1,12 @@
-"""State machine of the main protocol.
+"""State machine for the main protocol.
 
 Instead of a state machine that does its own calls to I/O-performing methods,
-this module provides a pure transducer that receives `messages.Messages` and
+this module provides a pure transducer that receives `messages.Message`s and
 yields `Event`s. In particular, the transducer is completely agnostic as to
-the kind of I/O is performed (or whether any is performed at all!).
+which kind of I/O is performed (or whether any is performed at all!).
 
-Code that wants to run the transducer sends it `messages.Messages` and
-dispatches on the type of events that the transducer yields; an `Event`
+Code that wants to run the transducer sends it `messages.Message`s and
+dispatches on the type of `Event`s that the transducer yields; an `Event`
 represents an action that the caller should take in order to advance the state
 of the connection.
 """
