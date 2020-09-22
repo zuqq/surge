@@ -58,13 +58,11 @@ async def print_progress(pieces: Sequence[metadata.Piece], root: Root) -> None:
         raise
 
 
-async def download(
-    meta: metadata.Metadata,
-    params: tracker.Parameters,
-    missing: Set[metadata.Piece],
-    max_peers: int,
-    max_requests: int,
-) -> None:
+async def download(meta: metadata.Metadata,
+                   params: tracker.Parameters,
+                   missing: Set[metadata.Piece],
+                   max_peers: int,
+                   max_requests: int) -> None:
     """Spin up a `Root` and write downloaded pieces to the file system."""
     async with Root(meta, params, missing, max_peers, max_requests) as root:
         printer = asyncio.create_task(print_progress(meta.pieces, root))
@@ -97,14 +95,12 @@ class Root(Actor):
     information about the download.
     """
 
-    def __init__(
-        self,
-        meta: metadata.Metadata,
-        params: tracker.Parameters,
-        missing: Set[metadata.Piece],
-        max_peers: int,
-        max_requests: int,
-    ):
+    def __init__(self,
+                 meta: metadata.Metadata,
+                 params: tracker.Parameters,
+                 missing: Set[metadata.Piece],
+                 max_peers: int,
+                 max_requests: int):
         super().__init__()
         self._peer_queue = tracker.PeerQueue(self, meta.announce_list, params)
         self.children.add(self._peer_queue)
@@ -196,15 +192,13 @@ class Node(Actor):
     The `Node` crashes if the peer stops responding or sends invalid data.
     """
 
-    def __init__(
-        self,
-        parent: Root,
-        pieces: Sequence[metadata.Piece],
-        info_hash: bytes,
-        peer_id: bytes,
-        peer: tracker.Peer,
-        max_requests: int,
-    ):
+    def __init__(self,
+                 parent: Root,
+                 pieces: Sequence[metadata.Piece],
+                 info_hash: bytes,
+                 peer_id: bytes,
+                 peer: tracker.Peer,
+                 max_requests: int):
         super().__init__(parent)
         self._coros.add(self._main(pieces, info_hash, peer_id))
 

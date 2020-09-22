@@ -43,9 +43,10 @@ class ConnectRequest:
 class AnnounceRequest:
     value = 1
 
-    def __init__(
-        self, transaction_id: bytes, connection_id: bytes, params: _metadata.Parameters
-    ):
+    def __init__(self,
+                 transaction_id: bytes,
+                 connection_id: bytes,
+                 params: _metadata.Parameters):
         self.transaction_id = transaction_id
         self.connection_id = connection_id
         self.params = params
@@ -114,11 +115,9 @@ class ProtocolError(Exception):
     pass
 
 
-def udp(
-    params: _metadata.Parameters,
-) -> Generator[
-    Tuple[Request, int], Tuple[Optional[Response], int], _metadata.Response,
-]:
+def udp(params: _metadata.Parameters) -> Generator[Tuple[Request, int],
+                                                   Tuple[Optional[Response], int],
+                                                   _metadata.Response]:
     """State machine for the UDP tracker protocol.
 
     The state machine is a transducer: it yields pairs consisting of a

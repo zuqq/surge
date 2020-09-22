@@ -29,12 +29,10 @@ __all__ = ("Parameters", "Peer", "PeerQueue")
 
 
 class PeerQueue(actor.Actor):
-    def __init__(
-        self,
-        parent: Optional[actor.Actor],
-        announce_list: Iterable[str],
-        params: Parameters,
-    ):
+    def __init__(self,
+                 parent: Optional[actor.Actor],
+                 announce_list: Iterable[str],
+                 params: Parameters):
         super().__init__(parent)
         for announce in announce_list:
             url = urllib.parse.urlparse(announce)
@@ -82,9 +80,10 @@ def get(url: urllib.parse.ParseResult, params: Parameters) -> bytes:
 
 
 class HTTPTrackerConnection(actor.Actor):
-    def __init__(
-        self, parent: PeerQueue, url: urllib.parse.ParseResult, params: Parameters
-    ):
+    def __init__(self,
+                 parent: PeerQueue,
+                 url: urllib.parse.ParseResult,
+                 params: Parameters):
         super().__init__(parent)
         self._coros.add(self._main(params))
 
@@ -181,9 +180,10 @@ class UDPTrackerProtocol(asyncio.DatagramProtocol):
 
 
 class UDPTrackerConnection(actor.Actor):
-    def __init__(
-        self, parent: PeerQueue, url: urllib.parse.ParseResult, params: Parameters
-    ):
+    def __init__(self,
+                 parent: PeerQueue,
+                 url: urllib.parse.ParseResult,
+                 params: Parameters):
         super().__init__(parent)
         self._coros.add(self._main(params))
 

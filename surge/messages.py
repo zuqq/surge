@@ -54,9 +54,11 @@ class Handshake(Message):
     pstr = b"BitTorrent protocol"
     reserved = 0
 
-    def __init__(
-        self, info_hash: bytes, peer_id: bytes, *, extension_protocol: bool = False
-    ):
+    def __init__(self,
+                 info_hash: bytes,
+                 peer_id: bytes,
+                 *,
+                 extension_protocol: bool = False):
         self.info_hash = info_hash
         self.peer_id = peer_id
         if extension_protocol:

@@ -44,9 +44,9 @@ from ..stream import Stream
 __all__ = ("download",)
 
 
-async def download(
-    announce_list: Iterable[str], params: tracker.Parameters, max_peers: int
-) -> bytes:
+async def download(announce_list: Iterable[str],
+                   params: tracker.Parameters,
+                   max_peers: int) -> bytes:
     """Spin up a `Root` and download the metadata."""
     async with Root(announce_list, params, max_peers) as root:
         return await root.result
@@ -55,9 +55,10 @@ async def download(
 class Root(Actor):
     """Root of the actor tree, similar to the one for the main protocol."""
 
-    def __init__(
-        self, announce_list: Iterable[str], params: tracker.Parameters, max_peers: int
-    ):
+    def __init__(self,
+                 announce_list: Iterable[str],
+                 params: tracker.Parameters,
+                 max_peers: int):
         super().__init__()
         peer_queue = tracker.PeerQueue(self, announce_list, params)
         self.children.add(peer_queue)

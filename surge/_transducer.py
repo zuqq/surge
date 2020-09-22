@@ -158,9 +158,10 @@ class Flow(enum.IntEnum):
     UNCHOKED = 2
 
 
-def base(
-    pieces: Sequence[metadata.Piece], info_hash: bytes, peer_id: bytes, state: State
-) -> Generator[Event, Optional[messages.Message], None]:
+def base(pieces: Sequence[metadata.Piece],
+         info_hash: bytes,
+         peer_id: bytes,
+         state: State) -> Generator[Event, Optional[messages.Message], None]:
     """The generator function part of the state machine."""
     # Two-way handshake.
     yield Write(messages.Handshake(info_hash, peer_id))
