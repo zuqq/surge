@@ -1,9 +1,9 @@
 """Actors for the main protocol.
 
 Every torrent download has an actor tree that is grounded in a central `Root`
-instance. That `Root` has two kinds of children: a `PeerQueue` instance
-controlling the tracker connections and a fixed number of `Node` instances that
-connect to peers.
+instance. That `Root` has two kinds of children: a `surge.tracker.PeerQueue`
+instance that is responsible for the tracker connections and a fixed number of
+`Node` instances that connect to peers.
 
 With respect to its `Node`s, the `Root` has three responsibilities: picking
 pieces for them to download, replacing `Node`s that crash (the peer stopped

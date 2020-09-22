@@ -1,8 +1,8 @@
 """Functions for converting to and from BEncoding.
 
-BEncoding is defined in the [BitTorrent specification][0].
+BEncoding is a serialization format defined in the [BitTorrent specification].
 
-[0]: http://bittorrent.org/beps/bep_0003.html
+[BitTorrent specification]: http://bittorrent.org/beps/bep_0003.html
 """
 
 

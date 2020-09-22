@@ -1,3 +1,21 @@
+"""Actor base class.
+
+The actor model is a concurrency paradigm that empasizes the use of message
+passing instead of shared state. Apart from sending and receiving messages,
+actors can also spawn other actors. The resulting tree-like structure gives us
+a convenient way of dealing with exceptions in an actor's thread of execution:
+it simply messages its parent, who can then decide to restart the child or
+replace it entirely. This makes the model especially suitable for concurrent
+communication over computer networks where connections are frequently expected
+to be dropped.
+
+As to the concrete implementation, actors are objects that derive from the
+`Actor` class. Messages are passed by calling methods of the receiving object,
+both synchronous and asynchronous in nature. An actor's thread of execution
+consists of a set of coroutines; exceptions in any of the coroutines are caught
+by a wrapper task. To implement a restart strategy, override `_supervise`.
+"""
+
 from __future__ import annotations
 from typing import Coroutine, Optional, Set
 
@@ -7,7 +25,7 @@ import logging
 
 
 class Actor:
-    """Sets of coroutines with support for message passing and error handling.
+    """Actor base class.
 
     `Actor`s form a directed graph whose structure is stored in the attributes
     `parent` and `children`.
@@ -17,12 +35,12 @@ class Actor:
     and children. Messages are to be implemented as methods of the receiving
     class.
 
-    `Actor`s are controlled via the methods `start` and `stop`; starting or
-    stopping an `Actor` does the same to all of its children.
+    The lifetime of an `Actor` is controlled via the methods `start` and `stop`;
+    starting orstopping an `Actor` does the same to all of its children.
 
-    If one of its coroutines raises an `Exception`, the `Actor` notifies its
-    parent; the parent then shuts down the affected `Actor`. Restart strategies
-    can be added to subclasses by overriding `_supervise`.
+    If any of its coroutines raises an `Exception`, the `Actor` messages its
+    `parent`, who then shuts down the affected `Actor`. Restart strategies can
+    be added by overriding `_supervise`.
     """
 
     def __init__(self, parent: Optional[Actor] = None):

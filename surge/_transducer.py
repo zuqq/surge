@@ -1,11 +1,14 @@
 """State machine of the main protocol.
 
-The state machine consists of the generator function `base` plus the class
-`State` that holds information about open requests; it is a transducer that
-receives `messages.Messages` and yields `Event`s.
+Instead of a state machine that does its own calls to I/O-performing methods,
+this module provides a pure transducer that receives `messages.Messages` and
+yields `Event`s. In particular, the transducer is completely agnostic as to
+the kind of I/O is performed (or whether any is performed at all!).
 
-`Event`s inform the driver (i.e., the code that advances the generator) what
-action to take next.
+Code that wants to run the transducer sends it `messages.Messages` and
+dispatches on the type of events that the transducer yields; an `Event`
+represents an action that the caller should take in order to advance the state
+of the connection.
 """
 
 from typing import Dict, Generator, Iterable, List, Optional, Sequence, Set, Union
