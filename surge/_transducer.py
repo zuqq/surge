@@ -21,29 +21,35 @@ from . import metadata
 
 
 @dataclasses.dataclass
-class Write:
+class Send:
+    """Send `message`."""
+
     message: messages.Message
 
 
 @dataclasses.dataclass
-class Result:
+class PutPiece:
+    """Process the downloaded `data` for `piece`."""
+
     piece: metadata.Piece
     data: bytes
 
 
-class NeedHandshake:
-    pass
+# This is separate from `ReceiveMessage` because the handshake message has
+# a fixed length, unlike the rest of the messages which are length-prefixed.
+class ReceiveHandshake:
+    """Receive a `messages.Handshake`."""
 
 
-class NeedMessage:
-    pass
+class ReceiveMessage:
+    """Receive a `messages.Message`."""
 
 
-class NeedPiece:
-    pass
+class GetPiece:
+    """Call `State.add_piece` with a piece to download."""
 
 
-Event = Union[Write, Result, NeedHandshake, NeedMessage, NeedPiece]
+Event = Union[Send, PutPiece, ReceiveHandshake, ReceiveMessage, GetPiece]
 
 
 class Progress:
@@ -74,13 +80,11 @@ class State:
     """
 
     def __init__(self, max_requests: int):
-        # Maximal number of outstanding requests.
         self._max_requests = max_requests
 
         self._progress: Dict[metadata.Piece, Progress] = {}
         # Blocks to request next.
         self._stack: List[metadata.Block] = []
-        # Outstanding requests.
         self._requested: Set[metadata.Block] = set()
 
         # Pieces that the peer is advertising.
@@ -116,7 +120,7 @@ class State:
         self._requested.add(block)
         return block
 
-    def on_block(self, block: metadata.Block, data: bytes) -> Optional[Result]:
+    def on_block(self, block: metadata.Block, data: bytes) -> Optional[PutPiece]:
         """Deliver a downloaded block.
 
         If `block` was the last missing block of its piece, return a `Result`.
@@ -131,7 +135,7 @@ class State:
             return None
         data = self._progress.pop(piece).data
         if metadata.valid_piece(piece, data):
-            return Result(piece, data)
+            return PutPiece(piece, data)
         raise ValueError("Invalid data.")
 
     def on_choke(self) -> None:
@@ -162,10 +166,8 @@ def base(pieces: Sequence[metadata.Piece],
          info_hash: bytes,
          peer_id: bytes,
          state: State) -> Generator[Event, Optional[messages.Message], None]:
-    """The generator function part of the state machine."""
-    # Two-way handshake.
-    yield Write(messages.Handshake(info_hash, peer_id))
-    received = yield NeedHandshake()
+    yield Send(messages.Handshake(info_hash, peer_id))
+    received = yield ReceiveHandshake()
     if not isinstance(received, messages.Handshake):
         raise TypeError("Expected handshake.")
     if received.info_hash != info_hash:
@@ -174,7 +176,7 @@ def base(pieces: Sequence[metadata.Piece],
     # Wait for the peer to tell us which pieces it has. This is not mandated by
     # the specification, but makes requesting pieces much easier.
     while True:
-        received = yield NeedMessage()
+        received = yield ReceiveMessage()
         if isinstance(received, messages.Have):
             state.available.add(received.piece(pieces))
             break
@@ -182,20 +184,19 @@ def base(pieces: Sequence[metadata.Piece],
             state.available.update(received.available(pieces))
             break
 
-    # Main loop.
     flow = Flow.CHOKED
     while True:
-        event: Event = NeedMessage()
+        event: Event = ReceiveMessage()
         if flow is Flow.CHOKED:
             flow = Flow.INTERESTED
-            event = Write(messages.Interested())
+            event = Send(messages.Interested())
         elif flow is Flow.UNCHOKED and state.can_request:
             try:
                 block = state.get_block()
             except IndexError:
-                event = NeedPiece()
+                event = GetPiece()
             else:
-                event = Write(messages.Request.from_block(block))
+                event = Send(messages.Request.from_block(block))
         received = yield event
         if isinstance(received, messages.Choke):
             flow = Flow.CHOKED

@@ -13,14 +13,14 @@ class TestProtocol(Example):
         transducer = _transducer.base(self.pieces, self.info_hash, self.peer_id, state)
 
         event = transducer.send(None)
-        self.assertIsInstance(event, _transducer.Write)
+        self.assertIsInstance(event, _transducer.Send)
         self.assertIsInstance(event.message, messages.Handshake)
 
         event = transducer.send(None)
-        self.assertIsInstance(event, _transducer.NeedHandshake)
+        self.assertIsInstance(event, _transducer.ReceiveHandshake)
 
         event = transducer.send(messages.Handshake(self.info_hash, other_peer_id))
-        self.assertIsInstance(event, _transducer.NeedMessage)
+        self.assertIsInstance(event, _transducer.ReceiveMessage)
 
         outbox = collections.deque()
         piece = self.pieces[0]
@@ -30,7 +30,7 @@ class TestProtocol(Example):
         while True:
             event = transducer.send(message)
             message = None
-            if isinstance(event, _transducer.Write):
+            if isinstance(event, _transducer.Send):
                 if isinstance(event.message, messages.Interested):
                     outbox.append(messages.Unchoke())
                 elif isinstance(event.message, messages.Request):
@@ -41,14 +41,14 @@ class TestProtocol(Example):
                             block, data[block.begin : block.begin + block.length]
                         )
                     )
-            elif isinstance(event, _transducer.Result):
+            elif isinstance(event, _transducer.PutPiece):
                 break
-            elif isinstance(event, _transducer.NeedPiece):
+            elif isinstance(event, _transducer.GetPiece):
                 if to_download:
                     state.add_piece(to_download.pop())
                 else:
                     state.requesting = False
-            elif isinstance(event, _transducer.NeedMessage):
+            elif isinstance(event, _transducer.ReceiveMessage):
                 if outbox:
                     message = outbox.popleft()
         self.assertEqual(event.piece, piece)

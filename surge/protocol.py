@@ -220,20 +220,20 @@ class Node(Actor):
             while True:
                 event = transducer.send(message)
                 message = None
-                if isinstance(event, _transducer.Write):
+                if isinstance(event, _transducer.Send):
                     await stream.write(event.message)
-                elif isinstance(event, _transducer.Result):
+                elif isinstance(event, _transducer.PutPiece):
                     self.downloading.remove(event.piece)
                     await self.parent.put(self, event.piece, event.data)
-                elif isinstance(event, _transducer.NeedPiece):
+                elif isinstance(event, _transducer.GetPiece):
                     if (piece := self.parent.get_nowait(self)) is None:
                         self._state.requesting = False
                     else:
                         self.downloading.add(piece)
                         self._state.add_piece(piece)
-                elif isinstance(event, _transducer.NeedHandshake):
+                elif isinstance(event, _transducer.ReceiveHandshake):
                     message = await asyncio.wait_for(stream.read_handshake(), 30)
-                elif isinstance(event, _transducer.NeedMessage):
+                elif isinstance(event, _transducer.ReceiveMessage):
                     message = await asyncio.wait_for(stream.read(), 30)
 
     @property

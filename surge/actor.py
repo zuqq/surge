@@ -99,6 +99,7 @@ class Actor:
             await child.start()
 
     async def spawn_child(self, child: Actor) -> None:
+        """Add `child` to `self.children`, then start it."""
         self.children.add(child)
         await child.start()
 
