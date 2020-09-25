@@ -9,9 +9,9 @@ it is download-only for now.
 ## Installation
 
 Surge requires Python 3.8 and [docopt]. The recommended way of installing these
-dependencies is to use [poetry]. Run `poetry install` in the root folder, which
-automatically gathers the dependencies from the provided `pyproject.toml` and
-installs them in a new virtual environment.
+dependencies is to use [poetry]. Run `poetry install`, which automatically
+gathers the dependencies from the provided `pyproject.toml` and installs them in
+a new virtual environment.
 
 [docopt]: https://pypi.org/project/docopt/
 [poetry]: https://python-poetry.org/
@@ -20,19 +20,16 @@ installs them in a new virtual environment.
 ## Usage
 
 Surge has a minimal command-line interface for downloading a single torrent,
-located in the `__main__` module. Inside of a `poetry shell` or another
-appropriate environment it can be run as `python -m surge`.
+located in the `__main__` module. It can be run as `poetry run python -m surge`.
 
 **Example:**
 
 ```
-$ poetry shell
-$ python -m surge --magnet 'magnet:?xt=urn:btih:4fb4bcb6fbb2181c7c5373d5bc9e5d781764164a&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce'
-Downloading metadata from peers...Done.
-Writing metadata to 4fb4bcb6fbb2181c7c5373d5bc9e5d781764164a.torrent.
-Progress: 1396/1396 pieces.
-$ md5sum debian-10.5.0-amd64-netinst.iso
-a3ebc76aec372808ad80000108a2593a  debian-10.5.0-amd64-netinst.iso
+# Download debian-10.5.0-amd64-netinst.iso.
+poetry run python -m surge --magnet 'magnet:?xt=urn:btih:4fb4bcb6fbb2181c7c5373d5bc9e5d781764164a&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce'
+
+# Check that the MD5 digest is a3ebc76aec372808ad80000108a2593a.
+md5sum debian-10.5.0-amd64-netinst.iso
 ```
 
 **Help page:**
