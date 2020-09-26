@@ -6,6 +6,7 @@ Surge is a client for the BitTorrent network, built on top of Python's
 coroutine-based concurrency model and the asyncio event loop. Please note that
 it is download-only for now.
 
+
 ## Installation
 
 Surge requires Python 3.8 and [docopt]. The recommended way of installing these
@@ -25,11 +26,12 @@ located in the `__main__` module. It can be run as `poetry run python -m surge`.
 **Example:**
 
 ```
-# Download debian-10.5.0-amd64-netinst.iso.
-poetry run python -m surge --magnet 'magnet:?xt=urn:btih:4fb4bcb6fbb2181c7c5373d5bc9e5d781764164a&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce'
-
-# Check that the MD5 digest is a3ebc76aec372808ad80000108a2593a.
-md5sum debian-10.5.0-amd64-netinst.iso
+$ poetry run python -m surge --magnet 'magnet:?xt=urn:btih:be00b2943b4228bdae969ddae01e89c34932255e&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce'
+Downloading metadata from peers...Done.
+Writing metadata to be00b2943b4228bdae969ddae01e89c34932255e.torrent.
+Progress: 1396/1396 pieces.
+$ md5sum debian-10.6.0-amd64-netinst.iso
+42c43392d108ed8957083843392c794b  debian-10.6.0-amd64-netinst.iso
 ```
 
 **Help page:**
@@ -56,44 +58,14 @@ Options:
 ```
 
 
-## Architecture
+## Features
 
-### Actor model
-
-Peers are modeled as [actors]; the strong encapsulation provided by this model
-makes it easy to connect to many peers at once and deal with unresponsive or
-malicious peers in a uniform way.
-
-For details about the implementation of the actor model, see the documentation
-of the `actor` module.
-
-[actors]: https://en.wikipedia.org/wiki/Actor_model
-
-### Request pipelining
-
-Surge uses request pipelining, even across pieces; this improves network
-throughput substantially.
-
-### Incremental writes
-
-Downloaded pieces are written to the file system immediately after they're
-downloaded and verified, freeing up memory.
-
-### Endgame mode
-
-Surge requests the last few pieces from every available peer, so that a handful
-of slow peers cannot stall the download.
-
-### Pure protocol implementation
-
-The protocol is implemented in the spirit of [Sans I/O], meaning that its
-state machine is completely independent from any objects performing I/O;
-this enables convenient mock-free unit testing.
-
-The state machine is based on generators functions, which provide a natural way
-to express multiphasic protocols.
-
-[Sans I/O]: https://sans-io.readthedocs.io/
+- Request pipelining: Surge pipelines block requests, even across pieces; this
+  improves network throughput substantially.
+- Incremental writes: Surge writes pieces to the file system immediately after
+  downloading and verifing them, freeing up memory.
+- Endgame mode: Surge requests the last few pieces from every available peer, so
+  that a handful of slow peers cannot stall the download.
 
 ### Supported protocol extensions
 
@@ -109,3 +81,28 @@ Surge supports the following extensions to the [base protocol][BEP 0003]:
 [BEP 0012]: http://bittorrent.org/beps/bep_0012.html
 [BEP 0015]: http://bittorrent.org/beps/bep_0015.html
 [BEP 0023]: http://bittorrent.org/beps/bep_0023.html
+
+
+## Architecture
+
+### Actor model
+
+Peers are modeled as [actors]; the strong encapsulation provided by this model
+makes it easy to connect to many peers at once and deal with unresponsive or
+malicious peers in a uniform way.
+
+For details about the implementation of the actor model, see the documentation
+of the `actor` module.
+
+[actors]: https://en.wikipedia.org/wiki/Actor_model
+
+### Pure protocol implementation
+
+The protocol is implemented in the spirit of [Sans I/O], meaning that its
+state machine is completely independent from any objects performing I/O;
+this enables convenient mock-free unit testing.
+
+The state machine is based on generators functions, which provide a natural way
+to express multiphasic protocols.
+
+[Sans I/O]: https://sans-io.readthedocs.io/
