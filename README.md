@@ -27,9 +27,9 @@ located in the `__main__` module. It can be run as `poetry run python -m surge`.
 
 ```
 $ poetry run python -m surge --magnet 'magnet:?xt=urn:btih:be00b2943b4228bdae969ddae01e89c34932255e&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce'
-Downloading metadata from peers...Done.
-Writing metadata to be00b2943b4228bdae969ddae01e89c34932255e.torrent.
-Progress: 1396/1396 pieces.
+Downloading .torrent file from peers...Done.
+Saving .torrent file to be00b2943b4228bdae969ddae01e89c34932255e.torrent.
+Download progress: 1396/1396 pieces.
 $ md5sum debian-10.6.0-amd64-netinst.iso
 42c43392d108ed8957083843392c794b  debian-10.6.0-amd64-netinst.iso
 ```

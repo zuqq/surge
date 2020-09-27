@@ -34,7 +34,7 @@ from .stream import Stream
 async def print_progress(pieces: Sequence[metadata.Piece], root: Root) -> None:
     """Periodically poll `root` and print the download progress to stdout."""
     total = len(pieces)
-    progress_template = "\r\x1b[KProgress: {{}}/{} pieces".format(total)
+    progress_template = "\r\x1b[KDownload progress: {{}}/{} pieces".format(total)
     connections_template = "({} tracker{}, {} peer{})"
     try:
         while True:

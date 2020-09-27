@@ -52,14 +52,13 @@ def main(args: Dict[str, str]) -> None:
         logging.disable(logging.CRITICAL)
 
     if path := args["--file"]:
-        print(f"Reading metadata from {path}.")
         with open(path, "rb") as f:
             raw_meta = f.read()
         meta = metadata.Metadata.from_bytes(raw_meta)
         params = tracker.Parameters.from_bytes(raw_meta)
     else:
         # Flush stdout because the next operation may take a while.
-        print("Downloading metadata from peers...", end="", flush=True)
+        print("Downloading .torrent file from peers...", end="", flush=True)
         info_hash, announce_list = magnet.parse(args["--magnet"])
         params = tracker.Parameters(info_hash)
         raw_meta = loop.run_until_complete(
@@ -68,7 +67,7 @@ def main(args: Dict[str, str]) -> None:
         meta = metadata.Metadata.from_bytes(raw_meta)
         print("Done.")
         path = f"{info_hash.hex()}.torrent"
-        print(f"Writing metadata to {path}.")
+        print(f"Saving .torrent file to {path}.")
         with open(path, "wb") as f:
             f.write(raw_meta)
 
