@@ -3,20 +3,19 @@
 [![Build Status](https://travis-ci.com/zuqq/surge.svg?branch=master)](https://travis-ci.com/zuqq/surge)
 
 Surge is a client for the BitTorrent network, built on top of Python's
-coroutine-based concurrency model and the asyncio event loop. Please note that
-it is download-only for now.
+coroutine-based concurrency model. Please note that it is download-only for now.
 
 
 ## Installation
 
-Surge requires Python 3.8 and [docopt]. The recommended way of installing these
-dependencies is to use [poetry]. Run `poetry install`, which automatically
-gathers the dependencies from the provided `pyproject.toml` and installs them in
-a new virtual environment.
+Surge requires Python 3.8 with [docopt] and [uvloop]. The recommended way of
+installing these dependencies is to use [poetry]. Run `poetry install`, which
+reads the dependencies from the provided `pyproject.toml` and installs them in a
+new virtual environment.
 
 [docopt]: https://pypi.org/project/docopt/
+[uvloop]: https://pypi.org/project/uvloop/
 [poetry]: https://python-poetry.org/
-
 
 ## Usage
 

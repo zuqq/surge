@@ -26,6 +26,7 @@ import os
 import sys
 
 from docopt import docopt  # type: ignore
+import uvloop
 
 from . import magnet
 from . import metadata
@@ -35,6 +36,7 @@ from . import tracker
 
 
 def main(args: Dict[str, str]) -> None:
+    uvloop.install()
     loop = asyncio.get_event_loop()
 
     max_peers = int(args["--peers"])
