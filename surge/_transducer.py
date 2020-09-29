@@ -134,7 +134,7 @@ class State:
         if not progress.done:
             return None
         data = self._progress.pop(piece).data
-        if metadata.valid_piece(piece, data):
+        if metadata.valid(piece, data):
             return PutPiece(piece, data)
         raise ValueError("Invalid data.")
 

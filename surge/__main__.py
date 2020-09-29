@@ -2,13 +2,11 @@
 
 Usage:
     __main__.py (-h | --help)
-    __main__.py [--folder FOLDER] [--resume] [--log LOG]
-                [--peers PEERS] [--requests REQUESTS]
+    __main__.py [--resume] [--log LOG] [--peers PEERS] [--requests REQUESTS]
                 (--file FILE | --magnet MAGNET)
 
 Options:
     -h, --help          Show this screen.
-    --folder FOLDER     Destination folder
     --resume            Resume the download.
     --log LOG           Log file.
     --peers PEERS       Maximal number of peers [default: 50].
@@ -73,15 +71,11 @@ def main(args: Dict[str, str]) -> None:
         with open(path, "wb") as f:
             f.write(raw_meta)
 
-    if folder := args["--folder"]:
-        meta.folder = os.path.join(folder, meta.folder)
-        print(f"Downloading to {meta.folder}.")
-
     missing = set(meta.pieces)
 
     if args["--resume"]:
         print("Checking for available pieces...", end="", flush=True)
-        for piece in metadata.available_pieces(meta.pieces, meta.folder, meta.files):
+        for piece in metadata.available(meta.pieces, meta.files):
             missing.remove(piece)
         print("Done.")
 

@@ -66,18 +66,17 @@ async def download(meta: metadata.Metadata,
     """Spin up a `Root` and write downloaded pieces to the file system."""
     async with Root(meta, peer_id, missing, max_peers, max_requests) as root:
         printer = asyncio.create_task(print_progress(meta.pieces, root))
-        chunks = metadata.piece_to_chunks(meta.pieces, meta.files)
+        chunks = metadata.chunk(meta.pieces, meta.files)
         loop = asyncio.get_running_loop()
-        folder = meta.folder
         # Delegate to a thread pool because asyncio has no direct support for
         # asynchronous file system operations.
         await loop.run_in_executor(
-            None, functools.partial(metadata.build_file_tree, folder, meta.files)
+            None, functools.partial(metadata.build_file_tree, meta.files)
         )
         async for piece, data in root.results:
             for chunk in chunks[piece]:
                 await loop.run_in_executor(
-                    None, functools.partial(metadata.write_chunk, folder, chunk, data)
+                    None, functools.partial(metadata.write, chunk, data)
                 )
         printer.cancel()
         with contextlib.suppress(asyncio.CancelledError):
