@@ -44,34 +44,36 @@ from ..stream import Stream
 __all__ = ("download",)
 
 
-async def download(announce_list: Iterable[str],
-                   params: tracker.Parameters,
+async def download(info_hash: bytes,
+                   announce_list: Iterable[str],
+                   peer_id: bytes,
                    max_peers: int) -> bytes:
     """Return the content of the `.torrent` file."""
-    async with Root(announce_list, params, max_peers) as root:
+    async with Root(info_hash, announce_list, peer_id, max_peers) as root:
         return await root.result
 
 
 class Root(Actor):
     def __init__(self,
+                 info_hash: bytes,
                  announce_list: Iterable[str],
-                 params: tracker.Parameters,
+                 peer_id: bytes,
                  max_peers: int):
         super().__init__()
-        peer_queue = tracker.PeerQueue(self, announce_list, params)
+        peer_queue = tracker.PeerQueue(self, info_hash, announce_list, peer_id)
         self.children.add(peer_queue)
-        self._coros.add(self._main(params, peer_queue))
+        self._coros.add(self._main(info_hash, peer_id, peer_queue))
 
         # Future that will hold the metadata.
         self.result = asyncio.get_event_loop().create_future()
         self._announce_list = announce_list
         self._slots = asyncio.Semaphore(max_peers)
 
-    async def _main(self, params, peer_queue):
+    async def _main(self, info_hash, peer_id, peer_queue):
         while True:
             await self._slots.acquire()
             peer = await peer_queue.get()
-            await self.spawn_child(Node(self, params, peer))
+            await self.spawn_child(Node(self, info_hash, peer_id, peer))
 
     def _on_child_crash(self, child):
         if isinstance(child, Node):
@@ -85,9 +87,13 @@ class Root(Actor):
 
 
 class Node(Actor):
-    def __init__(self, parent: Root, params: tracker.Parameters, peer: tracker.Peer):
+    def __init__(self,
+                 parent: Root,
+                 info_hash: bytes,
+                 peer_id: bytes,
+                 peer: tracker.Peer):
         super().__init__(parent)
-        self._coros.add(self._main(params.info_hash, params.peer_id))
+        self._coros.add(self._main(info_hash, peer_id))
 
         self.peer = peer
 

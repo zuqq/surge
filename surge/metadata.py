@@ -153,6 +153,7 @@ class Metadata:
     [BEP 0012]: http://bittorrent.org/beps/bep_0012.html
     """
 
+    info_hash: bytes
     announce_list: List[str]
     length: int
     piece_length: int
@@ -163,6 +164,8 @@ class Metadata:
     @classmethod
     def from_bytes(cls, raw_meta: bytes) -> Metadata:
         """Parse a `.torrent` file."""
+        info_hash = hashlib.sha1(bencoding.raw_val(raw_meta, b"info")).digest()
+
         d = bencoding.decode(raw_meta)
 
         announce_list = []
@@ -206,4 +209,4 @@ class Metadata:
             i += 1
             begin = end
 
-        return cls(announce_list, length, piece_length, pieces, folder, files)
+        return cls(info_hash, announce_list, length, piece_length, pieces, folder, files)

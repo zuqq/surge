@@ -88,13 +88,13 @@ class ConnectResponse:
 class AnnounceResponse:
     value = 1
 
-    def __init__(self, response: _metadata.Response):
-        self.response = response
+    def __init__(self, result: _metadata.Result):
+        self.result = result
 
     @classmethod
     def from_bytes(cls, data: bytes) -> AnnounceResponse:
         _, _, interval, _, _ = struct.unpack(">l4slll", data[:20])
-        return cls(_metadata.Response.from_bytes(interval, data[20:]))
+        return cls(_metadata.Result.from_bytes(interval, data[20:]))
 
 
 Response = Union[ConnectResponse, AnnounceResponse]
@@ -117,7 +117,7 @@ class ProtocolError(Exception):
 
 def udp(params: _metadata.Parameters) -> Generator[Tuple[Request, int],
                                                    Tuple[Optional[Response], int],
-                                                   _metadata.Response]:
+                                                   _metadata.Result]:
     """State machine for the UDP tracker protocol.
 
     The state machine is a transducer: it yields pairs consisting of a
@@ -138,7 +138,7 @@ def udp(params: _metadata.Parameters) -> Generator[Tuple[Request, int],
             message = AnnounceRequest(transaction_id, connection_id, params)
             received, time = yield (message, 15 * 2 ** n)
             if isinstance(received, AnnounceResponse):
-                return received.response
+                return received.result
             if time - connection_time >= 60:
                 connected = False
     raise ProtocolError("Maximal number of retries reached.")

@@ -22,24 +22,26 @@ import urllib.parse
 from . import _udp
 from .. import actor
 from .. import bencoding
-from ._metadata import Parameters, Peer, Response
+from ._metadata import Parameters, Peer, Result
 
 
-__all__ = ("Parameters", "Peer", "PeerQueue")
+__all__ = ("Peer", "PeerQueue")
 
 
 class PeerQueue(actor.Actor):
     def __init__(self,
                  parent: Optional[actor.Actor],
+                 info_hash: bytes,
                  announce_list: Iterable[str],
-                 params: Parameters):
+                 peer_id: bytes):
         super().__init__(parent)
+        parameters = Parameters(info_hash, peer_id)
         for announce in announce_list:
             url = urllib.parse.urlparse(announce)
             if url.scheme in ("http", "https"):
-                self.children.add(HTTPTrackerConnection(self, url, params))
+                self.children.add(HTTPTrackerConnection(self, url, parameters))
             elif url.scheme == "udp":
-                self.children.add(UDPTrackerConnection(self, url, params))
+                self.children.add(UDPTrackerConnection(self, url, parameters))
             else:
                 logging.warning("%r is invalid", announce)
 
@@ -60,11 +62,11 @@ class PeerQueue(actor.Actor):
         await self._peers.put(peer)
 
 
-def get(url: urllib.parse.ParseResult, params: Parameters) -> bytes:
+def get(url: urllib.parse.ParseResult, parameters: Parameters) -> bytes:
     # This uses `http.client` instead of the `urllib.request` wrapper because
     # the latter is not thread-safe.
     q = urllib.parse.parse_qs(url.query)
-    q.update(dataclasses.asdict(params))
+    q.update(dataclasses.asdict(parameters))
     path = url._replace(scheme="", netloc="", query=urllib.parse.urlencode(q)).geturl()
     if url.scheme == "http":
         conn = http.client.HTTPConnection(url.netloc, timeout=30)
@@ -83,9 +85,9 @@ class HTTPTrackerConnection(actor.Actor):
     def __init__(self,
                  parent: PeerQueue,
                  url: urllib.parse.ParseResult,
-                 params: Parameters):
+                 parameters: Parameters):
         super().__init__(parent)
-        self._coros.add(self._main(params))
+        self._coros.add(self._main(parameters))
 
         self.url = url
 
@@ -94,23 +96,23 @@ class HTTPTrackerConnection(actor.Actor):
         url = self.url.geturl()
         return f"<{class_name} with url={repr(url)}>"
 
-    async def _main(self, params):
+    async def _main(self, parameters):
         loop = asyncio.get_running_loop()
         while True:
             # I'm running a synchronous HTTP client in a separate thread here
             # because HTTP requests only happen sporadically.
             d = bencoding.decode(
                 await loop.run_in_executor(
-                    None, functools.partial(get, self.url, params)
+                    None, functools.partial(get, self.url, parameters)
                 )
             )
             if b"failure reason" in d:
                 raise ConnectionError(d[b"failure reason"].decode())
-            response = Response.from_dict(d)
-            logging.info("%r received %r peers", self, len(response.peers))
-            for peer in response.peers:
+            result = Result.from_dict(d)
+            logging.info("%r received %r peers", self, len(result.peers))
+            for peer in result.peers:
                 await self.parent.put(peer)
-            await asyncio.sleep(response.interval)
+            await asyncio.sleep(result.interval)
 
 
 # TODO: Implement the async context manager protocol.
@@ -183,9 +185,9 @@ class UDPTrackerConnection(actor.Actor):
     def __init__(self,
                  parent: PeerQueue,
                  url: urllib.parse.ParseResult,
-                 params: Parameters):
+                 parameters: Parameters):
         super().__init__(parent)
-        self._coros.add(self._main(params))
+        self._coros.add(self._main(parameters))
 
         self.url = url
 
@@ -195,7 +197,7 @@ class UDPTrackerConnection(actor.Actor):
         url = self.url.geturl()
         return f"<{class_name} object at {address} with url={repr(url)}>"
 
-    async def _main(self, params):
+    async def _main(self, parameters):
         loop = asyncio.get_running_loop()
         while True:
             _, protocol = await loop.create_datagram_endpoint(
@@ -203,7 +205,7 @@ class UDPTrackerConnection(actor.Actor):
                 remote_addr=(self.url.hostname, self.url.port),
             )
             try:
-                transducer = _udp.udp(params)
+                transducer = _udp.udp(parameters)
                 message, timeout = transducer.send(None)
                 while True:
                     protocol.write(message)
@@ -213,10 +215,10 @@ class UDPTrackerConnection(actor.Actor):
                         received = None
                     message, timeout = transducer.send((received, time.monotonic()))
             except StopIteration as exc:
-                response = exc.value
+                result = exc.value
             finally:
                 await protocol.close()
-            logging.info("%r received %r peers", self, len(response.peers))
-            for peer in response.peers:
+            logging.info("%r received %r peers", self, len(result.peers))
+            for peer in result.peers:
                 await self.parent.put(peer)
-            await asyncio.sleep(response.interval)
+            await asyncio.sleep(result.interval)

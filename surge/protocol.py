@@ -59,12 +59,12 @@ async def print_progress(pieces: Sequence[metadata.Piece], root: Root) -> None:
 
 
 async def download(meta: metadata.Metadata,
-                   params: tracker.Parameters,
+                   peer_id: bytes,
                    missing: Set[metadata.Piece],
                    max_peers: int,
                    max_requests: int) -> None:
     """Spin up a `Root` and write downloaded pieces to the file system."""
-    async with Root(meta, params, missing, max_peers, max_requests) as root:
+    async with Root(meta, peer_id, missing, max_peers, max_requests) as root:
         printer = asyncio.create_task(print_progress(meta.pieces, root))
         chunks = metadata.piece_to_chunks(meta.pieces, meta.files)
         loop = asyncio.get_running_loop()
@@ -97,16 +97,16 @@ class Root(Actor):
 
     def __init__(self,
                  meta: metadata.Metadata,
-                 params: tracker.Parameters,
+                 peer_id: bytes,
                  missing: Set[metadata.Piece],
                  max_peers: int,
                  max_requests: int):
         super().__init__()
-        self._peer_queue = tracker.PeerQueue(self, meta.announce_list, params)
-        self.children.add(self._peer_queue)
-        self._coros.add(
-            self._main(meta.pieces, params.info_hash, params.peer_id, max_requests)
+        self._peer_queue = tracker.PeerQueue(
+            self, meta.info_hash, meta.announce_list, peer_id
         )
+        self.children.add(self._peer_queue)
+        self._coros.add(self._main(meta.pieces, meta.info_hash, peer_id, max_requests))
 
         # The set of pieces that still need to be downloaded.
         self.missing = missing

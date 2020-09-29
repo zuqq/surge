@@ -23,6 +23,7 @@ from typing import Dict
 import asyncio
 import logging
 import os
+import secrets
 import sys
 
 from docopt import docopt  # type: ignore
@@ -32,7 +33,6 @@ from . import magnet
 from . import metadata
 from . import mex
 from . import protocol
-from . import tracker
 
 
 def main(args: Dict[str, str]) -> None:
@@ -53,18 +53,18 @@ def main(args: Dict[str, str]) -> None:
     else:
         logging.disable(logging.CRITICAL)
 
+    peer_id = secrets.token_bytes(20)
+
     if path := args["--file"]:
         with open(path, "rb") as f:
             raw_meta = f.read()
         meta = metadata.Metadata.from_bytes(raw_meta)
-        params = tracker.Parameters.from_bytes(raw_meta)
     else:
         # Flush stdout because the next operation may take a while.
         print("Downloading .torrent file from peers...", end="", flush=True)
         info_hash, announce_list = magnet.parse(args["--magnet"])
-        params = tracker.Parameters(info_hash)
         raw_meta = loop.run_until_complete(
-            mex.download(announce_list, params, max_peers)
+            mex.download(info_hash, announce_list, peer_id, max_peers)
         )
         meta = metadata.Metadata.from_bytes(raw_meta)
         print("Done.")
@@ -89,7 +89,7 @@ def main(args: Dict[str, str]) -> None:
         print("Nothing to do.")
     else:
         loop.run_until_complete(
-            protocol.download(meta, params, missing, max_peers, max_requests)
+            protocol.download(meta, peer_id, missing, max_peers, max_requests)
         )
 
 

@@ -9,28 +9,20 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 import dataclasses
-import hashlib
-import secrets
-
-from .. import bencoding
 
 
 @dataclasses.dataclass
 class Parameters:
     info_hash: bytes
-    peer_id: bytes = secrets.token_bytes(20)
+    peer_id: bytes
     port: int = 6881
     uploaded: int = 0
     downloaded: int = 0
+    # This is initialized to 0 because we also need to connect to the tracker
+    # before downloading the metadata.
     left: int = 0
     event: str = "started"
     compact: int = 1  # See BEP 23.
-
-    @classmethod
-    def from_bytes(cls, raw_meta: bytes) -> Parameters:
-        raw_info = bencoding.raw_val(raw_meta, b"info")
-        info_hash = hashlib.sha1(raw_info).digest()
-        return cls(info_hash)
 
 
 @dataclasses.dataclass(eq=True, frozen=True)
@@ -55,16 +47,16 @@ def _parse_peers(raw_peers):
 
 
 @dataclasses.dataclass
-class Response:
+class Result:
     interval: int
     peers: List[Peer]
 
     @classmethod
-    def from_bytes(cls, interval: int, raw_peers: bytes) -> Response:
+    def from_bytes(cls, interval: int, raw_peers: bytes) -> Result:
         return cls(interval, _parse_peers(raw_peers))
 
     @classmethod
-    def from_dict(cls, resp: Dict[bytes, Any]) -> Response:
+    def from_dict(cls, resp: Dict[bytes, Any]) -> Result:
         if isinstance(resp[b"peers"], list):
             # Dictionary model, as defined in BEP 3.
             peers = [Peer.from_dict(d) for d in resp[b"peers"]]

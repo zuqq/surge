@@ -1,3 +1,5 @@
+import secrets
+
 from surge.tracker import _metadata
 from surge.tracker import _udp
 
@@ -8,7 +10,7 @@ class TestUDP(Example):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.params = _metadata.Parameters(cls.info_hash)
+        cls.params = _metadata.Parameters(cls.info_hash, secrets.token_bytes(20))
         cls.connection_id = b"\x1c\xe3\xc2\x0bP\x88\x96\xd1"
 
     def test_successful_transaction(self):
@@ -25,7 +27,7 @@ class TestUDP(Example):
         peers = [_metadata.Peer("127.0.0.1", 6969)]
         with self.assertRaises(StopIteration) as cm:
             transducer.send(
-                (_udp.AnnounceResponse(_metadata.Response(interval, peers)), 1)
+                (_udp.AnnounceResponse(_metadata.Result(interval, peers)), 1)
             )
         response = cm.exception.value
         self.assertEqual(response.interval, interval)
