@@ -21,7 +21,6 @@ from typing import Coroutine, Optional, Set
 
 import asyncio
 import contextlib
-import logging
 import weakref
 
 
@@ -78,11 +77,9 @@ class Actor:
             await asyncio.gather(*self._tasks)
         # It's okay to catch `Exception` here because `asyncio.CancelledError`
         # derives directly from `BaseException` in Python 3.8.
-        except Exception as exc:
-            if self.running:
-                logging.warning("%r crashed with %r", self, exc)
-                if self.parent is not None:
-                    self.parent.report_crash(self)
+        except Exception:
+            if self.running and self.parent is not None:
+                self.parent.report_crash(self)
 
     def _on_child_crash(self, child: Actor):
         raise RuntimeError(f"Uncaught crash: {child}")
@@ -99,7 +96,6 @@ class Actor:
         # This method is async because it requires a running event loop.
         if self.running:
             return
-        logging.info("%r starting", self)
         self.running = True
         self._runner = asyncio.create_task(self._run())
         for child in self.children:
@@ -118,7 +114,6 @@ class Actor:
         """First stop `self`, then all of its children."""
         if not self.running:
             return
-        logging.info("%r stopping", self)
         self.running = False
         if self._runner is not None:
             self._runner.cancel()

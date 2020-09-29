@@ -15,7 +15,6 @@ import collections
 import dataclasses
 import functools
 import http.client
-import logging
 import time
 import urllib.parse
 
@@ -42,8 +41,6 @@ class PeerQueue(actor.Actor):
                 self.children.add(HTTPTrackerConnection(self, url, parameters))
             elif url.scheme == "udp":
                 self.children.add(UDPTrackerConnection(self, url, parameters))
-            else:
-                logging.warning("%r is invalid", announce)
 
         self._peers = asyncio.Queue(len(self.children) * 200)  # type: ignore
         self._seen: Set[Peer] = set()
@@ -109,7 +106,6 @@ class HTTPTrackerConnection(actor.Actor):
             if b"failure reason" in d:
                 raise ConnectionError(d[b"failure reason"].decode())
             result = Result.from_dict(d)
-            logging.info("%r received %r peers", self, len(result.peers))
             for peer in result.peers:
                 await self.parent.put(peer)
             await asyncio.sleep(result.interval)
@@ -218,7 +214,6 @@ class UDPTrackerConnection(actor.Actor):
                 result = exc.value
             finally:
                 await protocol.close()
-            logging.info("%r received %r peers", self, len(result.peers))
             for peer in result.peers:
                 await self.parent.put(peer)
             await asyncio.sleep(result.interval)

@@ -19,18 +19,20 @@ new virtual environment.
 
 ## Usage
 
-Surge has a minimal command-line interface for downloading a single torrent,
-located in the `__main__` module. It can be run as `poetry run python -m surge`.
+Surge has a command-line interface, located in the `__main__` module. Run
+`poetry run python -m surge` to use it.
 
 **Example:**
 
-```
-$ poetry run python -m surge --magnet 'magnet:?xt=urn:btih:be00b2943b4228bdae969ddae01e89c34932255e&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce'
-Downloading .torrent file from peers...Done.
-Saving .torrent file to be00b2943b4228bdae969ddae01e89c34932255e.torrent.
-Download progress: 1396/1396 pieces.
-$ md5sum debian-10.6.0-amd64-netinst.iso
-42c43392d108ed8957083843392c794b  debian-10.6.0-amd64-netinst.iso
+```bash
+# Download the .torrent file.
+poetry run python -m surge --magnet 'magnet:?xt=urn:btih:be00b2943b4228bdae969ddae01e89c34932255e&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce'
+
+# Download debian-10.6.0-amd64-netinst.iso.
+poetry run python -m surge be00b2943b4228bdae969ddae01e89c34932255e.torrent
+
+# Check that the MD5 digest is 42c43392d108ed8957083843392c794b.
+md5sum debian-10.6.0-amd64-netinst.iso
 ```
 
 **Help page:**
@@ -40,20 +42,15 @@ $ poetry run python -m surge --help
 Download files from the BitTorrent network.
 
 Usage:
+    __main__.py --magnet URI [--peers PEERS]
+    __main__.py FILE [--resume] [--peers PEERS] [--requests REQUESTS]
     __main__.py (-h | --help)
-    __main__.py [--folder FOLDER] [--resume] [--log LOG]
-                [--peers PEERS] [--requests REQUESTS]
-                (--file FILE | --magnet MAGNET)
 
 Options:
     -h, --help          Show this screen.
-    --folder FOLDER     Destination folder
     --resume            Resume the download.
-    --log LOG           Log file.
-    --peers PEERS       Maximal number of peers [default: 50].
-    --requests REQUEST  Maximal number of requests [default: 50].
-    --file PATH         Torrent file.
-    --magnet MAGNET     Magnet link.
+    --peers PEERS       Number of peers to connect to [default: 50].
+    --requests REQUEST  Number of open requests per peer [default: 50].
 ```
 
 

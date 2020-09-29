@@ -31,15 +31,14 @@ from .channel import Channel
 from .stream import Stream
 
 
-async def print_progress(pieces: Sequence[_metadata.Piece], root: Root) -> None:
+async def print_progress(root: Root, total: int) -> None:
     """Periodically poll `root` and print the download progress to stdout."""
-    total = len(pieces)
     progress_template = "\r\x1b[KDownload progress: {{}}/{} pieces".format(total)
     connections_template = "({} tracker{}, {} peer{})"
     try:
         while True:
             print(
-                progress_template.format(total - len(root.missing)),
+                progress_template.format(total - root.missing),
                 connections_template.format(
                     root.trackers,
                     "s" if root.trackers != 1 else "",
@@ -65,7 +64,7 @@ async def download(metadata: _metadata.Metadata,
                    max_requests: int) -> None:
     """Spin up a `Root` and write downloaded pieces to the file system."""
     async with Root(metadata, peer_id, missing, max_peers, max_requests) as root:
-        printer = asyncio.create_task(print_progress(metadata.pieces, root))
+        printer = asyncio.create_task(print_progress(root, len(metadata.pieces)))
         chunks = _metadata.chunk(metadata.pieces, metadata.files)
         loop = asyncio.get_running_loop()
         # Delegate to a thread pool because asyncio has no direct support for
@@ -110,7 +109,7 @@ class Root(Actor):
         )
 
         # The set of pieces that still need to be downloaded.
-        self.missing = missing
+        self._missing = missing
         # A `Channel` that holds up to `max_peers` downloaded pieces. If the
         # channel fills up, `Node`s will hold off on downloading more pieces
         # until the file system has caught up.
@@ -128,6 +127,9 @@ class Root(Actor):
         self._downloading = collections.defaultdict(set)
 
     async def _main(self, pieces, info_hash, peer_id, max_requests):
+        # Hack to cover the case where `put` is never called.
+        if not self._missing:
+            await self.results.close()
         while True:
             await self._slots.acquire()
             peer = await self._peer_queue.get()
@@ -144,6 +146,11 @@ class Root(Actor):
             self._slots.release()
         else:
             super()._on_child_crash(child)
+
+    @property
+    def missing(self) -> int:
+        """The number of missing pieces."""
+        return len(self._missing)
 
     @property
     def trackers(self) -> int:
@@ -163,7 +170,7 @@ class Root(Actor):
         downloading = set(self._downloading)
         # Strict endgame mode: only send duplicate requests if every missing
         # piece is already being requested from some peer.
-        pool = (self.missing - downloading or downloading) - node.downloading
+        pool = (self._missing - downloading or downloading) - node.downloading
         if not pool:
             return None
         piece = random.choice(tuple(pool & node.available or pool))
@@ -178,12 +185,12 @@ class Root(Actor):
         """
         if piece not in self._downloading:
             return
-        self.missing.remove(piece)
+        self._missing.remove(piece)
         self._downloading[piece].remove(node)
         for child in self._downloading.pop(piece):
             child.cancel_piece(piece)
         await self.results.put((piece, data))
-        if not self.missing:
+        if not self._missing:
             await self.results.close()
 
 

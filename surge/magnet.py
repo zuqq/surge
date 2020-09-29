@@ -11,7 +11,7 @@ import urllib.parse
 
 
 def parse(magnet: str) -> Tuple[bytes, List[str]]:
-    """Parse a magnet link.
+    """Parse a magnet URI.
 
     Raise `ValueError` if `magnet` is not a valid magnet link.
     """
