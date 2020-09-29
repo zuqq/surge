@@ -1,8 +1,8 @@
 import struct
 import unittest
 
+from surge import _metadata
 from surge import bencoding
-from surge import metadata
 from surge import messages
 
 from ._example import Example
@@ -113,7 +113,7 @@ class TestRequest(Example):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        block, *_ = metadata.blocks(cls.pieces[0])
+        block, *_ = _metadata.blocks(cls.pieces[0])
         cls.block = block
         cls.reference = struct.pack(
             ">LBLLL", 13, 6, block.piece.index, block.begin, block.length
@@ -132,7 +132,7 @@ class TestBlock(Example):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        block, *_ = metadata.blocks(cls.pieces[0])
+        block, *_ = _metadata.blocks(cls.pieces[0])
         cls.block = block
         cls.block_data = cls.data[0][block.begin : block.begin + block.length]
         n = len(cls.block_data)

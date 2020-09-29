@@ -23,15 +23,15 @@ import dataclasses
 import functools
 import random
 
+from . import _metadata
 from . import _transducer
-from . import metadata
 from . import tracker
 from .actor import Actor
 from .channel import Channel
 from .stream import Stream
 
 
-async def print_progress(pieces: Sequence[metadata.Piece], root: Root) -> None:
+async def print_progress(pieces: Sequence[_metadata.Piece], root: Root) -> None:
     """Periodically poll `root` and print the download progress to stdout."""
     total = len(pieces)
     progress_template = "\r\x1b[KDownload progress: {{}}/{} pieces".format(total)
@@ -58,25 +58,25 @@ async def print_progress(pieces: Sequence[metadata.Piece], root: Root) -> None:
         raise
 
 
-async def download(meta: metadata.Metadata,
+async def download(metadata: _metadata.Metadata,
                    peer_id: bytes,
-                   missing: Set[metadata.Piece],
+                   missing: Set[_metadata.Piece],
                    max_peers: int,
                    max_requests: int) -> None:
     """Spin up a `Root` and write downloaded pieces to the file system."""
-    async with Root(meta, peer_id, missing, max_peers, max_requests) as root:
-        printer = asyncio.create_task(print_progress(meta.pieces, root))
-        chunks = metadata.chunk(meta.pieces, meta.files)
+    async with Root(metadata, peer_id, missing, max_peers, max_requests) as root:
+        printer = asyncio.create_task(print_progress(metadata.pieces, root))
+        chunks = _metadata.chunk(metadata.pieces, metadata.files)
         loop = asyncio.get_running_loop()
         # Delegate to a thread pool because asyncio has no direct support for
         # asynchronous file system operations.
         await loop.run_in_executor(
-            None, functools.partial(metadata.build_file_tree, meta.files)
+            None, functools.partial(_metadata.build_file_tree, metadata.files)
         )
         async for piece, data in root.results:
             for chunk in chunks[piece]:
                 await loop.run_in_executor(
-                    None, functools.partial(metadata.write, chunk, data)
+                    None, functools.partial(_metadata.write, chunk, data)
                 )
         printer.cancel()
         with contextlib.suppress(asyncio.CancelledError):
@@ -95,17 +95,19 @@ class Root(Actor):
     """
 
     def __init__(self,
-                 meta: metadata.Metadata,
+                 metadata: _metadata.Metadata,
                  peer_id: bytes,
-                 missing: Set[metadata.Piece],
+                 missing: Set[_metadata.Piece],
                  max_peers: int,
                  max_requests: int):
         super().__init__()
         self._peer_queue = tracker.PeerQueue(
-            self, meta.info_hash, meta.announce_list, peer_id
+            self, metadata.info_hash, metadata.announce_list, peer_id
         )
         self.children.add(self._peer_queue)
-        self._coros.add(self._main(meta.pieces, meta.info_hash, peer_id, max_requests))
+        self._coros.add(
+            self._main(metadata.pieces, metadata.info_hash, peer_id, max_requests)
+        )
 
         # The set of pieces that still need to be downloaded.
         self.missing = missing
@@ -122,7 +124,7 @@ class Root(Actor):
         # as soon as one finishes downloading that piece, the other `Node`s
         # need to be notified. Therefore we keep track of which `Node`s are
         # downloading any given piece.
-        self._downloading: DefaultDict[metadata.Piece, Set[Node]]
+        self._downloading: DefaultDict[_metadata.Piece, Set[Node]]
         self._downloading = collections.defaultdict(set)
 
     async def _main(self, pieces, info_hash, peer_id, max_requests):
@@ -153,7 +155,7 @@ class Root(Actor):
         """The number of connected peers."""
         return max(0, len(self.children) - 1)
 
-    def get_nowait(self, node: Node) -> Optional[metadata.Piece]:
+    def get_nowait(self, node: Node) -> Optional[_metadata.Piece]:
         """Return a fresh piece to download.
 
         If there are no more pieces to download, return `None`.
@@ -168,7 +170,7 @@ class Root(Actor):
         self._downloading[piece].add(node)
         return piece
 
-    async def put(self, node: Node, piece: metadata.Piece, data: bytes) -> None:
+    async def put(self, node: Node, piece: _metadata.Piece, data: bytes) -> None:
         """Deliver a downloaded piece.
 
         If any other nodes are in the process of downloading `piece`, those
@@ -193,7 +195,7 @@ class Node(Actor):
 
     def __init__(self,
                  parent: Root,
-                 pieces: Sequence[metadata.Piece],
+                 pieces: Sequence[_metadata.Piece],
                  info_hash: bytes,
                  peer_id: bytes,
                  peer: tracker.Peer,
@@ -202,7 +204,7 @@ class Node(Actor):
         self._coros.add(self._main(pieces, info_hash, peer_id))
 
         self.peer = peer
-        self.downloading: Set[metadata.Piece] = set()
+        self.downloading: Set[_metadata.Piece] = set()
         self._state = _transducer.State(max_requests)
 
     def __repr__(self):
@@ -236,10 +238,10 @@ class Node(Actor):
                     message = await asyncio.wait_for(stream.read(), 30)
 
     @property
-    def available(self) -> Set[metadata.Piece]:
+    def available(self) -> Set[_metadata.Piece]:
         """The pieces that the peer advertises."""
         return self._state.available
 
-    def cancel_piece(self, piece: metadata.Piece) -> None:
+    def cancel_piece(self, piece: _metadata.Piece) -> None:
         """Stop downloading `piece`."""
         self._state.cancel_piece(piece)

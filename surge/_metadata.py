@@ -154,9 +154,9 @@ class Metadata:
     files: List[File]
 
     @classmethod
-    def from_bytes(cls, raw_meta: bytes) -> Metadata:
+    def from_bytes(cls, raw_metadata: bytes) -> Metadata:
         """Parse a `.torrent` file."""
-        d = bencoding.decode(raw_meta)
+        d = bencoding.decode(raw_metadata)
 
         announce_list = []
         if b"announce-list" in d:  # See BEP 12.
@@ -202,7 +202,7 @@ class Metadata:
             begin = end
 
         return cls(
-            hashlib.sha1(bencoding.raw_val(raw_meta, b"info")).digest(),
+            hashlib.sha1(bencoding.raw_val(raw_metadata, b"info")).digest(),
             announce_list,
             pieces,
             files,

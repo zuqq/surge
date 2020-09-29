@@ -16,8 +16,8 @@ from typing import Dict, Generator, Iterable, List, Optional, Sequence, Set, Uni
 import dataclasses
 import enum
 
+from . import _metadata
 from . import messages
-from . import metadata
 
 
 @dataclasses.dataclass
@@ -31,7 +31,7 @@ class Send:
 class PutPiece:
     """Process the downloaded `data` for `piece`."""
 
-    piece: metadata.Piece
+    piece: _metadata.Piece
     data: bytes
 
 
@@ -55,7 +55,7 @@ Event = Union[Send, PutPiece, ReceiveHandshake, ReceiveMessage, GetPiece]
 class Progress:
     """Helper class that keeps track of a single piece's progress."""
 
-    def __init__(self, piece: metadata.Piece, blocks: Iterable[metadata.Block]):
+    def __init__(self, piece: _metadata.Piece, blocks: Iterable[_metadata.Block]):
         self._missing = set(blocks)
         self._data = bytearray(piece.length)
 
@@ -67,7 +67,7 @@ class Progress:
     def data(self) -> bytes:
         return bytes(self._data)
 
-    def add(self, block: metadata.Block, data: bytes) -> None:
+    def add(self, block: _metadata.Block, data: bytes) -> None:
         self._missing.discard(block)
         self._data[block.begin : block.begin + block.length] = data
 
@@ -82,26 +82,26 @@ class State:
     def __init__(self, max_requests: int):
         self._max_requests = max_requests
 
-        self._progress: Dict[metadata.Piece, Progress] = {}
+        self._progress: Dict[_metadata.Piece, Progress] = {}
         # Blocks to request next.
-        self._stack: List[metadata.Block] = []
-        self._requested: Set[metadata.Block] = set()
+        self._stack: List[_metadata.Block] = []
+        self._requested: Set[_metadata.Block] = set()
 
         # Pieces that the peer is advertising.
-        self.available: Set[metadata.Piece] = set()
+        self.available: Set[_metadata.Piece] = set()
         self.requesting = True
 
     @property
     def can_request(self):
         return self.requesting and len(self._requested) < self._max_requests
 
-    def add_piece(self, piece: metadata.Piece) -> None:
+    def add_piece(self, piece: _metadata.Piece) -> None:
         """Add `piece` to the download queue."""
-        blocks = tuple(metadata.blocks(piece))
+        blocks = tuple(_metadata.blocks(piece))
         self._progress[piece] = Progress(piece, blocks)
         self._stack.extend(reversed(blocks))
 
-    def cancel_piece(self, piece: metadata.Piece) -> None:
+    def cancel_piece(self, piece: _metadata.Piece) -> None:
         """Cancel `piece`, discarding partial progress."""
         self._progress.pop(piece)
 
@@ -111,7 +111,7 @@ class State:
         self._requested = set(filter(predicate, self._requested))
         self._stack = list(filter(predicate, self._stack))
 
-    def get_block(self) -> metadata.Block:
+    def get_block(self) -> _metadata.Block:
         """"Return a fresh block to download.
 
         Raise `IndexError` if there are no blocks available.
@@ -120,7 +120,7 @@ class State:
         self._requested.add(block)
         return block
 
-    def on_block(self, block: metadata.Block, data: bytes) -> Optional[PutPiece]:
+    def on_block(self, block: _metadata.Block, data: bytes) -> Optional[PutPiece]:
         """Deliver a downloaded block.
 
         If `block` was the last missing block of its piece, return a `Result`.
@@ -134,7 +134,7 @@ class State:
         if not progress.done:
             return None
         data = self._progress.pop(piece).data
-        if metadata.valid(piece, data):
+        if _metadata.valid(piece, data):
             return PutPiece(piece, data)
         raise ValueError("Invalid data.")
 
@@ -162,7 +162,7 @@ class Flow(enum.IntEnum):
     UNCHOKED = 2
 
 
-def base(pieces: Sequence[metadata.Piece],
+def base(pieces: Sequence[_metadata.Piece],
          info_hash: bytes,
          peer_id: bytes,
          state: State) -> Generator[Event, Optional[messages.Message], None]:

@@ -27,8 +27,8 @@ import sys
 from docopt import docopt  # type: ignore
 import uvloop
 
+from . import _metadata
 from . import magnet
-from . import metadata
 from . import mex
 from . import protocol
 
@@ -55,27 +55,27 @@ def main(args: Dict[str, str]) -> None:
 
     if path := args["--file"]:
         with open(path, "rb") as f:
-            raw_meta = f.read()
-        meta = metadata.Metadata.from_bytes(raw_meta)
+            raw_metadata = f.read()
+        metadata = _metadata.Metadata.from_bytes(raw_metadata)
     else:
         # Flush stdout because the next operation may take a while.
         print("Downloading .torrent file from peers...", end="", flush=True)
         info_hash, announce_list = magnet.parse(args["--magnet"])
-        raw_meta = loop.run_until_complete(
+        raw_metadata = loop.run_until_complete(
             mex.download(info_hash, announce_list, peer_id, max_peers)
         )
-        meta = metadata.Metadata.from_bytes(raw_meta)
+        metadata = _metadata.Metadata.from_bytes(raw_metadata)
         print("Done.")
         path = f"{info_hash.hex()}.torrent"
         print(f"Saving .torrent file to {path}.")
         with open(path, "wb") as f:
-            f.write(raw_meta)
+            f.write(raw_metadata)
 
-    missing = set(meta.pieces)
+    missing = set(metadata.pieces)
 
     if args["--resume"]:
         print("Checking for available pieces...", end="", flush=True)
-        for piece in metadata.available(meta.pieces, meta.files):
+        for piece in _metadata.available(metadata.pieces, metadata.files):
             missing.remove(piece)
         print("Done.")
 
@@ -83,7 +83,7 @@ def main(args: Dict[str, str]) -> None:
         print("Nothing to do.")
     else:
         loop.run_until_complete(
-            protocol.download(meta, peer_id, missing, max_peers, max_requests)
+            protocol.download(metadata, peer_id, missing, max_peers, max_requests)
         )
 
 

@@ -22,8 +22,8 @@ from typing import Dict, Optional, Sequence, Set, Tuple, Type, Union
 
 import struct
 
+from . import _metadata
 from . import bencoding
-from . import metadata
 
 
 class Message:
@@ -118,7 +118,7 @@ class Have(Message):
         _, _, index = cls.formatter.unpack(data)
         return cls(index)
 
-    def piece(self, pieces: Sequence[metadata.Piece]) -> metadata.Piece:
+    def piece(self, pieces: Sequence[_metadata.Piece]) -> _metadata.Piece:
         return pieces[self.index]
 
 
@@ -143,7 +143,7 @@ class Bitfield(Message):
             result[i // 8] |= 1 << (7 - i % 8)
         return cls(bytes(result))
 
-    def available(self, pieces: Sequence[metadata.Piece]) -> Set[metadata.Piece]:
+    def available(self, pieces: Sequence[_metadata.Piece]) -> Set[_metadata.Piece]:
         # TODO: Deprecate this method and use indices instead.
         result = set()
         i = 0
@@ -169,7 +169,7 @@ class Request(Message):
         self.length = length
 
     @classmethod
-    def from_block(cls, block: metadata.Block):
+    def from_block(cls, block: _metadata.Block):
         return cls(block.piece.index, block.begin, block.length)
 
     @classmethod
@@ -177,8 +177,8 @@ class Request(Message):
         _, _, index, begin, length = cls.formatter.unpack(data)
         return cls(index, begin, length)
 
-    def block(self, pieces: Sequence[metadata.Piece]) -> metadata.Block:
-        return metadata.Block(pieces[self.index], self.begin, self.length)
+    def block(self, pieces: Sequence[_metadata.Piece]) -> _metadata.Block:
+        return _metadata.Block(pieces[self.index], self.begin, self.length)
 
 
 class Block(Message):
@@ -193,7 +193,7 @@ class Block(Message):
         self.data = data
 
     @classmethod
-    def from_block(cls, block: metadata.Block, data: bytes):
+    def from_block(cls, block: _metadata.Block, data: bytes):
         return cls(block.piece.index, block.begin, data)
 
     @classmethod
@@ -202,8 +202,8 @@ class Block(Message):
         _, _, index, begin, data = struct.unpack(f">LBLL{len(data) - 13}s", data)
         return cls(index, begin, data)
 
-    def block(self, pieces: Sequence[metadata.Piece]) -> metadata.Block:
-        return metadata.Block(pieces[self.index], self.begin, len(self.data))
+    def block(self, pieces: Sequence[_metadata.Piece]) -> _metadata.Block:
+        return _metadata.Block(pieces[self.index], self.begin, len(self.data))
 
 
 class Cancel(Message):

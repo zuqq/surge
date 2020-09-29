@@ -1,7 +1,7 @@
 import collections
 
-from surge import messages
 from surge import _transducer
+from surge import messages
 
 from ._example import Example
 
