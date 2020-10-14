@@ -128,9 +128,9 @@ class Root(Actor):
         self.results = Channel(max_peers)
 
     async def _main(self, pieces, info_hash, peer_id, max_requests):
-        # Hack to cover the case where `put` is never called.
+        # In case `put` is never called because there are no pieces to download.
         if not self._missing:
-            await self.results.close()
+            return await self.results.close()
         while True:
             await self._slots.acquire()
             peer = await self._peer_queue.get()
@@ -156,11 +156,12 @@ class Root(Actor):
     @property
     def trackers(self) -> int:
         """The number of connected trackers."""
-        return len(self._peer_queue.children)
+        return self._peer_queue.trackers
 
     @property
     def peers(self) -> int:
         """The number of connected peers."""
+        # Subtract `1` for the `PeerQueue`.
         return max(0, len(self.children) - 1)
 
     def get_nowait(self, node: Node) -> Optional[_metadata.Piece]:

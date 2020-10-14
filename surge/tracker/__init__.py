@@ -48,6 +48,11 @@ class PeerQueue(actor.Actor):
     def _on_child_crash(self, child):
         pass
 
+    @property
+    def trackers(self) -> int:
+        """The number of connected trackers."""
+        return len(self.children)
+
     async def get(self) -> Peer:
         """Return a fresh peer."""
         return await self._peers.get()
