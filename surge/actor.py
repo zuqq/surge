@@ -46,22 +46,16 @@ class Actor:
     def __init__(self, parent: Optional[Actor] = None):
         self._parent = None if parent is None else weakref.ref(parent)
         self.children: Set[Actor] = set()
-        self.running = False
 
         self._coros: Set[Coroutine[None, None, None]] = {self._supervise()}
         self._runner: Optional[asyncio.Task] = None
+        self._running = False
         self._tasks: Set[asyncio.Task] = set()
 
         # This queue is unbounded because the actor is supposed to control the
         # number of children it spawns (and thereby the number of concurrent
         # crashes that can occur).
         self._crashes = asyncio.Queue()  # type: ignore
-
-    @property
-    def parent(self):
-        if self._parent is None:
-            return None
-        return self._parent()
 
     async def __aenter__(self):
         await self.start()
@@ -78,7 +72,7 @@ class Actor:
         # It's okay to catch `Exception` here because `asyncio.CancelledError`
         # derives directly from `BaseException` in Python 3.8.
         except Exception:
-            if self.running and self.parent is not None:
+            if self._running and self.parent is not None:
                 self.parent.report_crash(self)
 
     def _on_child_crash(self, child: Actor):
@@ -91,12 +85,18 @@ class Actor:
             self.children.remove(child)
             self._on_child_crash(child)
 
+    @property
+    def parent(self):
+        if self._parent is None:
+            return None
+        return self._parent()
+
     async def start(self) -> None:
         """First start `self`, then all of its children."""
         # This method is async because it requires a running event loop.
-        if self.running:
+        if self._running:
             return
-        self.running = True
+        self._running = True
         self._runner = asyncio.create_task(self._run())
         for child in self.children:
             await child.start()
@@ -112,9 +112,9 @@ class Actor:
 
     async def stop(self) -> None:
         """First stop `self`, then all of its children."""
-        if not self.running:
+        if not self._running:
             return
-        self.running = False
+        self._running = False
         if self._runner is not None:
             self._runner.cancel()
             with contextlib.suppress(asyncio.CancelledError):
