@@ -17,16 +17,12 @@ new virtual environment.
 [uvloop]: https://pypi.org/project/uvloop/
 [poetry]: https://python-poetry.org/
 
+
 ## Usage
-
-Surge has a command-line interface, located in the `__main__` module. Run
-`poetry run python -m surge` to use it.
-
-**Example:**
 
 ```bash
 # Download the .torrent file.
-poetry run python -m surge --magnet 'magnet:?xt=urn:btih:be00b2943b4228bdae969ddae01e89c34932255e&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce'
+poetry run python -m surge.magnet 'magnet:?xt=urn:btih:be00b2943b4228bdae969ddae01e89c34932255e&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce'
 
 # Download debian-10.6.0-amd64-netinst.iso.
 poetry run python -m surge be00b2943b4228bdae969ddae01e89c34932255e.torrent
@@ -34,27 +30,6 @@ poetry run python -m surge be00b2943b4228bdae969ddae01e89c34932255e.torrent
 # Check that the MD5 digest is 42c43392d108ed8957083843392c794b.
 md5sum debian-10.6.0-amd64-netinst.iso
 ```
-
-**Help page:**
-
-```
-$ poetry run python -m surge --help
-Download files from the BitTorrent network.
-
-Usage:
-    __main__.py --magnet <URI> [--peers <peers>]
-    __main__.py <file> [--resume] [--peers <peers>] [--requests <requests>]
-    __main__.py (-h | --help)
-
-Options:
-    --magnet <URI>         Download the corresponding .torrent file.
-    <file>                 Download the files described by the .torrent file.
-    --resume               Resume the download.
-    --peers <peers>        Number of peers to connect to [default: 50].
-    --requests <requests>  Number of open requests per peer [default: 50].
-    -h, --help             Show this screen.
-```
-
 
 ## Features
 

@@ -1,19 +1,37 @@
-"""Magnet URI parser.
+"""Download .torrent files from peers.
 
-Specification: [BEP 009]
+Usage:
+    magnet.py <URI> [--peers <peers>]
+    magnet.py (-h | --help)
 
-[BEP 009]: http://www.bittorrent.org/beps/bep_0009.html
+Options:
+    <URI>             The magnet URI to use.
+    --peers <peers>   Number of peers to connect to [default: 50].
+    -h, --help        Show this screen.
+
 """
 
 from typing import List, Tuple
 
+import asyncio
+import secrets
+import sys
 import urllib.parse
+
+from . import mex
+
+import docopt  # type: ignore
+import uvloop  # type: ignore
 
 
 def parse(magnet: str) -> Tuple[bytes, List[str]]:
     """Parse a magnet URI.
 
     Raise `ValueError` if `magnet` is not a valid magnet link.
+
+    Specification: [BEP 009]
+
+    [BEP 009]: http://www.bittorrent.org/beps/bep_0009.html
     """
     url = urllib.parse.urlparse(magnet)
     qs = urllib.parse.parse_qs(url.query)
@@ -29,3 +47,28 @@ def parse(magnet: str) -> Tuple[bytes, List[str]]:
         raise ValueError("Invalid info hash.")
     announce_list = qs.get("tr", [])
     return info_hash, announce_list
+
+
+def main() -> None:
+    args = docopt.docopt(__doc__)
+    peer_id = secrets.token_bytes(20)
+    max_peers = int(args["--peers"])
+    info_hash, announce_list = parse(args["<URI>"])
+
+    uvloop.install()
+    print("Downloading .torrent file from peers.")
+    raw_metadata = asyncio.get_event_loop().run_until_complete(
+        mex.download(info_hash, announce_list, peer_id, max_peers)
+    )
+
+    path = f"{info_hash.hex()}.torrent"
+    print(f"Saving .torrent file to {path}.")
+    with open(path, "wb") as f:
+        f.write(raw_metadata)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(130)
