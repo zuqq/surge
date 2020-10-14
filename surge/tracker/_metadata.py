@@ -25,7 +25,7 @@ class Parameters:
     compact: int = 1  # See BEP 23.
 
 
-@dataclasses.dataclass(eq=True, frozen=True)
+@dataclasses.dataclass(frozen=True)
 class Peer:
     address: str
     port: int

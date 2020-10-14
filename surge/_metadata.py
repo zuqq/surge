@@ -6,7 +6,7 @@ A `.torrent` file contains tracker URLs and file metadata. For transmission,
 files are concatenated and split into equally sized pieces; the pieces' SHA-1
 digest is used to verify downloaded data. In order to keep `.torrent` files
 small, pieces are typically relatively large; the actual transmission unit is a
-block consisting of 16 KB.
+block consisting of 16 KiB.
 
 [BEP 0003]: http://bittorrent.org/beps/bep_0003.html
 [BEP 0012]: http://bittorrent.org/beps/bep_0010.html
@@ -22,7 +22,7 @@ import os
 from . import bencoding
 
 
-@dataclasses.dataclass(eq=True, frozen=True)
+@dataclasses.dataclass(frozen=True)
 class File:
     """File metadata."""
 
@@ -45,7 +45,7 @@ def build_file_tree(files: Iterable[File]) -> None:
             f.truncate(file.length)
 
 
-@dataclasses.dataclass(eq=True, frozen=True)
+@dataclasses.dataclass(frozen=True)
 class Piece:
     """Piece metadata."""
 
@@ -77,7 +77,7 @@ def available(pieces: Sequence[Piece],
             yield piece
 
 
-@dataclasses.dataclass(eq=True, frozen=True)
+@dataclasses.dataclass(frozen=True)
 class Chunk:
     """The part of a `Piece` belonging to a single `File`.
 
@@ -123,7 +123,7 @@ def write(chunk: Chunk, data: bytes) -> None:
         f.write(data[begin : begin + chunk.length])
 
 
-@dataclasses.dataclass(eq=True, frozen=True)
+@dataclasses.dataclass(frozen=True)
 class Block:
     """Block metadata."""
 
