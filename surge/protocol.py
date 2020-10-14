@@ -31,14 +31,14 @@ from .channel import Channel
 from .stream import Stream
 
 
-async def print_progress(root: Root, total: int) -> None:
+async def print_progress(root: Root) -> None:
     """Periodically poll `root` and print the download progress to stdout."""
-    progress_template = "\r\x1b[KDownload progress: {{}}/{} pieces".format(total)
+    progress_template = "\r\x1b[KDownload progress: {{}}/{} pieces".format(root.total)
     connections_template = "({} tracker{}, {} peer{})"
     try:
         while True:
             print(
-                progress_template.format(total - root.missing),
+                progress_template.format(root.total - root.missing),
                 connections_template.format(
                     root.trackers,
                     "s" if root.trackers != 1 else "",
@@ -53,7 +53,7 @@ async def print_progress(root: Root, total: int) -> None:
         if not root.missing:
             # Print one last time, so that the final terminal output reflects
             # the fact that the download completed.
-            print(progress_template.format(total), end=".\n", flush=True)
+            print(progress_template.format(root.total), end=".\n", flush=True)
         raise
 
 
@@ -64,7 +64,7 @@ async def download(metadata: _metadata.Metadata,
                    max_requests: int) -> None:
     """Spin up a `Root` and write downloaded pieces to the file system."""
     async with Root(metadata, peer_id, missing, max_peers, max_requests) as root:
-        printer = asyncio.create_task(print_progress(root, len(metadata.pieces)))
+        printer = asyncio.create_task(print_progress(root))
         chunks = _metadata.chunk(metadata.pieces, metadata.files)
         loop = asyncio.get_running_loop()
         # Delegate to a thread pool because asyncio has no direct support for
@@ -108,6 +108,7 @@ class Root(Actor):
             self._main(metadata.pieces, metadata.info_hash, peer_id, max_requests)
         )
 
+        self._pieces = metadata.pieces
         # The set of pieces that still need to be downloaded.
         self._missing = missing
         # We connect to at most `max_peers` peers at the same time. This
@@ -147,6 +148,11 @@ class Root(Actor):
             self._slots.release()
         else:
             super()._on_child_crash(child)
+
+    @property
+    def total(self) -> int:
+        """The total number of pieces."""
+        return len(self._pieces)
 
     @property
     def missing(self) -> int:
