@@ -1,15 +1,17 @@
 """Download files from the BitTorrent network.
 
 Usage:
-    __main__.py --magnet URI [--peers PEERS]
-    __main__.py FILE [--resume] [--peers PEERS] [--requests REQUESTS]
+    __main__.py --magnet <URI> [--peers <peers>]
+    __main__.py <file> [--resume] [--peers <peers>] [--requests <requests>]
     __main__.py (-h | --help)
 
 Options:
-    -h, --help          Show this screen.
-    --resume            Resume the download.
-    --peers PEERS       Number of peers to connect to [default: 50].
-    --requests REQUEST  Number of open requests per peer [default: 50].
+    --magnet <URI>         Download the corresponding .torrent file.
+    <file>                 Download the files described by the .torrent file.
+    --resume               Resume the download.
+    --peers <peers>        Number of peers to connect to [default: 50].
+    --requests <requests>  Number of open requests per peer [default: 50].
+    -h, --help             Show this screen.
 
 """
 
@@ -34,8 +36,8 @@ def main() -> None:
     peer_id = secrets.token_bytes(20)
     max_peers = int(args["--peers"])
 
-    if args["--magnet"]:
-        info_hash, announce_list = magnet.parse(args["URI"])
+    if (uri := args["--magnet"]) is not None:
+        info_hash, announce_list = magnet.parse(uri)
 
         print("Downloading .torrent file from peers.")
         raw_metadata = loop.run_until_complete(
@@ -47,7 +49,7 @@ def main() -> None:
         with open(path, "wb") as f:
             f.write(raw_metadata)
     else:
-        with open(args["FILE"], "rb") as f:
+        with open(args["<file>"], "rb") as f:
             metadata = _metadata.Metadata.from_bytes(f.read())
         missing = set(metadata.pieces)
         max_requests = int(args["--requests"])
