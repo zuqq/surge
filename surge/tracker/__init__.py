@@ -118,8 +118,8 @@ class UDPTrackerProtocol(asyncio.DatagramProtocol):
 
         self._transport = None
         self._closed = asyncio.get_event_loop().create_future()
-        self._exception = None
 
+        self._exception = None
         self._queue = collections.deque(maxlen=10)
         self._waiter = None
 

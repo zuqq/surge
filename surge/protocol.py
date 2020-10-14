@@ -110,10 +110,6 @@ class Root(Actor):
 
         # The set of pieces that still need to be downloaded.
         self._missing = missing
-        # A `Channel` that holds up to `max_peers` downloaded pieces. If the
-        # channel fills up, `Node`s will hold off on downloading more pieces
-        # until the file system has caught up.
-        self.results = Channel(max_peers)
         # We connect to at most `max_peers` peers at the same time. This
         # semaphore is a means of communication between the coroutine that
         # cleans up after crashed `Node`s and the coroutine that spawns new
@@ -125,6 +121,11 @@ class Root(Actor):
         # downloading any given piece.
         self._downloading: DefaultDict[_metadata.Piece, Set[Node]]
         self._downloading = collections.defaultdict(set)
+
+        # A `Channel` that holds up to `max_peers` downloaded pieces. If the
+        # channel fills up, `Node`s will hold off on downloading more pieces
+        # until the file system has caught up.
+        self.results = Channel(max_peers)
 
     async def _main(self, pieces, info_hash, peer_id, max_requests):
         # Hack to cover the case where `put` is never called.
@@ -210,9 +211,10 @@ class Node(Actor):
         super().__init__(parent)
         self._coros.add(self._main(pieces, info_hash, peer_id))
 
-        self.peer = peer
-        self.downloading: Set[_metadata.Piece] = set()
         self._state = _transducer.State(max_requests)
+
+        self.downloading: Set[_metadata.Piece] = set()
+        self.peer = peer
 
     def __repr__(self):
         class_name = self.__module__ + "." + self.__class__.__qualname__

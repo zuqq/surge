@@ -64,10 +64,11 @@ class Root(Actor):
         self.children.add(peer_queue)
         self._coros.add(self._main(info_hash, peer_id, peer_queue))
 
-        # Future that will hold the metadata.
-        self.result = asyncio.get_event_loop().create_future()
         self._announce_list = announce_list
         self._slots = asyncio.Semaphore(max_peers)
+
+        # Future that will hold the metadata.
+        self.result = asyncio.get_event_loop().create_future()
 
     async def _main(self, info_hash, peer_id, peer_queue):
         while True:
