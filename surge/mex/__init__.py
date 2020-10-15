@@ -111,11 +111,11 @@ class Node(Actor):
                 while True:
                     event = transducer.send(message)
                     message = None
-                    if isinstance(event, _transducer.Write):
+                    if isinstance(event, _transducer.Send):
                         await stream.write(event.message)
-                    elif isinstance(event, _transducer.NeedHandshake):
+                    elif isinstance(event, _transducer.ReceiveHandshake):
                         message = await asyncio.wait_for(stream.read_handshake(), 30)
-                    elif isinstance(event, _transducer.NeedMessage):
+                    elif isinstance(event, _transducer.ReceiveMessage):
                         message = await asyncio.wait_for(stream.read(), 30)
             except StopIteration as exc:
                 self.parent.done(exc.value)

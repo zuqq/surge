@@ -14,34 +14,36 @@ from .. import messages
 
 
 @dataclasses.dataclass
-class Write:
+class Send:
+    """Send `message`."""
+
     message: messages.Message
 
 
-class NeedHandshake:
-    pass
+class ReceiveHandshake:
+    """Receive a `messages.Handshake`."""
 
 
-class NeedMessage:
-    pass
+class ReceiveMessage:
+    """Receive a `messages.Message`."""
 
 
-Event = Union[Write, NeedHandshake, NeedMessage]
+Event = Union[Send, ReceiveHandshake, ReceiveMessage]
 
 
 def mex(info_hash: bytes, peer_id: bytes) -> Generator[Event,
                                                        Optional[messages.Message],
                                                        bytes]:
-    yield Write(messages.Handshake(info_hash, peer_id, extension_protocol=True))
-    received = yield NeedHandshake()
+    yield Send(messages.Handshake(info_hash, peer_id, extension_protocol=True))
+    received = yield ReceiveHandshake()
     if not isinstance(received, messages.Handshake):
         raise TypeError("Expected handshake.")
     if received.info_hash != info_hash:
         raise ValueError("Wrong 'info_hash'.")
 
-    yield Write(messages.ExtensionHandshake())
+    yield Send(messages.ExtensionHandshake())
     while True:
-        received = yield NeedMessage()
+        received = yield ReceiveMessage()
         if isinstance(received, messages.ExtensionHandshake):
             ut_metadata = received.ut_metadata
             metadata_size = received.metadata_size
@@ -55,9 +57,9 @@ def mex(info_hash: bytes, peer_id: bytes) -> Generator[Event,
     piece_length = 2 ** 14
     pieces = []
     for i in range((metadata_size + piece_length - 1) // piece_length):  # type: ignore
-        yield Write(messages.MetadataRequest(i, ut_metadata))
+        yield Send(messages.MetadataRequest(i, ut_metadata))
         while True:
-            received = yield NeedMessage()
+            received = yield ReceiveMessage()
             if isinstance(received, messages.MetadataData):
                 # We assume that the peer sends us data for the piece that we
                 # just requested; if not, the result of the transaction will be

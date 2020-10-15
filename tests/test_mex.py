@@ -12,19 +12,19 @@ class TestMex(Example):
         transducer = _transducer.mex(self.info_hash, self.peer_id)
 
         event = transducer.send(None)
-        self.assertIsInstance(event, _transducer.Write)
+        self.assertIsInstance(event, _transducer.Send)
         self.assertIsInstance(event.message, messages.Handshake)
 
         event = transducer.send(None)
-        self.assertIsInstance(event, _transducer.NeedHandshake)
+        self.assertIsInstance(event, _transducer.ReceiveHandshake)
 
         event = transducer.send(messages.Handshake(self.info_hash, other_peer_id))
-        self.assertIsInstance(event, _transducer.Write)
+        self.assertIsInstance(event, _transducer.Send)
         self.assertIsInstance(event.message, messages.ExtensionHandshake)
         ut_metadata = event.message.ut_metadata
 
         event = transducer.send(None)
-        self.assertIsInstance(event, _transducer.NeedMessage)
+        self.assertIsInstance(event, _transducer.ReceiveMessage)
 
         outbox = collections.deque()
         message = messages.ExtensionHandshake(3, len(self.raw_info))
@@ -32,7 +32,7 @@ class TestMex(Example):
             while True:
                 event = transducer.send(message)
                 message = None
-                if isinstance(event, _transducer.Write):
+                if isinstance(event, _transducer.Send):
                     if isinstance(event.message, messages.MetadataRequest):
                         i = event.message.index
                         outbox.append(
@@ -43,7 +43,7 @@ class TestMex(Example):
                                 ut_metadata,
                             )
                         )
-                elif isinstance(event, _transducer.NeedMessage):
+                elif isinstance(event, _transducer.ReceiveMessage):
                     if outbox:
                         message = outbox.popleft()
         self.assertEqual(cm.exception.value, self.raw_info)
