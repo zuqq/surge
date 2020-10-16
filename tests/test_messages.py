@@ -15,11 +15,14 @@ class TestHandshake(Example):
     reserved = 0
 
     def test_to_bytes(self):
-        handshake = messages.Handshake(self.info_hash, self.peer_id).to_bytes()
-        pstrlen, pstr, _, info_hash, peer_id = struct.unpack(self.format, handshake)
+        handshake = messages.Handshake(0, self.info_hash, self.peer_id).to_bytes()
+        pstrlen, pstr, reserved, info_hash, peer_id = struct.unpack(
+            self.format, handshake
+        )
 
         self.assertEqual(pstrlen, self.pstrlen)
         self.assertEqual(pstr, self.pstr)
+        self.assertEqual(reserved, self.reserved)
         self.assertEqual(info_hash, self.info_hash)
         self.assertEqual(peer_id, self.peer_id)
 
@@ -37,13 +40,6 @@ class TestHandshake(Example):
 
         self.assertEqual(message.info_hash, self.info_hash)
         self.assertEqual(message.peer_id, self.peer_id)
-
-    def test_extension_protocol(self):
-        message = messages.Handshake(
-            self.info_hash, self.peer_id, extension_protocol=True
-        )
-        _, _, reserved, _, _ = struct.unpack(self.format, message.to_bytes())
-        self.assertTrue(reserved & (1 << 20))
 
 
 class TestKeepalive(unittest.TestCase):
@@ -105,7 +101,8 @@ class TestBitfield(Example):
 
     def test_parse(self):
         self.assertEqual(
-            messages.parse(self.reference).available(self.pieces), {self.pieces[0]},
+            messages.parse(self.reference).available(self.pieces),
+            {self.pieces[0]},
         )
 
 
@@ -121,7 +118,8 @@ class TestRequest(Example):
 
     def test_to_bytes(self):
         self.assertEqual(
-            messages.Request.from_block(self.block).to_bytes(), self.reference,
+            messages.Request.from_block(self.block).to_bytes(),
+            self.reference,
         )
 
     def test_block(self):

@@ -18,7 +18,9 @@ class TestMex(Example):
         event = transducer.send(None)
         self.assertIsInstance(event, _transducer.ReceiveHandshake)
 
-        event = transducer.send(messages.Handshake(self.info_hash, other_peer_id))
+        event = transducer.send(
+            messages.Handshake(1 << 20, self.info_hash, other_peer_id)
+        )
         self.assertIsInstance(event, _transducer.Send)
         self.assertIsInstance(event.message, messages.ExtensionHandshake)
         ut_metadata = event.message.ut_metadata

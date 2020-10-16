@@ -19,7 +19,7 @@ class TestProtocol(Example):
         event = transducer.send(None)
         self.assertIsInstance(event, _transducer.ReceiveHandshake)
 
-        event = transducer.send(messages.Handshake(self.info_hash, other_peer_id))
+        event = transducer.send(messages.Handshake(0, self.info_hash, other_peer_id))
         self.assertIsInstance(event, _transducer.ReceiveMessage)
 
         outbox = collections.deque()

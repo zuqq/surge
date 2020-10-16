@@ -5,8 +5,7 @@ Every BitTorrent message falls into one of three categories:
 - messages belonging to the extension protocol [BEP 0010];
 - messages belonging to the metadata exchange protocol [BEP 0009].
 
-These categories correspond to the classes `Message`, `ExtensionProtocol`,
-and `MetadataProtocol`.
+These categories correspond to `Message`, `ExtensionMessage`, and `MetadataMessage`.
 
 Among the messages belonging to the base protocol, `Handshake` is special: it
 possesses neither length prefix nor identifier byte and must therefore be
@@ -18,118 +17,139 @@ treated separately when parsing.
 """
 
 from __future__ import annotations
-from typing import Dict, Optional, Sequence, Set, Tuple, Type, Union
+from typing import Any, ClassVar, Dict, Optional, Set, Union
 
+import dataclasses
 import struct
 
 from . import _metadata
 from . import bencoding
 
 
-class Message:
-    """Base class for BitTorrent messages.
-
-    Messages are (de-)serialized using `struct`. The format string is stored in
-    the attribute `format`, while `fields` stores the names of the attributes
-    holding the data.
-    """
-
-    formatter = struct.Struct("")
-    fields: Tuple[str, ...] = ()
-
-    def to_bytes(self) -> bytes:
-        return self.formatter.pack(*(getattr(self, f) for f in self.fields))
-
-    @classmethod
-    def from_bytes(cls, data: bytes) -> Message:
-        # Default implementation for messages that are ignored.
-        return cls()
-
-
-class Handshake(Message):
-    formatter = struct.Struct(">B19sQ20s20s")
-    fields = ("pstrlen", "pstr", "reserved", "info_hash", "peer_id")
-
-    pstrlen = 19
-    pstr = b"BitTorrent protocol"
-    reserved = 0
-
-    def __init__(self,
-                 info_hash: bytes,
-                 peer_id: bytes,
-                 *,
-                 extension_protocol: bool = False):
-        self.info_hash = info_hash
-        self.peer_id = peer_id
-        if extension_protocol:
-            self.reserved |= 1 << 20  # See BEP 10.
+@dataclasses.dataclass
+class Handshake:
+    pstrlen: ClassVar[int] = 19
+    pstr: ClassVar[bytes] = b"BitTorrent protocol"
+    reserved: int
+    info_hash: bytes
+    peer_id: bytes
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Handshake:
-        _, _, _, info_hash, peer_id = cls.formatter.unpack(data)
-        return cls(info_hash, peer_id)
+        _, _, reserved, info_hash, peer_id = struct.unpack(">B19sQ20s20s", data)
+        return cls(reserved, info_hash, peer_id)
+
+    def to_bytes(self) -> bytes:
+        return struct.pack(
+            ">B19sQ20s20s",
+            self.pstrlen,
+            self.pstr,
+            self.reserved,
+            self.info_hash,
+            self.peer_id,
+        )
 
 
-class Keepalive(Message):
-    formatter = struct.Struct(">L")
-    fields = ("prefix",)
-    prefix = 0
+@dataclasses.dataclass
+class Keepalive:
+    prefix: ClassVar[int] = 0
+
+    @classmethod
+    def from_bytes(cls, _: bytes) -> Keepalive:
+        return cls()
+
+    def to_bytes(self) -> bytes:
+        return struct.pack(">L", self.prefix)
 
 
-class Choke(Message):
-    formatter = struct.Struct(">LB")
-    fields = ("prefix", "value")
-    prefix = 1
-    value = 0
+message_type = {}
 
 
-class Unchoke(Message):
-    formatter = struct.Struct(">LB")
-    fields = ("prefix", "value")
-    prefix = 1
-    value = 1
+def valued(cls):
+    message_type[cls.value] = cls
+    return cls
 
 
-class Interested(Message):
-    formatter = struct.Struct(">LB")
-    fields = ("prefix", "value")
-    prefix = 1
-    value = 2
+@valued
+@dataclasses.dataclass
+class Choke:
+    prefix: ClassVar[int] = 1
+    value: ClassVar[int] = 0
+
+    @classmethod
+    def from_bytes(cls, _: bytes) -> Choke:
+        return cls()
+
+    def to_bytes(self) -> bytes:
+        return struct.pack(">LB", self.prefix, self.value)
 
 
-class NotInterested(Message):
-    formatter = struct.Struct(">LB")
-    fields = ("prefix", "value")
-    prefix = 1
-    value = 3
+@valued
+@dataclasses.dataclass
+class Unchoke:
+    prefix: ClassVar[int] = 1
+    value: ClassVar[int] = 1
+
+    @classmethod
+    def from_bytes(cls, _: bytes) -> Unchoke:
+        return cls()
+
+    def to_bytes(self) -> bytes:
+        return struct.pack(">LB", self.prefix, self.value)
 
 
-class Have(Message):
-    formatter = struct.Struct(">LBL")
-    fields = ("prefix", "value", "index")
-    prefix = 5
-    value = 4
+@valued
+@dataclasses.dataclass
+class Interested:
+    prefix: ClassVar[int] = 1
+    value: ClassVar[int] = 2
 
-    def __init__(self, index: int):
-        self.index = index
+    @classmethod
+    def from_bytes(cls, _: bytes) -> Interested:
+        return cls()
+
+    def to_bytes(self) -> bytes:
+        return struct.pack(">LB", self.prefix, self.value)
+
+
+@valued
+@dataclasses.dataclass
+class NotInterested:
+    prefix: ClassVar[int] = 1
+    value: ClassVar[int] = 3
+
+    @classmethod
+    def from_bytes(cls, _: bytes) -> NotInterested:
+        return cls()
+
+    def to_bytes(self) -> bytes:
+        return struct.pack(">LB", self.prefix, self.value)
+
+
+@valued
+@dataclasses.dataclass
+class Have:
+    prefix: ClassVar[int] = 5
+    value: ClassVar[int] = 4
+    index: int
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Have:
-        _, _, index = cls.formatter.unpack(data)
+        _, _, index = struct.unpack(">LBL", data)
         return cls(index)
+
+    def to_bytes(self) -> bytes:
+        return struct.pack(">LBL", self.prefix, self.value, self.index)
 
     def piece(self, pieces: Sequence[_metadata.Piece]) -> _metadata.Piece:
         return pieces[self.index]
 
 
-class Bitfield(Message):
-    fields = ("prefix", "value", "payload")
-    value = 5
-
-    def __init__(self, payload: bytes):
-        self.formatter = struct.Struct(f">LB{len(payload)}s")
-        self.prefix = 1 + len(payload)
-        self.payload = payload
+@valued
+@dataclasses.dataclass
+class Bitfield:
+    value: ClassVar[int] = 5
+    payload: bytes
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Bitfield:
@@ -142,6 +162,10 @@ class Bitfield(Message):
         for i in indices:
             result[i // 8] |= 1 << (7 - i % 8)
         return cls(bytes(result))
+
+    def to_bytes(self) -> bytes:
+        n = len(self.payload)
+        return struct.pack(f">LB{n}s", n + 1, self.value, self.payload)
 
     def available(self, pieces: Sequence[_metadata.Piece]) -> Set[_metadata.Piece]:
         # TODO: Deprecate this method and use indices instead.
@@ -157,16 +181,14 @@ class Bitfield(Message):
         return result
 
 
-class Request(Message):
-    formatter = struct.Struct(">LBLLL")
-    fields = ("prefix", "value", "index", "begin", "length")
-    prefix = 13
-    value = 6
-
-    def __init__(self, index: int, begin: int, length: int):
-        self.index = index
-        self.begin = begin
-        self.length = length
+@valued
+@dataclasses.dataclass
+class Request:
+    prefix: ClassVar[int] = 13
+    value: ClassVar[int] = 6
+    index: int
+    begin: int
+    length: int
 
     @classmethod
     def from_block(cls, block: _metadata.Block):
@@ -174,23 +196,25 @@ class Request(Message):
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Request:
-        _, _, index, begin, length = cls.formatter.unpack(data)
+        _, _, index, begin, length = struct.unpack(">LBLLL", data)
         return cls(index, begin, length)
+
+    def to_bytes(self) -> bytes:
+        return struct.pack(
+            ">LBLLL", self.prefix, self.value, self.index, self.begin, self.length
+        )
 
     def block(self, pieces: Sequence[_metadata.Piece]) -> _metadata.Block:
         return _metadata.Block(pieces[self.index], self.begin, self.length)
 
 
-class Block(Message):
-    fields = ("prefix", "value", "index", "begin", "data")
-    value = 7
-
-    def __init__(self, index: int, begin: int, data: bytes):
-        self.formatter = struct.Struct(f">LBLL{len(data)}s")
-        self.prefix = 9 + len(data)
-        self.index = index
-        self.begin = begin
-        self.data = data
+@valued
+@dataclasses.dataclass
+class Block:
+    value: ClassVar[int] = 7
+    index: int
+    begin: int
+    data: bytes
 
     @classmethod
     def from_block(cls, block: _metadata.Block, data: bytes):
@@ -202,28 +226,43 @@ class Block(Message):
         _, _, index, begin, data = struct.unpack(f">LBLL{len(data) - 13}s", data)
         return cls(index, begin, data)
 
+    def to_bytes(self) -> bytes:
+        n = len(self.data)
+        return struct.pack(
+            f">LBLL{n}s", n + 9, self.value, self.index, self.begin, self.data
+        )
+
     def block(self, pieces: Sequence[_metadata.Piece]) -> _metadata.Block:
         return _metadata.Block(pieces[self.index], self.begin, len(self.data))
 
 
-class Cancel(Message):
-    value = 8
-
-
-class Port(Message):
-    value = 9
-
-
-class ExtensionProtocol(Message):
-    """Base class for messages belonging to the extension protocol."""
-
-    value = 20
-
-    def to_bytes(self) -> bytes:
-        raise NotImplementedError  # pragma: no cover
+@valued
+@dataclasses.dataclass
+class Cancel:
+    value: ClassVar[int] = 8
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> ExtensionProtocol:
+    def from_bytes(cls, _: bytes) -> Cancel:
+        return cls()
+
+
+@valued
+@dataclasses.dataclass
+class Port:
+    value: ClassVar[int] = 9
+
+    @classmethod
+    def from_bytes(cls, _: bytes) -> Port:
+        return cls()
+
+
+@valued
+@dataclasses.dataclass
+class ExtensionProtocol:
+    value: ClassVar[int] = 20
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> ExtensionMessage:
         if data[5] == ExtensionHandshake.extension_value:
             return ExtensionHandshake.from_bytes(data)
         if data[5] == MetadataProtocol.extension_value:
@@ -231,12 +270,11 @@ class ExtensionProtocol(Message):
         raise ValueError("Unknown extension protocol identifier.")
 
 
+@dataclasses.dataclass
 class ExtensionHandshake(ExtensionProtocol):
-    extension_value = 0
-
-    def __init__(self, ut_metadata: int = 3, metadata_size: Optional[int] = None):
-        self.ut_metadata = ut_metadata
-        self.metadata_size = metadata_size
+    extension_value: ClassVar[int] = 0
+    ut_metadata: int = 3
+    metadata_size: Optional[int] = None
 
     def to_bytes(self) -> bytes:
         d: Dict[bytes, Union[Dict[bytes, int], int]]
@@ -255,19 +293,12 @@ class ExtensionHandshake(ExtensionProtocol):
         return cls(d[b"m"][b"ut_metadata"], d[b"metadata_size"])
 
 
-class MetadataProtocol(ExtensionProtocol):
-    """Base class for messages belonging to the metadata exchange protocol."""
-
-    extension_value = 3
-
-    def __init__(self, ut_metadata: int = 3):
-        self.extension_value = ut_metadata
-
-    def to_bytes(self) -> bytes:
-        raise NotImplementedError  # pragma: no cover
+@dataclasses.dataclass
+class MetadataProtocol:
+    extension_value: ClassVar[int] = 3
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> MetadataProtocol:
+    def from_bytes(cls, data: bytes) -> MetadataMessage:
         i, d = bencoding.decode_from(data, 6)
         if b"msg_type" not in d:
             raise ValueError("Missing key b'msg_type'.")
@@ -286,12 +317,17 @@ class MetadataProtocol(ExtensionProtocol):
         raise ValueError("Invalid value for b'msg_type'.")
 
 
-class MetadataRequest(MetadataProtocol):
-    metadata_value = 0
+@dataclasses.dataclass
+class MetadataRequest:
+    value: ClassVar[int] = 20
+    extension_value: ClassVar[int] = 3
+    metadata_value: ClassVar[int] = 0
+    index: int
+    ut_metadata: dataclasses.InitVar[Optional[int]] = None
 
-    def __init__(self, index: int, ut_metadata: int = 3):
-        super().__init__(ut_metadata)
-        self.index = index
+    def __post_init__(self, ut_metadata):
+        if ut_metadata is not None:
+            self.extension_value = ut_metadata
 
     def to_bytes(self) -> bytes:
         payload = bencoding.encode(
@@ -303,22 +339,28 @@ class MetadataRequest(MetadataProtocol):
         )
 
 
-class MetadataData(MetadataProtocol):
-    metadata_value = 1
+@dataclasses.dataclass
+class MetadataData:
+    value: ClassVar[int] = 20
+    extension_value: ClassVar[int] = 3
+    metadata_value: ClassVar[int] = 1
+    index: int
+    total_size: int
+    data: bytes
+    ut_metadata: dataclasses.InitVar[Optional[int]] = None
 
-    def __init__(self, index: int, total_size: int, data: bytes, ut_metadata: int = 3):
-        super().__init__(ut_metadata)
-        self.index = index
-        self.total_size = total_size
-        self.data = data
+    def __post_init__(self, ut_metadata):
+        if ut_metadata is not None:
+            self.extension_value = ut_metadata
 
     def to_bytes(self) -> bytes:
-        d = {
-            b"msg_type": self.metadata_value,
-            b"piece": self.index,
-            b"total_size": self.total_size,
-        }
-        payload = bencoding.encode(d)
+        payload = bencoding.encode(
+            {
+                b"msg_type": self.metadata_value,
+                b"piece": self.index,
+                b"total_size": self.total_size,
+            }
+        )
         m = len(payload)
         n = len(self.data)
         return struct.pack(
@@ -331,12 +373,17 @@ class MetadataData(MetadataProtocol):
         )
 
 
+@dataclasses.dataclass
 class MetadataReject(MetadataProtocol):
-    metadata_value = 2
+    value: ClassVar[int] = 20
+    extension_value: ClassVar[int] = 3
+    metadata_value: ClassVar[int] = 2
+    index: int
+    ut_metadata: dataclasses.InitVar[Optional[int]] = None
 
-    def __init__(self, index: int, ut_metadata: int = 3):
-        super().__init__(ut_metadata)
-        self.index = index
+    def __post_init__(self, ut_metadata):
+        if ut_metadata is not None:
+            self.extension_value = ut_metadata
 
     def to_bytes(self) -> bytes:
         payload = bencoding.encode(
@@ -348,25 +395,14 @@ class MetadataReject(MetadataProtocol):
         )
 
 
+Message = Any
+MetadataMessage = Union[MetadataRequest, MetadataData, MetadataReject]
+ExtensionMessage = Union[ExtensionHandshake, MetadataMessage]
+
+
 def parse_handshake(data: bytes) -> Handshake:
     """Parse a BitTorrent handshake."""
     return Handshake.from_bytes(data)
-
-
-message_type: Dict[int, Type[Message]]
-message_type = {
-    0: Choke,
-    1: Unchoke,
-    2: Interested,
-    3: NotInterested,
-    4: Have,
-    5: Bitfield,
-    6: Request,
-    7: Block,
-    8: Cancel,
-    9: Port,
-    20: ExtensionProtocol,
-}
 
 
 def parse(data: bytes) -> Message:

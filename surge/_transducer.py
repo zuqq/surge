@@ -166,7 +166,7 @@ def base(pieces: Sequence[_metadata.Piece],
          info_hash: bytes,
          peer_id: bytes,
          state: State) -> Generator[Event, Optional[messages.Message], None]:
-    yield Send(messages.Handshake(info_hash, peer_id))
+    yield Send(messages.Handshake(0, info_hash, peer_id))
     received = yield ReceiveHandshake()
     if not isinstance(received, messages.Handshake):
         raise TypeError("Expected handshake.")
