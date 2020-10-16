@@ -178,10 +178,11 @@ def base(pieces: Sequence[_metadata.Piece],
     while True:
         received = yield ReceiveMessage()
         if isinstance(received, messages.Have):
-            state.available.add(received.piece(pieces))
+            state.available.add(pieces[received.index])
             break
         if isinstance(received, messages.Bitfield):
-            state.available.update(received.available(pieces))
+            for i in received.to_indices():
+                state.available.add(pieces[i])
             break
 
     flow = Flow.CHOKED
@@ -204,8 +205,15 @@ def base(pieces: Sequence[_metadata.Piece],
         elif isinstance(received, messages.Unchoke):
             flow = Flow.UNCHOKED
         elif isinstance(received, messages.Have):
-            state.available.add(received.piece(pieces))
+            state.available.add(pieces[received.index])
         elif isinstance(received, messages.Block):
-            result = state.on_block(received.block(pieces), received.data)
+            result = state.on_block(
+                _metadata.Block(
+                    pieces[received.index],
+                    received.begin,
+                    len(received.data),
+                ),
+                received.data,
+            )
             if result is not None:
                 yield result

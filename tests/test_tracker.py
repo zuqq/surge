@@ -1,17 +1,15 @@
-import secrets
+import unittest
 
 from surge.tracker import _metadata
 from surge.tracker import _udp
 
-from ._example import Example
 
-
-class TestUDP(Example):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.params = _metadata.Parameters(cls.info_hash, secrets.token_bytes(20))
-        cls.connection_id = b"\x1c\xe3\xc2\x0bP\x88\x96\xd1"
+class TestUDP(unittest.TestCase):
+    params = _metadata.Parameters(
+        b"O\xd2\xd3Y\x8a\x11\x01\xa1U\xdd\x86|\x91\x04\xfc\xd2\xd9\xe4$+",
+        b"\xa7\x88\x06\x8b\xeb6i~=//\x1e\xc8\x1d\xbb\x12\x023\xa58",
+    )
+    connection_id = b"\x1c\xe3\xc2\x0bP\x88\x96\xd1"
 
     def test_successful_transaction(self):
         # Successful transaction, with a one second delay between the answers.

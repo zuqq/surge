@@ -141,9 +141,6 @@ class Have:
     def to_bytes(self) -> bytes:
         return struct.pack(">LBL", self.prefix, self.value, self.index)
 
-    def piece(self, pieces: Sequence[_metadata.Piece]) -> _metadata.Piece:
-        return pieces[self.index]
-
 
 @valued
 @dataclasses.dataclass
@@ -157,8 +154,8 @@ class Bitfield:
         return cls(payload)
 
     @classmethod
-    def from_indices(cls, indices: Set[int], length: int) -> Bitfield:
-        result = bytearray(length)
+    def from_indices(cls, indices: Set[int], total: int) -> Bitfield:
+        result = bytearray((total + 7) // 8)
         for i in indices:
             result[i // 8] |= 1 << (7 - i % 8)
         return cls(bytes(result))
@@ -167,15 +164,14 @@ class Bitfield:
         n = len(self.payload)
         return struct.pack(f">LB{n}s", n + 1, self.value, self.payload)
 
-    def available(self, pieces: Sequence[_metadata.Piece]) -> Set[_metadata.Piece]:
-        # TODO: Deprecate this method and use indices instead.
+    def to_indices(self) -> Set[int]:
         result = set()
         i = 0
         for b in self.payload:
             mask = 1 << 7
-            while mask and i < len(pieces):
+            while mask:
                 if b & mask:
-                    result.add(pieces[i])
+                    result.add(i)
                 mask >>= 1
                 i += 1
         return result
@@ -204,9 +200,6 @@ class Request:
             ">LBLLL", self.prefix, self.value, self.index, self.begin, self.length
         )
 
-    def block(self, pieces: Sequence[_metadata.Piece]) -> _metadata.Block:
-        return _metadata.Block(pieces[self.index], self.begin, self.length)
-
 
 @valued
 @dataclasses.dataclass
@@ -231,9 +224,6 @@ class Block:
         return struct.pack(
             f">LBLL{n}s", n + 9, self.value, self.index, self.begin, self.data
         )
-
-    def block(self, pieces: Sequence[_metadata.Piece]) -> _metadata.Block:
-        return _metadata.Block(pieces[self.index], self.begin, len(self.data))
 
 
 @valued
