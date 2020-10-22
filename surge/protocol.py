@@ -19,7 +19,6 @@ from typing import DefaultDict, Optional, Sequence, Set
 import asyncio
 import collections
 import contextlib
-import dataclasses
 import functools
 import random
 
@@ -222,11 +221,6 @@ class Node(Actor):
 
         self.downloading: Set[_metadata.Piece] = set()
         self.peer = peer
-
-    def __repr__(self):
-        class_name = self.__module__ + "." + self.__class__.__qualname__
-        peer = dataclasses.astuple(self.peer)
-        return f"<{class_name} with peer={peer}>"
 
     async def _main(self, pieces, info_hash, peer_id):
         async with Stream(self.peer) as stream:

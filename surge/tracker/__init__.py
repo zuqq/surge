@@ -93,11 +93,6 @@ class HTTPTrackerConnection(actor.Actor):
 
         self.url = url
 
-    def __repr__(self):
-        class_name = self.__module__ + "." + self.__class__.__qualname__
-        url = self.url.geturl()
-        return f"<{class_name} with url={repr(url)}>"
-
     async def _main(self, parameters):
         loop = asyncio.get_running_loop()
         while True:
@@ -191,12 +186,6 @@ class UDPTrackerConnection(actor.Actor):
         self._coros.add(self._main(parameters))
 
         self.url = url
-
-    def __repr__(self):
-        class_name = self.__module__ + "." + self.__class__.__qualname__
-        address = hex(id(self))
-        url = self.url.geturl()
-        return f"<{class_name} object at {address} with url={repr(url)}>"
 
     async def _main(self, parameters):
         loop = asyncio.get_running_loop()

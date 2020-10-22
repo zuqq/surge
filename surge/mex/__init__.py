@@ -32,7 +32,6 @@ Typical message flow:
 from typing import Iterable
 
 import asyncio
-import dataclasses
 
 from . import _info
 from . import _transducer
@@ -97,11 +96,6 @@ class Node(Actor):
         self._coros.add(self._main(info_hash, peer_id))
 
         self.peer = peer
-
-    def __repr__(self):
-        class_name = self.__module__ + "." + self.__class__.__qualname__
-        peer = dataclasses.astuple(self.peer)
-        return f"<{class_name} with peer={peer}>"
 
     async def _main(self, info_hash, peer_id):
         async with Stream(self.peer) as stream:
