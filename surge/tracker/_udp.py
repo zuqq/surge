@@ -6,18 +6,6 @@ The UDP tracker protocol is a lightweight alternative to the original HTTP-based
 way of communicating with trackers. It is a simple two-step protocol built on
 top of UDP, with a custom retransmission mechanism using exponential backoff.
 
-Typical message flow:
-
-    Us                       Tracker
-     |      ConnectRequest      |
-     |------------------------->|
-     |     ConnectResponse      |
-     |<-------------------------|
-     |      AnnounceRequest     |
-     |------------------------->|
-     |     AnnounceResponse     |
-     |<-------------------------|
-
 [BEP 0015]: http://bittorrent.org/beps/bep_0015.html
 """
 

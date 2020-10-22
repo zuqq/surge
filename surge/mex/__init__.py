@@ -8,25 +8,6 @@ messages as part of a BitTorrent connection; see `messages.MetadataMessage`.
 Therefore the implementation uses the same approach as that of the main
 protocol.
 
-Typical message flow:
-
-    Us                         Peer
-     |        Handshake         |
-     |------------------------->|
-     |        Handshake         |
-     |<-------------------------|
-     |    ExtensionHandshake    |
-     |------------------------->|
-     |    ExtensionHandshake    |
-     |<-------------------------|
-     |     MetadataRequest      |
-     |------------------------->|
-     |       MetadataData       |
-     |<-------------------------|
-     |     MetadataRequest      |
-     |------------------------->|
-     |           ...            |
-
 [BEP 0009]: http://bittorrent.org/beps/bep_0009.html
 """
 from typing import Iterable
