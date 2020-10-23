@@ -2,8 +2,14 @@
 
 [![Build Status](https://travis-ci.com/zuqq/surge.svg?branch=master)](https://travis-ci.com/zuqq/surge)
 
-Surge is a client for the BitTorrent network, built on top of Python's
-coroutine-based concurrency model. Please note that it is download-only for now.
+Surge is an implementation of the [BitTorrent protocol]. It specializes in
+downloading from many peers at once, relying on Python's built-in coroutines
+for concurrency. In addition to the original BitTorrent specification, Surge
+also supports magnet URIs and UDP trackers.
+
+Please note that Surge is download-only for now.
+
+[BitTorrent protocol]: https://en.wikipedia.org/wiki/BitTorrent
 
 
 ## Installation
@@ -18,18 +24,20 @@ new virtual environment.
 [poetry]: https://python-poetry.org/
 
 
-## Usage
+## Example
+
+Inside of a `poetry shell`, downloading the latest [Debian release] looks like this:
 
 ```bash
-# Download the .torrent file.
-poetry run python -m surge.magnet 'magnet:?xt=urn:btih:be00b2943b4228bdae969ddae01e89c34932255e&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce'
-
-# Download debian-10.6.0-amd64-netinst.iso.
-poetry run python -m surge be00b2943b4228bdae969ddae01e89c34932255e.torrent
-
-# Check that the MD5 digest is 42c43392d108ed8957083843392c794b.
-md5sum debian-10.6.0-amd64-netinst.iso
+$ python -m surge.magnet 'magnet:?xt=urn:btih:be00b2943b4228bdae969ddae01e89c34932255e&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce'
+$ python -m surge be00b2943b4228bdae969ddae01e89c34932255e.torrent
+Download progress: 1396/1396 pieces.
+$ md5sum debian-10.6.0-amd64-netinst.iso
+42c43392d108ed8957083843392c794b  debian-10.6.0-amd64-netinst.iso
 ```
+
+[Debian release]: https://cdimage.debian.org/debian-cd/current/amd64/bt-cd/
+
 
 ## Features
 
