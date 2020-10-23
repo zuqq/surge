@@ -1,19 +1,10 @@
 """BitTorrent message types and parser.
 
-Every BitTorrent message falls into one of three categories:
-- messages belonging to the base protocol [BEP 0003];
-- messages belonging to the extension protocol [BEP 0010];
-- messages belonging to the metadata exchange protocol [BEP 0009].
-
-These categories correspond to `Message`, `ExtensionMessage`, and `MetadataMessage`.
-
-Among the messages belonging to the base protocol, `Handshake` is special: it
-possesses neither length prefix nor identifier byte and must therefore be
-treated separately when parsing.
-
-[BEP 0003]: http://bittorrent.org/beps/bep_0003.html
-[BEP 0010]: http://bittorrent.org/beps/bep_0010.html
-[BEP 0009]: http://bittorrent.org/beps/bep_0009.html
+Every supported message has its own class, with methods `from_bytes` and
+`to_bytes` for (de-)serialization. In order to parse a message of unknown
+type that is not a `Handshake`, use the function `parse`. Handshakes are
+handled by the separate function `parse_handshake` because they are the only
+type of message without length prefix and identifier byte.
 """
 
 from __future__ import annotations
@@ -249,6 +240,11 @@ class Port:
 @valued
 @dataclasses.dataclass
 class ExtensionProtocol:
+    """Base class for [extension protocol][BEP 0010] messages.
+
+    [BEP 0010]: http://bittorrent.org/beps/bep_0010.html
+    """
+
     value: ClassVar[int] = 20
 
     @classmethod
@@ -285,6 +281,11 @@ class ExtensionHandshake(ExtensionProtocol):
 
 @dataclasses.dataclass
 class MetadataProtocol:
+    """Base class for [metadata exchange protocol][BEP 0009] messages.
+
+    [BEP 0009]: http://bittorrent.org/beps/bep_0009.html
+    """
+
     extension_value: ClassVar[int] = 3
 
     @classmethod
@@ -385,7 +386,7 @@ class MetadataReject(MetadataProtocol):
         )
 
 
-Message = Any
+Message = Any  # TODO: Work around mypy's limitations.
 MetadataMessage = Union[MetadataRequest, MetadataData, MetadataReject]
 ExtensionMessage = Union[ExtensionHandshake, MetadataMessage]
 

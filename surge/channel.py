@@ -2,7 +2,7 @@ import asyncio
 
 
 class Channel(asyncio.Queue):
-    """A subclass of `asyncio.Queue` supporting the async iterator protocol.
+    """A subclass of `asyncio.Queue` that implements the async iterator protocol.
 
     Note that this class is only safe to use as a unidirectional channel with
     one producer and one consumer.

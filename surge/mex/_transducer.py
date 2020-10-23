@@ -1,6 +1,6 @@
 """State machine for the metadata exchange protocol.
 
-The structure is similar to that of the main protocol. Howeve, because this
+The structure is similar to that of the main protocol. However, because this
 protocol is much simpler, there is no need for a separate `State` object and
 there are fewer types of `Event`s.
 """

@@ -56,13 +56,11 @@ def main() -> None:
     info_hash, announce_list = parse(args["<URI>"])
 
     uvloop.install()
-    print("Downloading .torrent file from peers.")
     raw_metadata = asyncio.get_event_loop().run_until_complete(
         mex.download(info_hash, announce_list, peer_id, max_peers)
     )
 
     path = f"{info_hash.hex()}.torrent"
-    print(f"Saving .torrent file to {path}.")
     with open(path, "wb") as f:
         f.write(raw_metadata)
 

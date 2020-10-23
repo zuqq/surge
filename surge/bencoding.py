@@ -7,7 +7,7 @@ BEncoding is a serialization format defined in the [BitTorrent specification].
 
 
 def _int(bs, start):
-    # Note that this doesn't follow the specification in BEP 3, because it
+    # TODO: This doesn't adhere to the specification in BEP 3, because it
     # ignores leading zeros instead of raising an exception.
     end = bs.index(b"e", start)
     return end + 1, int(bs[start + 1 : end].decode("ascii"))

@@ -96,8 +96,9 @@ class HTTPTrackerConnection(actor.Actor):
     async def _main(self, parameters):
         loop = asyncio.get_running_loop()
         while True:
-            # I'm running a synchronous HTTP client in a separate thread here
-            # because HTTP requests only happen sporadically.
+            # I'm running the synchronous HTTP client from the standard library
+            # in a separate thread here because HTTP requests only happen
+            # sporadically and `aiohttp` is a hefty dependency.
             d = bencoding.decode(
                 await loop.run_in_executor(
                     None, functools.partial(get, self.url, parameters)
