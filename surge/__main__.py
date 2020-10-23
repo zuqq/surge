@@ -34,7 +34,6 @@ def main() -> None:
     missing = set(metadata.pieces)
 
     if args["--resume"]:
-        print("Checking for available pieces.")
         for piece in _metadata.available(metadata.pieces, metadata.files):
             missing.remove(piece)
 
