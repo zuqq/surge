@@ -50,9 +50,13 @@ async def print_progress(root: Root) -> None:
             await asyncio.sleep(0.5)
     except asyncio.CancelledError:
         if not root.missing:
-            # Print one last time, so that the final terminal output reflects
-            # the fact that the download completed.
-            print(progress_template.format(root.total), end=".\n", flush=True)
+            # Print one last time, so that the terminal output reflects the
+            # final state.
+            print(
+                progress_template.format(root.total - root.missing),
+                end=".\n",
+                flush=True,
+            )
         raise
 
 
