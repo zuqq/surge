@@ -72,6 +72,20 @@ class Progress:
         self._data[block.begin : block.begin + block.length] = data
 
 
+class Flow(enum.IntEnum):
+    """Additional state that indicates whether we are allowed to request.
+
+    `CHOKED` is the initial state. We transition from `CHOKED` to `INTERESTED`
+    by sending a `messages.Interested` message to the peer and then to
+    `UNCHOKED` by receiving a `messages.Unchoke` message. The peer will only
+    honor our `messages.Request` messages if we're `UNCHOKED`.
+    """
+
+    CHOKED = 0
+    INTERESTED = 1
+    UNCHOKED = 2
+
+
 class State:
     """Connection state, especially the parts pertaining to open block request.
 
@@ -89,6 +103,7 @@ class State:
 
         # Pieces that the peer is advertising.
         self.available: Set[_metadata.Piece] = set()
+        self.flow = Flow.CHOKED
         self.requesting = True
 
     @property
@@ -148,20 +163,6 @@ class State:
             self.add_piece(piece)
 
 
-class Flow(enum.IntEnum):
-    """Additional state that indicates whether we are allowed to request.
-
-    `CHOKED` is the initial state. We transition from `CHOKED` to `INTERESTED`
-    by sending a `messages.Interested` message to the peer and then to
-    `UNCHOKED` by receiving a `messages.Unchoke` message. The peer will only
-    honor our `messages.Request` messages if we're `UNCHOKED`.
-    """
-
-    CHOKED = 0
-    INTERESTED = 1
-    UNCHOKED = 2
-
-
 def base(pieces: Sequence[_metadata.Piece],
          info_hash: bytes,
          peer_id: bytes,
@@ -185,13 +186,12 @@ def base(pieces: Sequence[_metadata.Piece],
                 state.available.add(pieces[i])
             break
 
-    flow = Flow.CHOKED
     while True:
         event: Event = ReceiveMessage()
-        if flow is Flow.CHOKED:
-            flow = Flow.INTERESTED
+        if state.flow is Flow.CHOKED:
+            state.flow = Flow.INTERESTED
             event = Send(messages.Interested())
-        elif flow is Flow.UNCHOKED and state.can_request:
+        elif state.flow is Flow.UNCHOKED and state.can_request:
             try:
                 block = state.get_block()
             except IndexError:
@@ -200,10 +200,10 @@ def base(pieces: Sequence[_metadata.Piece],
                 event = Send(messages.Request.from_block(block))
         received = yield event
         if isinstance(received, messages.Choke):
-            flow = Flow.CHOKED
+            state.flow = Flow.CHOKED
             state.on_choke()
         elif isinstance(received, messages.Unchoke):
-            flow = Flow.UNCHOKED
+            state.flow = Flow.UNCHOKED
         elif isinstance(received, messages.Have):
             state.available.add(pieces[received.index])
         elif isinstance(received, messages.Block):
