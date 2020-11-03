@@ -9,6 +9,7 @@ class TestBencoding(unittest.TestCase):
         (b"i3e", 3),
         (b"i-3e", -3),
         (b"i0e", 0),
+        (b"le", []),
         (b"l4:spam4:eggse", [b"spam", b"eggs"]),
         (b"d3:cow3:moo4:spam4:eggse", {b"cow": b"moo", b"spam": b"eggs"}),
         (b"d4:spaml1:a1:bee", {b"spam": [b"a", b"b"]}),
