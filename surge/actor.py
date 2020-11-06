@@ -30,13 +30,12 @@ class Actor:
     `Actor`s form a directed graph whose structure is stored in the attributes
     `parent` and `children`.
 
-    The principal purpose of an `Actor` is to run the coroutines contained in
-    `_coros`. In doing so, it may spawn children and pass messages to its parent
-    and children. Messages are to be implemented as methods of the receiving
-    class.
+    The principal purpose of an `Actor` is to run the coroutines `_coros`. In
+    doing so, it may spawn children and pass messages to its parent and
+    children. Messages are to be implemented as methods of the receiving class.
 
     The lifetime of an `Actor` is controlled via the methods `start` and `stop`;
-    starting orstopping an `Actor` does the same to all of its children.
+    starting or stopping an `Actor` does the same to all of its children.
 
     If any of its coroutines raises an `Exception`, the `Actor` messages its
     `parent`, who then shuts down the affected `Actor`. Restart strategies can
