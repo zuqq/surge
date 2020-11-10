@@ -8,7 +8,7 @@ type of message without length prefix and identifier byte.
 """
 
 from __future__ import annotations
-from typing import Any, ClassVar, Dict, Optional, Set, Union
+from typing import Any, ClassVar, Dict, Iterable, Optional, Set, Union
 
 import dataclasses
 import struct
@@ -145,7 +145,7 @@ class Bitfield:
         return cls(payload)
 
     @classmethod
-    def from_indices(cls, indices: Set[int], total: int) -> Bitfield:
+    def from_indices(cls, indices: Iterable[int], total: int) -> Bitfield:
         result = bytearray((total + 7) // 8)
         for i in indices:
             result[i // 8] |= 1 << (7 - i % 8)
