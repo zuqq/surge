@@ -39,12 +39,15 @@ class Root(Actor):
                  announce_list: Iterable[str],
                  peer_id: bytes,
                  max_peers: int):
-        super().__init__()
-        peer_queue = tracker.PeerQueue(self, info_hash, announce_list, peer_id)
-        self.children.add(peer_queue)
-        self._coros.add(self._start_children(info_hash, peer_id, peer_queue))
         self._crashes = asyncio.Queue()  # type: ignore
-        self._coros.add(self._stop_children())
+        peer_queue = tracker.PeerQueue(self, info_hash, announce_list, peer_id)
+        super().__init__(
+            children=(peer_queue,),
+            coros=(
+                self._start_children(info_hash, peer_id, peer_queue),
+                self._stop_children(),
+            )
+        )
 
         self._announce_list = announce_list
         self._slots = asyncio.Semaphore(max_peers)

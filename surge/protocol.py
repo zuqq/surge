@@ -102,21 +102,19 @@ class Root(Actor):
                  missing: Set[_metadata.Piece],
                  max_peers: int,
                  max_requests: int):
-        super().__init__()
+        self._crashes = asyncio.Queue()  # type: ignore
         self._peer_queue = tracker.PeerQueue(
             self, metadata.info_hash, metadata.announce_list, peer_id
         )
-        self.children.add(self._peer_queue)
-        self._coros.add(
-            self._start_children(
-                metadata.pieces,
-                metadata.info_hash,
-                peer_id,
-                max_requests
+        super().__init__(
+            children=(self._peer_queue,),
+            coros=(
+                self._start_children(
+                    metadata.pieces, metadata.info_hash, peer_id, max_requests
+                ),
+                self._stop_children(),
             )
         )
-        self._crashes = asyncio.Queue()  # type: ignore
-        self._coros.add(self._stop_children())
 
         self._pieces = metadata.pieces
         # The set of pieces that still need to be downloaded.
@@ -232,8 +230,7 @@ class Node(Actor):
                  peer_id: bytes,
                  peer: tracker.Peer,
                  max_requests: int):
-        super().__init__(parent)
-        self._coros.add(self._main(pieces, info_hash, peer_id))
+        super().__init__(parent, coros=(self._main(pieces, info_hash, peer_id),))
 
         self._state = _transducer.State(max_requests)
 

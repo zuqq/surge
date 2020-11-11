@@ -33,16 +33,16 @@ class PeerQueue(actor.Actor):
                  info_hash: bytes,
                  announce_list: Iterable[str],
                  peer_id: bytes):
-        super().__init__(parent)
+        self._crashes = asyncio.Queue()  # type: ignore
         parameters = Parameters(info_hash, peer_id)
+        children = []
         for announce in announce_list:
             url = urllib.parse.urlparse(announce)
             if url.scheme in ("http", "https"):
-                self.children.add(HTTPTrackerConnection(self, url, parameters))
+                children.append(HTTPTrackerConnection(self, url, parameters))
             elif url.scheme == "udp":
-                self.children.add(UDPTrackerConnection(self, url, parameters))
-        self._crashes = asyncio.Queue()  # type: ignore
-        self._coros.add(self._stop_children())
+                children.append(UDPTrackerConnection(self, url, parameters))
+        super().__init__(parent, children=children, coros=(self._stop_children(),))
 
         self._peers = asyncio.Queue(len(self.children) * 200)  # type: ignore
         self._seen: Set[Peer] = set()
@@ -96,8 +96,7 @@ class HTTPTrackerConnection(actor.Actor):
                  parent: PeerQueue,
                  url: urllib.parse.ParseResult,
                  parameters: Parameters):
-        super().__init__(parent)
-        self._coros.add(self._main(parameters))
+        super().__init__(parent, coros=(self._main(parameters),))
 
         self.url = url
 
@@ -191,8 +190,7 @@ class UDPTrackerConnection(actor.Actor):
                  parent: PeerQueue,
                  url: urllib.parse.ParseResult,
                  parameters: Parameters):
-        super().__init__(parent)
-        self._coros.add(self._main(parameters))
+        super().__init__(parent, coros=(self._main(parameters),))
 
         self.url = url
 

@@ -17,7 +17,7 @@ by a wrapper task. To implement a restart strategy, override `report_crash`.
 """
 
 from __future__ import annotations
-from typing import Coroutine, Optional, Set
+from typing import Coroutine, Iterable, Optional, Set
 
 import asyncio
 import contextlib
@@ -42,11 +42,14 @@ class Actor:
     can be added by overriding `report_crash`.
     """
 
-    def __init__(self, parent: Optional[Actor] = None):
+    def __init__(self,
+                 parent: Optional[Actor] = None,
+                 children: Iterable[Actor] = (),
+                 coros: Iterable[Coroutine[None, None, None]] = ()):
         self._parent = None if parent is None else weakref.ref(parent)
-        self.children: Set[Actor] = set()
+        self.children = set(children)
 
-        self._coros: Set[Coroutine[None, None, None]] = set()
+        self._coros = set(coros)
         self._runner: Optional[asyncio.Task] = None
         self._running = False
         self._tasks: Set[asyncio.Task] = set()
