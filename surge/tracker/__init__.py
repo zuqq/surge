@@ -41,12 +41,20 @@ class PeerQueue(actor.Actor):
                 self.children.add(HTTPTrackerConnection(self, url, parameters))
             elif url.scheme == "udp":
                 self.children.add(UDPTrackerConnection(self, url, parameters))
+        self._crashes = asyncio.Queue()  # type: ignore
+        self._coros.add(self._stop_children())
 
         self._peers = asyncio.Queue(len(self.children) * 200)  # type: ignore
         self._seen: Set[Peer] = set()
 
-    def _on_child_crash(self, child):
-        pass
+    async def _stop_children(self):
+        while True:
+            child = await self._crashes.get()
+            await child.stop()
+            self.children.remove(child)
+
+    def report_crash(self, child: actor.Actor) -> None:
+        self._crashes.put_nowait(child)
 
     @property
     def trackers(self) -> int:

@@ -108,8 +108,15 @@ class Root(Actor):
         )
         self.children.add(self._peer_queue)
         self._coros.add(
-            self._main(metadata.pieces, metadata.info_hash, peer_id, max_requests)
+            self._start_children(
+                metadata.pieces,
+                metadata.info_hash,
+                peer_id,
+                max_requests
+            )
         )
+        self._crashes = asyncio.Queue()  # type: ignore
+        self._coros.add(self._stop_children())
 
         self._pieces = metadata.pieces
         # The set of pieces that still need to be downloaded.
@@ -131,7 +138,7 @@ class Root(Actor):
         # until the file system has caught up.
         self.results = Channel(max_peers)
 
-    async def _main(self, pieces, info_hash, peer_id, max_requests):
+    async def _start_children(self, pieces, info_hash, peer_id, max_requests):
         # In case `put` is never called because there are no pieces to download.
         if not self._missing:
             return await self.results.close()
@@ -142,15 +149,22 @@ class Root(Actor):
                 Node(self, pieces, info_hash, peer_id, peer, max_requests)
             )
 
-    def _on_child_crash(self, child):
-        if isinstance(child, Node):
+    async def _stop_children(self):
+        while True:
+            child = await self._crashes.get()
+            await child.stop()
+            self.children.remove(child)
             for piece in child.downloading:
                 self._downloading[piece].remove(child)
                 if not self._downloading[piece]:
                     self._downloading.pop(piece)
             self._slots.release()
+
+    def report_crash(self, child: Actor) -> None:
+        if isinstance(child, Node):
+            self._crashes.put_nowait(child)
         else:
-            super()._on_child_crash(child)
+            super().report_crash(child)
 
     @property
     def total(self) -> int:

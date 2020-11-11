@@ -13,7 +13,7 @@ As to the concrete implementation, actors are objects that derive from the
 `Actor` class. Messages are passed by calling methods of the receiving object,
 both synchronous and asynchronous in nature. An actor's thread of execution
 consists of a set of coroutines; exceptions in any of the coroutines are caught
-by a wrapper task. To implement a restart strategy, override `_supervise`.
+by a wrapper task. To implement a restart strategy, override `report_crash`.
 """
 
 from __future__ import annotations
@@ -38,23 +38,18 @@ class Actor:
     starting or stopping an `Actor` does the same to all of its children.
 
     If any of its coroutines raises an `Exception`, the `Actor` messages its
-    `parent`, who then shuts down the affected `Actor`. Restart strategies can
-    be added by overriding `_supervise`.
+    `parent`, who can then shut down the affected `Actor`. Restart strategies
+    can be added by overriding `report_crash`.
     """
 
     def __init__(self, parent: Optional[Actor] = None):
         self._parent = None if parent is None else weakref.ref(parent)
         self.children: Set[Actor] = set()
 
-        self._coros: Set[Coroutine[None, None, None]] = {self._supervise()}
+        self._coros: Set[Coroutine[None, None, None]] = set()
         self._runner: Optional[asyncio.Task] = None
         self._running = False
         self._tasks: Set[asyncio.Task] = set()
-
-        # This queue is unbounded because the actor is supposed to control the
-        # number of children it spawns (and thereby the number of concurrent
-        # crashes that can occur).
-        self._crashes = asyncio.Queue()  # type: ignore
 
     async def __aenter__(self):
         await self.start()
@@ -73,16 +68,6 @@ class Actor:
         except Exception:
             if self._running and self.parent is not None:
                 self.parent.report_crash(self)
-
-    def _on_child_crash(self, child: Actor):
-        raise RuntimeError(f"Uncaught crash: {child}")
-
-    async def _supervise(self):
-        while True:
-            child = await self._crashes.get()
-            await child.stop()
-            self.children.remove(child)
-            self._on_child_crash(child)
 
     @property
     def parent(self):
@@ -107,7 +92,10 @@ class Actor:
 
     def report_crash(self, child: Actor) -> None:
         """Report that `child` crashed."""
-        self._crashes.put_nowait(child)
+        if self.parent is not None:
+            self.parent.report_crash(self)
+        else:
+            raise RuntimeError(f"Unexpected crash: {child}")
 
     async def stop(self) -> None:
         """First stop `self`, then all of its children."""

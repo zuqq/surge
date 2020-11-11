@@ -42,7 +42,9 @@ class Root(Actor):
         super().__init__()
         peer_queue = tracker.PeerQueue(self, info_hash, announce_list, peer_id)
         self.children.add(peer_queue)
-        self._coros.add(self._main(info_hash, peer_id, peer_queue))
+        self._coros.add(self._start_children(info_hash, peer_id, peer_queue))
+        self._crashes = asyncio.Queue()  # type: ignore
+        self._coros.add(self._stop_children())
 
         self._announce_list = announce_list
         self._slots = asyncio.Semaphore(max_peers)
@@ -50,17 +52,24 @@ class Root(Actor):
         # Future that will hold the metadata.
         self.result = asyncio.get_event_loop().create_future()
 
-    async def _main(self, info_hash, peer_id, peer_queue):
+    async def _start_children(self, info_hash, peer_id, peer_queue):
         while True:
             await self._slots.acquire()
             peer = await peer_queue.get()
             await self.spawn_child(Node(self, info_hash, peer_id, peer))
 
-    def _on_child_crash(self, child):
-        if isinstance(child, Node):
+    async def _stop_children(self):
+        while True:
+            child = await self._crashes.get()
+            await child.stop()
+            self.children.remove(child)
             self._slots.release()
+
+    def report_crash(self, child: Actor) -> None:
+        if isinstance(child, Node):
+            self._crashes.put_nowait(child)
         else:
-            super()._on_child_crash(child)
+            super().report_crash(child)
 
     def done(self, raw_info: bytes) -> None:
         if not self.result.done():
