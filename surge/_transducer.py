@@ -127,7 +127,7 @@ class State:
         self._stack = list(filter(predicate, self._stack))
 
     def get_block(self) -> _metadata.Block:
-        """"Return a fresh block to download.
+        """Return a fresh block to download.
 
         Raise `IndexError` if there are no blocks available.
         """

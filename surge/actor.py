@@ -98,7 +98,7 @@ class Actor:
         if self.parent is not None:
             self.parent.report_crash(self)
         else:
-            raise RuntimeError(f"Unexpected crash: {child}")
+            raise RuntimeError(f"Unexpected crash in {child}")
 
     async def stop(self) -> None:
         """First stop `self`, then all of its children."""

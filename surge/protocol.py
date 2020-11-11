@@ -113,7 +113,7 @@ class Root(Actor):
                     metadata.pieces, metadata.info_hash, peer_id, max_requests
                 ),
                 self._stop_children(),
-            )
+            ),
         )
 
         self._pieces = metadata.pieces

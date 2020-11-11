@@ -21,9 +21,6 @@ from ..actor import Actor
 from ..stream import Stream
 
 
-__all__ = ("download",)
-
-
 async def download(info_hash: bytes,
                    announce_list: Iterable[str],
                    peer_id: bytes,
@@ -46,7 +43,7 @@ class Root(Actor):
             coros=(
                 self._start_children(info_hash, peer_id, peer_queue),
                 self._stop_children(),
-            )
+            ),
         )
 
         self._announce_list = announce_list

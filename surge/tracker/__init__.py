@@ -24,9 +24,6 @@ from .. import bencoding
 from ._metadata import Parameters, Peer, Result
 
 
-__all__ = ("Peer", "PeerQueue")
-
-
 class PeerQueue(actor.Actor):
     def __init__(self,
                  parent: Optional[actor.Actor],
