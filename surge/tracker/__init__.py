@@ -25,11 +25,13 @@ from ._metadata import Parameters, Peer, Result
 
 
 class PeerQueue(actor.Actor):
-    def __init__(self,
-                 parent: Optional[actor.Actor],
-                 info_hash: bytes,
-                 announce_list: Iterable[str],
-                 peer_id: bytes):
+    def __init__(
+        self,
+        parent: Optional[actor.Actor],
+        info_hash: bytes,
+        announce_list: Iterable[str],
+        peer_id: bytes,
+    ):
         self._crashes = asyncio.Queue()  # type: ignore
         parameters = Parameters(info_hash, peer_id)
         children = []
@@ -89,10 +91,9 @@ def get(url: urllib.parse.ParseResult, parameters: Parameters) -> bytes:
 
 
 class HTTPTrackerConnection(actor.Actor):
-    def __init__(self,
-                 parent: PeerQueue,
-                 url: urllib.parse.ParseResult,
-                 parameters: Parameters):
+    def __init__(
+        self, parent: PeerQueue, url: urllib.parse.ParseResult, parameters: Parameters
+    ):
         super().__init__(parent, coros=(self._main(parameters),))
 
         self.url = url
@@ -183,10 +184,9 @@ class UDPTrackerProtocol(asyncio.DatagramProtocol):
 
 
 class UDPTrackerConnection(actor.Actor):
-    def __init__(self,
-                 parent: PeerQueue,
-                 url: urllib.parse.ParseResult,
-                 parameters: Parameters):
+    def __init__(
+        self, parent: PeerQueue, url: urllib.parse.ParseResult, parameters: Parameters
+    ):
         super().__init__(parent, coros=(self._main(parameters),))
 
         self.url = url

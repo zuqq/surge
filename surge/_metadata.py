@@ -60,8 +60,9 @@ def valid(piece: Piece, data: bytes) -> bool:
     return hashlib.sha1(data).digest() == piece.hash
 
 
-def available(pieces: Sequence[Piece],
-              files: Sequence[File]) -> Generator[Piece, None, None]:
+def available(
+    pieces: Sequence[Piece], files: Sequence[File]
+) -> Generator[Piece, None, None]:
     """Yield all valid pieces."""
     chunks = chunk(pieces, files)
     for piece in pieces:
@@ -92,8 +93,7 @@ class Chunk:
     length: int
 
 
-def chunk(pieces: Sequence[Piece],
-          files: Sequence[File]) -> Dict[Piece, List[Chunk]]:
+def chunk(pieces: Sequence[Piece], files: Sequence[File]) -> Dict[Piece, List[Chunk]]:
     """Map each element of `pieces` to a list of its `Chunk`s."""
     result: Dict[Piece, List[Chunk]] = {piece: [] for piece in pieces}
     i = 0

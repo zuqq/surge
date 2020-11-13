@@ -31,9 +31,9 @@ class ReceiveMessage:
 Event = Union[Send, ReceiveHandshake, ReceiveMessage]
 
 
-def mex(info_hash: bytes, peer_id: bytes) -> Generator[Event,
-                                                       Optional[messages.Message],
-                                                       bytes]:
+def mex(
+    info_hash: bytes, peer_id: bytes
+) -> Generator[Event, Optional[messages.Message], bytes]:
     yield Send(messages.Handshake(1 << 20, info_hash, peer_id))
     received = yield ReceiveHandshake()
     if not isinstance(received, messages.Handshake):

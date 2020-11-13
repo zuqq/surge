@@ -60,11 +60,13 @@ async def print_progress(root: Root) -> None:
         raise
 
 
-async def download(metadata: _metadata.Metadata,
-                   peer_id: bytes,
-                   missing: Set[_metadata.Piece],
-                   max_peers: int,
-                   max_requests: int) -> None:
+async def download(
+    metadata: _metadata.Metadata,
+    peer_id: bytes,
+    missing: Set[_metadata.Piece],
+    max_peers: int,
+    max_requests: int,
+) -> None:
     """Spin up a `Root` and write downloaded pieces to the file system."""
     async with Root(metadata, peer_id, missing, max_peers, max_requests) as root:
         printer = asyncio.create_task(print_progress(root))
@@ -96,12 +98,14 @@ class Root(Actor):
     information about the download.
     """
 
-    def __init__(self,
-                 metadata: _metadata.Metadata,
-                 peer_id: bytes,
-                 missing: Set[_metadata.Piece],
-                 max_peers: int,
-                 max_requests: int):
+    def __init__(
+        self,
+        metadata: _metadata.Metadata,
+        peer_id: bytes,
+        missing: Set[_metadata.Piece],
+        max_peers: int,
+        max_requests: int,
+    ):
         self._crashes = asyncio.Queue()  # type: ignore
         self._peer_queue = tracker.PeerQueue(
             self, metadata.info_hash, metadata.announce_list, peer_id
@@ -223,13 +227,15 @@ class Node(Actor):
     The `Node` crashes if the peer stops responding or sends invalid data.
     """
 
-    def __init__(self,
-                 parent: Root,
-                 pieces: Sequence[_metadata.Piece],
-                 info_hash: bytes,
-                 peer_id: bytes,
-                 peer: tracker.Peer,
-                 max_requests: int):
+    def __init__(
+        self,
+        parent: Root,
+        pieces: Sequence[_metadata.Piece],
+        info_hash: bytes,
+        peer_id: bytes,
+        peer: tracker.Peer,
+        max_requests: int,
+    ):
         super().__init__(parent, coros=(self._main(pieces, info_hash, peer_id),))
 
         self._state = _transducer.State(max_requests)

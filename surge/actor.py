@@ -42,10 +42,12 @@ class Actor:
     can be added by overriding `report_crash`.
     """
 
-    def __init__(self,
-                 parent: Optional[Actor] = None,
-                 children: Iterable[Actor] = (),
-                 coros: Iterable[Coroutine[None, None, None]] = ()):
+    def __init__(
+        self,
+        parent: Optional[Actor] = None,
+        children: Iterable[Actor] = (),
+        coros: Iterable[Coroutine[None, None, None]] = (),
+    ):
         self._parent = None if parent is None else weakref.ref(parent)
         self.children = set(children)
 

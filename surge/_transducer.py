@@ -163,10 +163,9 @@ class State:
             self.add_piece(piece)
 
 
-def base(pieces: Sequence[_metadata.Piece],
-         info_hash: bytes,
-         peer_id: bytes,
-         state: State) -> Generator[Event, Optional[messages.Message], None]:
+def base(
+    pieces: Sequence[_metadata.Piece], info_hash: bytes, peer_id: bytes, state: State
+) -> Generator[Event, Optional[messages.Message], None]:
     yield Send(messages.Handshake(0, info_hash, peer_id))
     received = yield ReceiveHandshake()
     if not isinstance(received, messages.Handshake):
@@ -209,9 +208,7 @@ def base(pieces: Sequence[_metadata.Piece],
         elif isinstance(received, messages.Block):
             result = state.on_block(
                 _metadata.Block(
-                    pieces[received.index],
-                    received.begin,
-                    len(received.data),
+                    pieces[received.index], received.begin, len(received.data)
                 ),
                 received.data,
             )

@@ -21,21 +21,22 @@ from ..actor import Actor
 from ..stream import Stream
 
 
-async def download(info_hash: bytes,
-                   announce_list: Iterable[str],
-                   peer_id: bytes,
-                   max_peers: int) -> bytes:
+async def download(
+    info_hash: bytes, announce_list: Iterable[str], peer_id: bytes, max_peers: int
+) -> bytes:
     """Return the content of the `.torrent` file."""
     async with Root(info_hash, announce_list, peer_id, max_peers) as root:
         return await root.result
 
 
 class Root(Actor):
-    def __init__(self,
-                 info_hash: bytes,
-                 announce_list: Iterable[str],
-                 peer_id: bytes,
-                 max_peers: int):
+    def __init__(
+        self,
+        info_hash: bytes,
+        announce_list: Iterable[str],
+        peer_id: bytes,
+        max_peers: int,
+    ):
         self._crashes = asyncio.Queue()  # type: ignore
         peer_queue = tracker.PeerQueue(self, info_hash, announce_list, peer_id)
         super().__init__(
@@ -77,11 +78,9 @@ class Root(Actor):
 
 
 class Node(Actor):
-    def __init__(self,
-                 parent: Root,
-                 info_hash: bytes,
-                 peer_id: bytes,
-                 peer: tracker.Peer):
+    def __init__(
+        self, parent: Root, info_hash: bytes, peer_id: bytes, peer: tracker.Peer
+    ):
         super().__init__(parent)
         self._coros.add(self._main(info_hash, peer_id))
 
