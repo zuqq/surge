@@ -2,7 +2,7 @@
 
 Usage:
     __main__.py <file> [--resume] [--peers <peers>] [--requests <requests>]
-    __main__.py (-h | --help)
+    __main__.py (-h | --help)
 
 Options:
     <file>                 The .torrent file to use.

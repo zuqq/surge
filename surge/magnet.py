@@ -2,7 +2,7 @@
 
 Usage:
     magnet.py <URI> [--peers <peers>]
-    magnet.py (-h | --help)
+    magnet.py (-h | --help)
 
 Options:
     <URI>             The magnet URI to use.
