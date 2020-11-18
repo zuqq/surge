@@ -35,6 +35,9 @@ class TestBencoding(unittest.TestCase):
                 with self.assertRaises(TypeError):
                     bencoding.encode(y)
 
+        with self.subTest("Dictionary keys are sorted."):
+            self.assertEqual(bencoding.encode({b"b": 1, b"a": 0}), b"d1:ai0e1:bi1ee")
+
     def test_raw_val(self):
         examples = [
             (b"d3:cow3:moo4:spam4:eggse", b"cow", b"3:moo"),

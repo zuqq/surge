@@ -95,7 +95,7 @@ def _encode_list(l):  # noqa: E741
 
 def _encode_dict(d):
     result = [b"d"]
-    for key, value in d.items():
+    for key, value in sorted(d.items()):
         result.append(_encode_str(key))
         result.append(encode(value))
     result.append(b"e")
