@@ -1,12 +1,12 @@
 """Download .torrent files from peers.
 
 Usage:
-    magnet.py <URI> [--peers <peers>]
+    magnet.py <URI> [--peers=<peers>]
     magnet.py (-h | --help)
 
 Options:
     <URI>             The magnet URI to use.
-    --peers <peers>   Number of peers to connect to [default: 50].
+    --peers=<peers>   Number of peers to connect to [default: 50].
     -h, --help        Show this screen.
 
 """
