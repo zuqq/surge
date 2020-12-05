@@ -53,7 +53,6 @@ class Actor:
 
         self._coros = set(coros)
         self._runner: Optional[asyncio.Task] = None
-        self._running = False
         self._tasks: Set[asyncio.Task] = set()
 
     async def __aenter__(self):
@@ -71,8 +70,10 @@ class Actor:
         # It's okay to catch `Exception` here because `asyncio.CancelledError`
         # derives directly from `BaseException` in Python 3.8.
         except Exception:
-            if self._running and self.parent is not None:
-                self.parent.report_crash(self)
+            if (parent := self.parent) is not None:
+                parent.report_crash(self)
+            else:
+                raise SystemExit(f"Unexpected crash in {self}.")
 
     @property
     def parent(self):
@@ -83,9 +84,8 @@ class Actor:
     async def start(self) -> None:
         """First start `self`, then all of its children."""
         # This method is async because it requires a running event loop.
-        if self._running:
+        if self._runner is not None:
             return
-        self._running = True
         self._runner = asyncio.create_task(self._run())
         for child in self.children:
             await child.start()
@@ -97,22 +97,22 @@ class Actor:
 
     def report_crash(self, child: Actor) -> None:
         """Report that `child` crashed."""
-        if self.parent is not None:
-            self.parent.report_crash(self)
+        if (parent := self.parent) is not None:
+            parent.report_crash(self)
         else:
-            raise RuntimeError(f"Unexpected crash in {child}")
+            raise SystemExit(f"Unexpected crash in {child}.")
 
     async def stop(self) -> None:
         """First stop `self`, then all of its children."""
-        if not self._running:
+        if (runner := self._runner) is None:
             return
-        self._running = False
-        if self._runner is not None:
-            self._runner.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._runner
+        self._runner = None
+        runner.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await runner
         for task in self._tasks:
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
+        self._tasks.clear()
         for child in self.children:
             await child.stop()

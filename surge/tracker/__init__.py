@@ -49,6 +49,8 @@ class PeerQueue(actor.Actor):
     async def _stop_children(self):
         while True:
             child = await self._crashes.get()
+            if child not in self.children:
+                continue
             await child.stop()
             self.children.remove(child)
 
