@@ -83,8 +83,7 @@ class Node(Actor):
     def __init__(
         self, parent: Root, info_hash: bytes, peer_id: bytes, peer: tracker.Peer
     ):
-        super().__init__(parent)
-        self._coros.add(self._main(info_hash, peer_id))
+        super().__init__(parent, coros=(self._main(info_hash, peer_id),))
 
         self.peer = peer
 
