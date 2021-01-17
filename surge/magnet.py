@@ -56,7 +56,7 @@ def main() -> None:
     info_hash, announce_list = parse(args["<URI>"])
 
     uvloop.install()
-    raw_metadata = asyncio.get_event_loop().run_until_complete(
+    raw_metadata = asyncio.run(
         mex.download(info_hash, announce_list, peer_id, max_peers)
     )
 

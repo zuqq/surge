@@ -38,9 +38,7 @@ def main() -> None:
             missing.remove(piece)
 
     uvloop.install()
-    asyncio.get_event_loop().run_until_complete(
-        protocol.download(metadata, peer_id, missing, max_peers, max_requests)
-    )
+    asyncio.run(protocol.download(metadata, peer_id, missing, max_peers, max_requests))
 
 
 if __name__ == "__main__":
