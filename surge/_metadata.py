@@ -17,7 +17,7 @@ from typing import Dict, Generator, Iterable, List, Sequence
 
 import dataclasses
 import hashlib
-import os
+import pathlib
 
 from . import bencoding
 
@@ -28,7 +28,7 @@ class File:
 
     begin: int  # Absolute offset.
     length: int
-    path: str  # TODO: Use `pathlib` instead?
+    path: pathlib.Path
 
 
 def build_file_tree(files: Iterable[File]) -> None:
@@ -38,10 +38,8 @@ def build_file_tree(files: Iterable[File]) -> None:
     of the boundaries defined by the `File` instance.
     """
     for file in files:
-        tail, _ = os.path.split(file.path)
-        if tail:
-            os.makedirs(tail, exist_ok=True)
-        with open(file.path, "a+b") as f:
+        file.path.parent.mkdir(exist_ok=True)
+        with file.path.open("a+b") as f:
             f.truncate(file.length)
 
 
@@ -69,7 +67,7 @@ def available(
         data = []
         for c in chunks[piece]:
             try:
-                with open(c.file.path, "rb") as f:
+                with c.file.path.open("rb") as f:
                     f.seek(c.begin - c.file.begin)
                     data.append(f.read(c.length))
             except FileNotFoundError:
@@ -117,7 +115,7 @@ def chunk(pieces: Sequence[Piece], files: Sequence[File]) -> Dict[Piece, List[Ch
 
 def write(chunk: Chunk, data: bytes) -> None:
     """Write `data` to `chunk`."""
-    with open(chunk.file.path, "rb+") as f:
+    with chunk.file.path.open("rb+") as f:
         f.seek(chunk.begin - chunk.file.begin)
         begin = chunk.begin - chunk.piece.begin
         f.write(data[begin : begin + chunk.length])
@@ -176,16 +174,16 @@ class Metadata:
         if b"length" in info:
             # Single file mode.
             length = info[b"length"]
-            files.append(File(0, length, info[b"name"].decode()))
+            files.append(File(0, length, pathlib.Path(info[b"name"].decode())))
         else:
             # Multiple file mode.
             length = 0  # Will be computed below.
-            folder = info[b"name"].decode()
+            folder = pathlib.Path(info[b"name"].decode())
             for f in info[b"files"]:
                 file = File(
                     length,
                     f[b"length"],
-                    os.path.join(folder, *(part.decode() for part in f[b"path"])),
+                    folder.joinpath(*(part.decode() for part in f[b"path"])),
                 )
                 files.append(file)
                 length += file.length
