@@ -8,7 +8,7 @@ connection with a single tracker; `PeerQueue` manages multiple connections and
 exposes an `asyncio.Queue`-like interface for the received peers.
 """
 
-from typing import Iterable, Optional, Set
+from typing import Iterable, List, Optional, Set, Union
 
 import asyncio
 import collections
@@ -34,7 +34,7 @@ class PeerQueue(actor.Actor):
     ):
         self._crashes = asyncio.Queue()  # type: ignore
         parameters = Parameters(info_hash, peer_id)
-        children = []
+        children: List[Union[HTTPTrackerConnection, UDPTrackerConnection]] = []
         for announce in announce_list:
             url = urllib.parse.urlparse(announce)
             if url.scheme in ("http", "https"):
