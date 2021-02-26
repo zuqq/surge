@@ -1,9 +1,9 @@
-name: poetry
+name: tests
 
 on: push
 
 jobs:
-  poetry:
+  tests:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repository
