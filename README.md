@@ -1,6 +1,6 @@
 # surge
 
-[![Build Status](https://travis-ci.com/zuqq/surge.svg?branch=master)](https://travis-ci.com/zuqq/surge)
+![tests](https://github.com/zuqq/surge/actions/workflows/tests.yml/badge.svg)
 
 Surge is an implementation of the [BitTorrent protocol]. It specializes in
 downloading from many peers at once, relying on Python's built-in coroutines
