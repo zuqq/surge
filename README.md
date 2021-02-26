@@ -15,7 +15,7 @@ Please note that Surge is download-only for now.
 ## Installation
 
 Surge requires Python 3.8 with [docopt] and [uvloop]. The recommended way of
-installing these dependencies is to use [poetry]. Run `poetry install`, which
+installing these dependencies is to use [Poetry]. Run `poetry install`, which
 reads the dependencies from the provided `pyproject.toml` and installs them in a
 new virtual environment.
 
