@@ -1,0 +1,35 @@
+name: poetry
+
+on: [pull_request, push]
+
+jobs:
+  poetry:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+      - name: Install Poetry
+        run: python -m pip install poetry
+      - name: Configure Poetry
+        run: |
+          poetry config virtualenvs.create 'true'
+          poetry config virtualenvs.in-project 'true'
+      - name: Activate the virtual environment
+        id: activate-virtualenv
+        uses: actions/cache@v2
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+      - name: Install dependencies
+        if: steps.activate-virtualenv.outputs.cache-hit != 'true'
+        run: poetry install -n --no-root
+      - name: Install
+        run: poetry install -n
+      - name: Run tests
+        run: |
+          source .venv/bin/activate
+          python -m unittest
