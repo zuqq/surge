@@ -12,20 +12,26 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: 3.8
+      - name: Cache Poetry
+        id: cache-poetry
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
       - name: Install Poetry
-        run: python -m pip install poetry
-      - name: Configure Poetry
+        if: steps.cache-poetry.outputs.cache-hit != 'true'
         run: |
+          python -m pip install poetry
           poetry config virtualenvs.create 'true'
           poetry config virtualenvs.in-project 'true'
-      - name: Activate the virtual environment
-        id: activate-virtualenv
+      - name: Cache dependencies
+        id: cache-venv
         uses: actions/cache@v2
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('**/pyproject.toml') }}
       - name: Install dependencies
-        if: steps.activate-virtualenv.outputs.cache-hit != 'true'
+        if: steps.cache-virtualenv.outputs.cache-hit != 'true'
         run: poetry install -n --no-root
       - name: Install
         run: poetry install -n
