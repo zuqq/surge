@@ -1,6 +1,6 @@
 name: poetry
 
-on: [pull_request, push]
+on: push
 
 jobs:
   poetry:
