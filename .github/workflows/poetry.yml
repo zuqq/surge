@@ -31,7 +31,7 @@ jobs:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('**/pyproject.toml') }}
       - name: Install dependencies
-        if: steps.cache-virtualenv.outputs.cache-hit != 'true'
+        if: steps.cache-venv.outputs.cache-hit != 'true'
         run: poetry install -n --no-root
       - name: Install
         run: poetry install -n
