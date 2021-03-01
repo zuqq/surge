@@ -24,7 +24,7 @@ from . import messages
 class Send:
     """Send `message`."""
 
-    message: messages.Message
+    message: Union[messages.Handshake, messages.Message]
 
 
 @dataclasses.dataclass

@@ -5,7 +5,7 @@ protocol is much simpler, there is no need for a separate `State` object and
 there are fewer types of `Event`s.
 """
 
-from typing import Generator, Optional, Union
+from typing import Generator, List, Optional, Union
 
 import dataclasses
 
@@ -17,7 +17,12 @@ from .. import messages
 class Send:
     """Send `message`."""
 
-    message: messages.Message
+    message: Union[
+        messages.Handshake,
+        messages.Message,
+        messages.ExtensionMessage,
+        messages.MetadataMessage,
+    ]
 
 
 class ReceiveHandshake:
@@ -55,7 +60,7 @@ def mex(
     # number of pieces is typically very small, a simple stop-and-wait protocol
     # is fast enough.
     piece_length = 2 ** 14
-    pieces = []
+    pieces: List[bytes] = []
     for i in range((metadata_size + piece_length - 1) // piece_length):  # type: ignore
         yield Send(messages.MetadataRequest(i, ut_metadata))
         while True:

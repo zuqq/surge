@@ -8,7 +8,7 @@ type of message without length prefix and identifier byte.
 """
 
 from __future__ import annotations
-from typing import Any, ClassVar, Dict, Iterable, Optional, Set, Union
+from typing import ClassVar, Dict, Iterable, Optional, Set, Union
 
 import dataclasses
 import struct
@@ -53,15 +53,6 @@ class Keepalive:
         return struct.pack(">L", self.prefix)
 
 
-message_type = {}
-
-
-def valued(cls):
-    message_type[cls.value] = cls
-    return cls
-
-
-@valued
 @dataclasses.dataclass
 class Choke:
     prefix: ClassVar[int] = 1
@@ -75,7 +66,6 @@ class Choke:
         return struct.pack(">LB", self.prefix, self.value)
 
 
-@valued
 @dataclasses.dataclass
 class Unchoke:
     prefix: ClassVar[int] = 1
@@ -89,7 +79,6 @@ class Unchoke:
         return struct.pack(">LB", self.prefix, self.value)
 
 
-@valued
 @dataclasses.dataclass
 class Interested:
     prefix: ClassVar[int] = 1
@@ -103,7 +92,6 @@ class Interested:
         return struct.pack(">LB", self.prefix, self.value)
 
 
-@valued
 @dataclasses.dataclass
 class NotInterested:
     prefix: ClassVar[int] = 1
@@ -117,7 +105,6 @@ class NotInterested:
         return struct.pack(">LB", self.prefix, self.value)
 
 
-@valued
 @dataclasses.dataclass
 class Have:
     prefix: ClassVar[int] = 5
@@ -133,7 +120,6 @@ class Have:
         return struct.pack(">LBL", self.prefix, self.value, self.index)
 
 
-@valued
 @dataclasses.dataclass
 class Bitfield:
     value: ClassVar[int] = 5
@@ -168,7 +154,6 @@ class Bitfield:
         return result
 
 
-@valued
 @dataclasses.dataclass
 class Request:
     prefix: ClassVar[int] = 13
@@ -192,7 +177,6 @@ class Request:
         )
 
 
-@valued
 @dataclasses.dataclass
 class Block:
     value: ClassVar[int] = 7
@@ -217,7 +201,6 @@ class Block:
         )
 
 
-@valued
 @dataclasses.dataclass
 class Cancel:
     value: ClassVar[int] = 8
@@ -227,7 +210,6 @@ class Cancel:
         return cls()
 
 
-@valued
 @dataclasses.dataclass
 class Port:
     value: ClassVar[int] = 9
@@ -237,7 +219,6 @@ class Port:
         return cls()
 
 
-@valued
 @dataclasses.dataclass
 class ExtensionProtocol:
     """Base class for [extension protocol][BEP 0010] messages.
@@ -386,7 +367,33 @@ class MetadataReject(MetadataProtocol):
         )
 
 
-Message = Any  # TODO: Work around mypy's limitations.
+MESSAGE_TYPE = {
+    0: Choke,
+    1: Unchoke,
+    2: Interested,
+    3: NotInterested,
+    4: Have,
+    5: Bitfield,
+    6: Request,
+    7: Block,
+    8: Cancel,
+    9: Port,
+    20: ExtensionProtocol,
+}
+Message = Union[
+    Keepalive,
+    Choke,
+    Unchoke,
+    Interested,
+    NotInterested,
+    Have,
+    Bitfield,
+    Request,
+    Block,
+    Cancel,
+    Port,
+    ExtensionProtocol,
+]
 MetadataMessage = Union[MetadataRequest, MetadataData, MetadataReject]
 ExtensionMessage = Union[ExtensionHandshake, MetadataMessage]
 
@@ -405,7 +412,7 @@ def parse(data: bytes) -> Message:
     if len(data) != 4 + n:
         raise ValueError("Incorrect length prefix.")
     try:
-        cls = message_type[data[4]]
+        cls = MESSAGE_TYPE[data[4]]
     except IndexError:
         return Keepalive()
     except KeyError as exc:
