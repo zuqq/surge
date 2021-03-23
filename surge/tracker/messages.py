@@ -10,7 +10,7 @@ top of UDP, with a custom retransmission mechanism using exponential backoff.
 """
 
 from __future__ import annotations
-from typing import Generator, Optional, Tuple, Union
+from typing import Union
 
 import secrets
 import struct
@@ -32,11 +32,14 @@ class AnnounceRequest:
     value = 1
 
     def __init__(
-        self, transaction_id: bytes, connection_id: bytes, params: _metadata.Parameters
+        self,
+        transaction_id: bytes,
+        connection_id: bytes,
+        parameters: _metadata.Parameters,
     ):
         self.transaction_id = transaction_id
         self.connection_id = connection_id
-        self.params = params
+        self.parameters = parameters
 
     def to_bytes(self) -> bytes:
         return struct.pack(
@@ -44,16 +47,16 @@ class AnnounceRequest:
             self.connection_id,
             self.value,
             self.transaction_id,
-            self.params.info_hash,
-            self.params.peer_id,
-            self.params.downloaded,
-            self.params.left,
-            self.params.uploaded,
+            self.parameters.info_hash,
+            self.parameters.peer_id,
+            self.parameters.downloaded,
+            self.parameters.left,
+            self.parameters.uploaded,
             0,
             0,
             secrets.token_bytes(4),
             -1,
-            self.params.port,
+            self.parameters.port,
         )
 
 
@@ -96,36 +99,3 @@ def parse(data: bytes) -> Response:
     if value == AnnounceResponse.value:
         return AnnounceResponse.from_bytes(data)
     raise ValueError("Unkown message identifier.")
-
-
-class ProtocolError(Exception):
-    pass
-
-
-def udp(
-    params: _metadata.Parameters,
-) -> Generator[Tuple[Request, int], Tuple[Optional[Response], int], _metadata.Result]:
-    """State machine for the UDP tracker protocol.
-
-    The state machine is a transducer: it yields pairs consisting of a
-    `Request` plus its timeout and receives timestamped `Response`s.
-    """
-    connected = False
-    message: Request
-    for n in range(9):
-        if not connected:
-            transaction_id = secrets.token_bytes(4)
-            message = ConnectRequest(transaction_id)
-            received, time = yield (message, 15 * 2 ** n)
-            if isinstance(received, ConnectResponse):
-                connected = True
-                connection_id = received.connection_id
-                connection_time = time
-        if connected:
-            message = AnnounceRequest(transaction_id, connection_id, params)
-            received, time = yield (message, 15 * 2 ** n)
-            if isinstance(received, AnnounceResponse):
-                return received.result
-            if time - connection_time >= 60:
-                connected = False
-    raise ProtocolError("Maximal number of retries reached.")

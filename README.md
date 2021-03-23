@@ -62,28 +62,3 @@ Surge supports the following extensions to the [base protocol][BEP 0003]:
 [BEP 0012]: http://bittorrent.org/beps/bep_0012.html
 [BEP 0015]: http://bittorrent.org/beps/bep_0015.html
 [BEP 0023]: http://bittorrent.org/beps/bep_0023.html
-
-
-## Architecture
-
-### Actor model
-
-Peers are modeled as [actors]; the strong encapsulation provided by this model
-makes it easy to connect to many peers at once and deal with unresponsive or
-malicious peers in a uniform way.
-
-For details about the implementation of the actor model, see the documentation
-of the `actor` module.
-
-[actors]: https://en.wikipedia.org/wiki/Actor_model
-
-### Pure protocol implementation
-
-The protocol is implemented in the spirit of [Sans I/O], meaning that its
-state machine is completely independent from any objects performing I/O;
-this enables convenient mock-free unit testing.
-
-The state machine is based on generators functions, which provide a natural way
-to express multiphasic protocols.
-
-[Sans I/O]: https://sans-io.readthedocs.io/

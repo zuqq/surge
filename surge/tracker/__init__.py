@@ -1,76 +1,21 @@
-"""Actors for the tracker protocols.
-
-This package contains support for two protocols: the original tracker protocol
-over HTTP and its UDP-based variant.
-
-An instance of `HTTPTrackerConnection` or `UDPTrackerConnection` represents a
-connection with a single tracker; `PeerQueue` manages multiple connections and
-exposes an `asyncio.Queue`-like interface for the received peers.
-"""
-
-from typing import Iterable, List, Optional, Set, Union
+from typing import Optional, Union
 
 import asyncio
 import collections
+import contextlib
 import dataclasses
 import functools
 import http.client
+import secrets
 import time
 import urllib.parse
 
-from . import _udp
-from .. import actor
+from . import messages
 from .. import bencoding
 from ._metadata import Parameters, Peer, Result
 
 
-class PeerQueue(actor.Actor):
-    def __init__(
-        self,
-        parent: Optional[actor.Actor],
-        info_hash: bytes,
-        announce_list: Iterable[str],
-        peer_id: bytes,
-    ):
-        self._crashes = asyncio.Queue()  # type: ignore
-        parameters = Parameters(info_hash, peer_id)
-        children: List[Union[HTTPTrackerConnection, UDPTrackerConnection]] = []
-        for announce in announce_list:
-            url = urllib.parse.urlparse(announce)
-            if url.scheme in ("http", "https"):
-                children.append(HTTPTrackerConnection(self, url, parameters))
-            elif url.scheme == "udp":
-                children.append(UDPTrackerConnection(self, url, parameters))
-        super().__init__(parent, children=children, coros=(self._stop_children(),))
-
-        self._peers = asyncio.Queue(len(self.children) * 200)  # type: ignore
-        self._seen: Set[Peer] = set()
-
-    async def _stop_children(self):
-        while True:
-            child = await self._crashes.get()
-            if child not in self.children:
-                continue
-            await child.stop()
-            self.children.remove(child)
-
-    def report_crash(self, child: actor.Actor) -> None:
-        self._crashes.put_nowait(child)
-
-    @property
-    def trackers(self) -> int:
-        """The number of connected trackers."""
-        return len(self.children)
-
-    async def get(self) -> Peer:
-        """Return a fresh peer."""
-        return await self._peers.get()
-
-    async def put(self, peer: Peer) -> None:
-        if peer in self._seen:
-            return
-        self._seen.add(peer)
-        await self._peers.put(peer)
+__all__ = ("Parameters", "Peer", "Result", "request_peers_http", "request_peers_udp")
 
 
 def get(url: urllib.parse.ParseResult, parameters: Parameters) -> bytes:
@@ -92,34 +37,6 @@ def get(url: urllib.parse.ParseResult, parameters: Parameters) -> bytes:
         conn.close()
 
 
-class HTTPTrackerConnection(actor.Actor):
-    def __init__(
-        self, parent: PeerQueue, url: urllib.parse.ParseResult, parameters: Parameters
-    ):
-        super().__init__(parent, coros=(self._main(parameters),))
-
-        self.url = url
-
-    async def _main(self, parameters):
-        loop = asyncio.get_running_loop()
-        while True:
-            # I'm running the synchronous HTTP client from the standard library
-            # in a separate thread here because HTTP requests only happen
-            # sporadically and `aiohttp` is a hefty dependency.
-            d = bencoding.decode(
-                await loop.run_in_executor(
-                    None, functools.partial(get, self.url, parameters)
-                )
-            )
-            if b"failure reason" in d:
-                raise ConnectionError(d[b"failure reason"].decode())
-            result = Result.from_dict(d)
-            for peer in result.peers:
-                await self.parent.put(peer)
-            await asyncio.sleep(result.interval)
-
-
-# TODO: Implement the async context manager protocol.
 class UDPTrackerProtocol(asyncio.DatagramProtocol):
     def __init__(self):
         super().__init__()
@@ -142,24 +59,22 @@ class UDPTrackerProtocol(asyncio.DatagramProtocol):
         else:
             waiter.set_exception(exc)
 
-    async def read(self) -> _udp.Response:
+    async def read(self) -> messages.Response:
         if self._exception is not None:
             raise self._exception
         if not self._queue:
             waiter = asyncio.get_running_loop().create_future()
             self._waiter = waiter
             await waiter
-        return _udp.parse(self._queue.popleft())
+        return messages.parse(self._queue.popleft())
 
-    def write(self, message: _udp.Request) -> None:
+    def write(self, message: messages.Request) -> None:
         # I'm omitting flow control because every write is followed by a read.
         self._transport.sendto(message.to_bytes())
 
     async def close(self) -> None:
         self._transport.close()
         await self._closed
-
-    # asyncio.BaseProtocol
 
     def connection_made(self, transport):
         self._transport = transport
@@ -174,8 +89,6 @@ class UDPTrackerProtocol(asyncio.DatagramProtocol):
         if not self._closed.done():
             self._closed.set_result(None)
 
-    # asyncio.DatagramProtocol
-
     def datagram_received(self, data, addr):
         self._queue.append(data)
         self._wake_up()
@@ -185,35 +98,80 @@ class UDPTrackerProtocol(asyncio.DatagramProtocol):
         self._wake_up(exc)
 
 
-class UDPTrackerConnection(actor.Actor):
-    def __init__(
-        self, parent: PeerQueue, url: urllib.parse.ParseResult, parameters: Parameters
-    ):
-        super().__init__(parent, coros=(self._main(parameters),))
+@contextlib.asynccontextmanager
+async def create_udp_tracker_protocol(url):
+    _, protocol = await asyncio.get_running_loop().create_datagram_endpoint(
+        functools.partial(UDPTrackerProtocol), remote_addr=(url.hostname, url.port)
+    )
+    try:
+        yield protocol
+    finally:
+        await protocol.close()
 
-        self.url = url
 
-    async def _main(self, parameters):
+async def request_peers_http(root, url, parameters):
+    try:
         loop = asyncio.get_running_loop()
         while True:
-            _, protocol = await loop.create_datagram_endpoint(
-                functools.partial(UDPTrackerProtocol),
-                remote_addr=(self.url.hostname, self.url.port),
+            # I'm running the synchronous HTTP client from the standard library
+            # in a separate thread here because HTTP requests only happen
+            # sporadically and `aiohttp` is a hefty dependency.
+            d = bencoding.decode(
+                await loop.run_in_executor(
+                    None, functools.partial(get, url, parameters)
+                )
             )
-            try:
-                transducer = _udp.udp(parameters)
-                message, timeout = transducer.send(None)
-                while True:
-                    protocol.write(message)
-                    try:
-                        received = await asyncio.wait_for(protocol.read(), timeout)
-                    except asyncio.TimeoutError:
-                        received = None
-                    message, timeout = transducer.send((received, time.monotonic()))
-            except StopIteration as exc:
-                result = exc.value
-            finally:
-                await protocol.close()
+            if b"failure reason" in d:
+                raise ConnectionError(d[b"failure reason"].decode())
+            result = Result.from_dict(d)
             for peer in result.peers:
-                await self.parent.put(peer)
+                await root.put_peer(peer)
             await asyncio.sleep(result.interval)
+    except Exception:
+        pass
+    finally:
+        root.remove_tracker(asyncio.current_task())
+
+
+async def request_peers_udp(root, url, parameters):
+    try:
+        while True:
+            async with create_udp_tracker_protocol(url) as protocol:
+                connected = False
+                for n in range(9):
+                    timeout = 15 * 2 ** n
+                    if not connected:
+                        transaction_id = secrets.token_bytes(4)
+                        protocol.write(messages.ConnectRequest(transaction_id))
+                        try:
+                            received = await asyncio.wait_for(protocol.read(), timeout)
+                        except asyncio.TimeoutError:
+                            continue
+                        if isinstance(received, messages.ConnectResponse):
+                            connected = True
+                            connection_id = received.connection_id
+                            connection_time = time.monotonic()
+                    if connected:
+                        protocol.write(
+                            messages.AnnounceRequest(
+                                transaction_id, connection_id, parameters
+                            )
+                        )
+                        try:
+                            received = await asyncio.wait_for(protocol.read(), timeout)
+                        except asyncio.TimeoutError:
+                            continue
+                        if isinstance(received, messages.AnnounceResponse):
+                            result = received.result
+                            break
+                        if time.monotonic() - connection_time >= 60:
+                            connected = False
+                else:
+                    raise RuntimeError("Maximal number of retries reached.")
+            for peer in result.peers:
+                await root.put_peer(peer)
+            await asyncio.sleep(result.interval)
+    except Exception:
+        pass
+    finally:
+        root.remove_tracker(asyncio.current_task())

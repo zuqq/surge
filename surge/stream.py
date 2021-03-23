@@ -2,7 +2,6 @@ import asyncio
 import contextlib
 
 from . import messages
-from . import tracker
 
 
 class Stream:
