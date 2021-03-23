@@ -18,7 +18,7 @@ from . import _info
 from . import _transducer
 from .. import tracker
 from ..actor import Actor
-from ..stream import Stream
+from ..stream import open_stream
 
 
 async def download(
@@ -88,7 +88,7 @@ class Node(Actor):
         self.peer = peer
 
     async def _main(self, info_hash, peer_id):
-        async with Stream(self.peer) as stream:
+        async with open_stream(self.peer) as stream:
             transducer = _transducer.mex(info_hash, peer_id)
             try:
                 message = None

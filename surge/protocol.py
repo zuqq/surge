@@ -27,7 +27,7 @@ from . import _transducer
 from . import tracker
 from .actor import Actor
 from .channel import Channel
-from .stream import Stream
+from .stream import open_stream
 
 
 async def print_progress(root: Root) -> None:
@@ -246,7 +246,7 @@ class Node(Actor):
         self.peer = peer
 
     async def _main(self, pieces, info_hash, peer_id):
-        async with Stream(self.peer) as stream:
+        async with open_stream(self.peer) as stream:
             transducer = _transducer.base(pieces, info_hash, peer_id, self._state)
             message = None
             # Main loop that drives the transducer. See the documentation of the
