@@ -11,19 +11,19 @@ class Stream:
     of bytes, it reads and writes BitTorrent messages.
     """
 
-    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    def __init__(self, reader, writer):
         self._reader = reader
         self._writer = writer
 
-    async def read_handshake(self) -> messages.Handshake:
+    async def read_handshake(self):
         return messages.parse_handshake(await self._reader.readexactly(68))
 
-    async def read(self) -> messages.Message:
+    async def read(self):
         prefix = await self._reader.readexactly(4)
         data = await self._reader.readexactly(int.from_bytes(prefix, "big"))
         return messages.parse(prefix + data)
 
-    async def write(self, message: messages.Message) -> None:
+    async def write(self, message):
         self._writer.write(message.to_bytes())
         await self._writer.drain()
 

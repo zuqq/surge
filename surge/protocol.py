@@ -1,6 +1,3 @@
-from __future__ import annotations
-from typing import DefaultDict, Dict, Iterable, List, Optional, Set, Tuple
-
 import asyncio
 import collections
 import contextlib
@@ -16,7 +13,7 @@ from .channel import Channel
 from .stream import open_stream
 
 
-async def print_progress(root: Root) -> None:
+async def print_progress(root):
     """Periodically poll `root` and print the download progress to stdout."""
     total = len(root.pieces)
     progress_template = "\r\x1b[KDownload progress: {{}}/{} pieces".format(total)
@@ -43,13 +40,7 @@ async def print_progress(root: Root) -> None:
         raise
 
 
-async def download(
-    metadata: _metadata.Metadata,
-    peer_id: bytes,
-    missing_pieces: Set[_metadata.Piece],
-    max_peers: int,
-    max_requests: int,
-) -> None:
+async def download(metadata, peer_id, missing_pieces, max_peers, max_requests):
     """Spin up a `Root` and write downloaded pieces to the file system."""
     root = Root(metadata, peer_id, missing_pieces, max_peers, max_requests)
     root.start()
@@ -76,14 +67,7 @@ async def download(
 
 
 class Root:
-    def __init__(
-        self,
-        metadata: _metadata.Metadata,
-        peer_id: bytes,
-        missing_pieces: Set[_metadata.Piece],
-        max_peers: int,
-        max_requests: int,
-    ):
+    def __init__(self, metadata, peer_id, missing_pieces, max_peers, max_requests):
         self.pieces = metadata.pieces
         self.info_hash = metadata.info_hash
         self.peer_id = peer_id
@@ -97,38 +81,36 @@ class Root:
         self.results = Channel(max_peers)
 
         self._announce_list = metadata.announce_list
-        self._trackers: Set[asyncio.Task] = set()
-        self._seen_peers: Set[tracker.Peer] = set()
-        self._new_peers = asyncio.Queue(max_peers)  # type: ignore
+        self._trackers = set()
+        self._seen_peers = set()
+        self._new_peers = asyncio.Queue(max_peers)
 
-        self._nodes: Set[Node] = set()
+        self._nodes = set()
         # In endgame mode, multiple `Node`s can be downloading the same piece;
         # as soon as one finishes downloading that piece, the other `Node`s
         # need to be notified. Therefore we keep track of which `Node`s are
         # downloading any given piece.
-        self._node_to_pieces: Dict[Node, Set[_metadata.Piece]]
         self._node_to_pieces = {}
-        self._piece_to_nodes: DefaultDict[_metadata.Piece, Set[Node]]
         self._piece_to_nodes = collections.defaultdict(set)
 
     @property
-    def connected_trackers(self) -> int:
+    def connected_trackers(self):
         """The number of connected trackers."""
         return len(self._trackers)
 
     @property
-    def connected_peers(self) -> int:
+    def connected_peers(self):
         """The number of connected peers."""
         return len(self._nodes)
 
-    async def put_peer(self, peer: tracker.Peer) -> None:
+    async def put_peer(self, peer):
         if peer in self._seen_peers:
             return
         self._seen_peers.add(peer)
         await self._new_peers.put(peer)
         self.maybe_add_node()
 
-    def get_piece(self, node: Node, available: Set[_metadata.Piece]) -> _metadata.Piece:
+    def get_piece(self, node, available):
         """Return a fresh piece to download.
 
         Raise `IndexError` if there are no more pieces to download.
@@ -149,7 +131,7 @@ class Root:
         self._node_to_pieces[node].add(piece)
         return piece
 
-    async def put_piece(self, node: Node, piece: _metadata.Piece, data: bytes) -> None:
+    async def put_piece(self, node, piece, data):
         """Deliver a downloaded piece.
 
         If any other nodes are in the process of downloading `piece`, those
@@ -184,7 +166,7 @@ class Root:
                 self._piece_to_nodes.pop(piece)
         self.maybe_add_node()
 
-    def start(self) -> None:
+    def start(self):
         parameters = tracker.Parameters(self.info_hash, self.peer_id)
         for announce in self._announce_list:
             url = urllib.parse.urlparse(announce)
@@ -196,7 +178,7 @@ class Root:
                 raise ValueError("Unsupported announce.")
             self._trackers.add(asyncio.create_task(coroutine))
 
-    async def stop(self) -> None:
+    async def stop(self):
         for task in tuple(self._trackers):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -208,19 +190,19 @@ class Root:
 class Progress:
     """Helper class that keeps track of a single piece's progress."""
 
-    def __init__(self, piece: _metadata.Piece, blocks: Iterable[_metadata.Block]):
+    def __init__(self, piece, blocks):
         self._missing_blocks = set(blocks)
         self._data = bytearray(piece.length)
 
     @property
-    def done(self) -> bool:
+    def done(self):
         return not self._missing_blocks
 
     @property
-    def data(self) -> bytes:
+    def data(self):
         return bytes(self._data)
 
-    def add(self, block: _metadata.Block, data: bytes) -> None:
+    def add(self, block, data):
         self._missing_blocks.discard(block)
         self._data[block.begin : block.begin + block.length] = data
 
@@ -233,23 +215,23 @@ class State(enum.IntEnum):
 
 
 class Node:
-    def __init__(self, root: Root, peer: tracker.Peer):
+    def __init__(self, root, peer):
         self.root = root
         self.peer = peer
 
-        self._progress: Dict[_metadata.Piece, Progress] = {}
-        self._requested: Set[_metadata.Block] = set()
-        self._stack: List[_metadata.Block] = []
+        self._progress = {}
+        self._requested = set()
+        self._stack = []
 
         self._task = None
 
-    def add_piece(self, piece: _metadata.Piece) -> None:
+    def add_piece(self, piece):
         """Add `piece` to the download queue."""
         blocks = tuple(_metadata.blocks(piece))
         self._progress[piece] = Progress(piece, blocks)
         self._stack.extend(reversed(blocks))
 
-    def remove_piece(self, piece: _metadata.Piece) -> None:
+    def remove_piece(self, piece):
         """Remove `piece` from the download queue."""
         self._progress.pop(piece)
 
@@ -268,15 +250,15 @@ class Node:
             self.add_piece(piece)
 
     @property
-    def can_request(self) -> bool:
+    def can_request(self):
         return len(self._requested) < self.root.max_requests
 
-    def get_block(self) -> _metadata.Block:
+    def get_block(self):
         block = self._stack.pop()
         self._requested.add(block)
         return block
 
-    def put_block(self, block, data) -> Optional[Tuple[_metadata.Piece, bytes]]:
+    def put_block(self, block, data):
         if block not in self._requested:
             return None
         self._requested.remove(block)
@@ -290,7 +272,7 @@ class Node:
             return (piece, data)
         raise ValueError("Invalid data.")
 
-    async def _main(self) -> None:
+    async def _main(self):
         try:
             async with open_stream(self.peer) as stream:
                 pieces = self.root.pieces
@@ -358,12 +340,12 @@ class Node:
         finally:
             self.root.remove_node(self)
 
-    def start(self) -> None:
+    def start(self):
         if self._task is not None:
             return
         self._task = asyncio.create_task(self._main())
 
-    async def stop(self) -> None:
+    async def stop(self):
         if (task := self._task) is None:
             return
         self._task = None

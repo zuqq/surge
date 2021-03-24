@@ -11,8 +11,6 @@ Options:
 
 """
 
-from typing import Iterable, List, Tuple, Set
-
 import asyncio
 import contextlib
 import itertools
@@ -21,8 +19,8 @@ import secrets
 import sys
 import urllib.parse
 
-import docopt  # type: ignore
-import uvloop  # type: ignore
+import docopt
+import uvloop
 
 from . import bencoding
 from . import messages
@@ -30,7 +28,7 @@ from . import tracker
 from .stream import open_stream
 
 
-def parse(magnet: str) -> Tuple[bytes, List[str]]:
+def parse(magnet):
     """Parse a magnet URI.
 
     Raise `ValueError` if `magnet` is not a valid magnet link.
@@ -55,7 +53,7 @@ def parse(magnet: str) -> Tuple[bytes, List[str]]:
     return info_hash, announce_list
 
 
-def main() -> None:
+def main():
     args = docopt.docopt(__doc__)
     peer_id = secrets.token_bytes(20)
     max_peers = int(args["--peers"])
@@ -69,9 +67,7 @@ def main() -> None:
         f.write(raw_metadata)
 
 
-async def download(
-    info_hash: bytes, announce_list: Iterable[str], peer_id: bytes, max_peers: int
-) -> bytes:
+async def download(info_hash, announce_list, peer_id, max_peers):
     """Return the content of the `.torrent` file."""
     root = Root(info_hash, announce_list, peer_id, max_peers)
     root.start()
@@ -81,12 +77,12 @@ async def download(
         await root.stop()
 
 
-def valid(info_hash: bytes, raw_info: bytes) -> bool:
+def valid(info_hash, raw_info):
     """Check that the `b"info"` value is valid."""
     return hashlib.sha1(raw_info).digest() == info_hash
 
 
-def assemble(announce_list: Iterable[str], raw_info: bytes) -> bytes:
+def assemble(announce_list, raw_info):
     """Build the metadata from list of trackers and the `b"info"` value."""
     # We can't just decode and re-encode, because the value associated with
     # the key `b"info"` needs to be preserved exactly.
@@ -116,28 +112,22 @@ class Root:
     [BEP 0009]: http://bittorrent.org/beps/bep_0009.html
     """
 
-    def __init__(
-        self,
-        info_hash: bytes,
-        announce_list: Iterable[str],
-        peer_id: bytes,
-        max_peers: int,
-    ):
+    def __init__(self, info_hash, announce_list, peer_id, max_peers):
         self.info_hash = info_hash
         self.peer_id = peer_id
         self.max_peers = max_peers
 
         self._announce_list = announce_list
-        self._trackers: Set[asyncio.Task] = set()
-        self._seen_peers: Set[tracker.Peer] = set()
-        self._new_peers = asyncio.Queue(max_peers)  # type: ignore
+        self._trackers = set()
+        self._seen_peers = set()
+        self._new_peers = asyncio.Queue(max_peers)
 
-        self._nodes: Set[asyncio.Task] = set()
+        self._nodes = set()
 
         # Future that will hold the metadata.
         self.result = asyncio.get_event_loop().create_future()
 
-    async def put_peer(self, peer: tracker.Peer) -> None:
+    async def put_peer(self, peer):
         if peer in self._seen_peers:
             return
         self._seen_peers.add(peer)
@@ -156,7 +146,7 @@ class Root:
         self._nodes.remove(task)
         self.maybe_add_node()
 
-    def start(self) -> None:
+    def start(self):
         parameters = tracker.Parameters(self.info_hash, self.peer_id)
         for announce in self._announce_list:
             url = urllib.parse.urlparse(announce)
@@ -168,13 +158,13 @@ class Root:
                 raise ValueError("Unsupported announce.")
             self._trackers.add(asyncio.create_task(coroutine))
 
-    async def stop(self) -> None:
+    async def stop(self):
         for task in itertools.chain(tuple(self._trackers), tuple(self._nodes)):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
 
-    def put_result(self, raw_info: bytes) -> None:
+    def put_result(self, raw_info):
         if not self.result.done():
             self.result.set_result(assemble(self._announce_list, raw_info))
 
@@ -206,8 +196,8 @@ async def download_from_peer(root, peer):
             # number of pieces is typically very small, a simple stop-and-wait protocol
             # is fast enough.
             piece_length = 2 ** 14
-            pieces: List[bytes] = []
-            for i in range((metadata_size + piece_length - 1) // piece_length):  # type: ignore
+            pieces = []
+            for i in range((metadata_size + piece_length - 1) // piece_length):
                 await stream.write(messages.MetadataRequest(i, ut_metadata))
                 while True:
                     received = await stream.read()

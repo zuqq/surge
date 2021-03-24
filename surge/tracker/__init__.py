@@ -1,5 +1,3 @@
-from typing import Optional, Union
-
 import asyncio
 import collections
 import contextlib
@@ -18,7 +16,7 @@ from ._metadata import Parameters, Peer, Result
 __all__ = ("Parameters", "Peer", "Result", "request_peers_http", "request_peers_udp")
 
 
-def get(url: urllib.parse.ParseResult, parameters: Parameters) -> bytes:
+def get(url, parameters):
     # This uses `http.client` instead of the `urllib.request` wrapper because
     # the latter is not thread-safe.
     q = urllib.parse.parse_qs(url.query)
@@ -59,7 +57,7 @@ class UDPTrackerProtocol(asyncio.DatagramProtocol):
         else:
             waiter.set_exception(exc)
 
-    async def read(self) -> messages.Response:
+    async def read(self):
         if self._exception is not None:
             raise self._exception
         if not self._queue:
@@ -68,11 +66,11 @@ class UDPTrackerProtocol(asyncio.DatagramProtocol):
             await waiter
         return messages.parse(self._queue.popleft())
 
-    def write(self, message: messages.Request) -> None:
+    def write(self, message):
         # I'm omitting flow control because every write is followed by a read.
         self._transport.sendto(message.to_bytes())
 
-    async def close(self) -> None:
+    async def close(self):
         self._transport.close()
         await self._closed
 

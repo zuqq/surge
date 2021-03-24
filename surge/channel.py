@@ -8,7 +8,7 @@ class Channel(asyncio.Queue):
     one producer and one consumer.
     """
 
-    def __init__(self, maxsize: int = 0):
+    def __init__(self, maxsize=0):
         super().__init__(maxsize)
         self._sentinel = object()
 
@@ -20,6 +20,6 @@ class Channel(asyncio.Queue):
             raise StopAsyncIteration
         return item
 
-    async def close(self) -> None:
+    async def close(self):
         # TODO: Actually close the channel.
         await self.put(self._sentinel)

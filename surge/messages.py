@@ -7,13 +7,11 @@ handled by the separate function `parse_handshake` because they are the only
 type of message without length prefix and identifier byte.
 """
 
-from __future__ import annotations
-from typing import ClassVar, Dict, Iterable, Optional, Set, Union
+from typing import ClassVar, Optional
 
 import dataclasses
 import struct
 
-from . import _metadata
 from . import bencoding
 
 
@@ -26,11 +24,11 @@ class Handshake:
     peer_id: bytes
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> Handshake:
+    def from_bytes(cls, data):
         _, _, reserved, info_hash, peer_id = struct.unpack(">B19sQ20s20s", data)
         return cls(reserved, info_hash, peer_id)
 
-    def to_bytes(self) -> bytes:
+    def to_bytes(self):
         return struct.pack(
             ">B19sQ20s20s",
             self.pstrlen,
@@ -46,10 +44,10 @@ class Keepalive:
     prefix: ClassVar[int] = 0
 
     @classmethod
-    def from_bytes(cls, _: bytes) -> Keepalive:
+    def from_bytes(cls, _):
         return cls()
 
-    def to_bytes(self) -> bytes:
+    def to_bytes(self):
         return struct.pack(">L", self.prefix)
 
 
@@ -59,10 +57,10 @@ class Choke:
     value: ClassVar[int] = 0
 
     @classmethod
-    def from_bytes(cls, _: bytes) -> Choke:
+    def from_bytes(cls, _):
         return cls()
 
-    def to_bytes(self) -> bytes:
+    def to_bytes(self):
         return struct.pack(">LB", self.prefix, self.value)
 
 
@@ -72,10 +70,10 @@ class Unchoke:
     value: ClassVar[int] = 1
 
     @classmethod
-    def from_bytes(cls, _: bytes) -> Unchoke:
+    def from_bytes(cls, _):
         return cls()
 
-    def to_bytes(self) -> bytes:
+    def to_bytes(self):
         return struct.pack(">LB", self.prefix, self.value)
 
 
@@ -85,10 +83,10 @@ class Interested:
     value: ClassVar[int] = 2
 
     @classmethod
-    def from_bytes(cls, _: bytes) -> Interested:
+    def from_bytes(cls, _):
         return cls()
 
-    def to_bytes(self) -> bytes:
+    def to_bytes(self):
         return struct.pack(">LB", self.prefix, self.value)
 
 
@@ -98,10 +96,10 @@ class NotInterested:
     value: ClassVar[int] = 3
 
     @classmethod
-    def from_bytes(cls, _: bytes) -> NotInterested:
+    def from_bytes(cls, _):
         return cls()
 
-    def to_bytes(self) -> bytes:
+    def to_bytes(self):
         return struct.pack(">LB", self.prefix, self.value)
 
 
@@ -112,11 +110,11 @@ class Have:
     index: int
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> Have:
+    def from_bytes(cls, data):
         _, _, index = struct.unpack(">LBL", data)
         return cls(index)
 
-    def to_bytes(self) -> bytes:
+    def to_bytes(self):
         return struct.pack(">LBL", self.prefix, self.value, self.index)
 
 
@@ -126,22 +124,22 @@ class Bitfield:
     payload: bytes
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> Bitfield:
+    def from_bytes(cls, data):
         _, _, payload = struct.unpack(f">LB{len(data) - 5}s", data)
         return cls(payload)
 
     @classmethod
-    def from_indices(cls, indices: Iterable[int], total: int) -> Bitfield:
-        result = bytearray((total + 7) // 8)
+    def from_indices(cls, indices, length):
+        result = bytearray((length + 7) // 8)
         for i in indices:
             result[i // 8] |= 1 << (7 - i % 8)
         return cls(bytes(result))
 
-    def to_bytes(self) -> bytes:
+    def to_bytes(self):
         n = len(self.payload)
         return struct.pack(f">LB{n}s", n + 1, self.value, self.payload)
 
-    def to_indices(self) -> Set[int]:
+    def to_indices(self):
         result = set()
         i = 0
         for b in self.payload:
@@ -163,15 +161,15 @@ class Request:
     length: int
 
     @classmethod
-    def from_block(cls, block: _metadata.Block):
+    def from_block(cls, block):
         return cls(block.piece.index, block.begin, block.length)
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> Request:
+    def from_bytes(cls, data):
         _, _, index, begin, length = struct.unpack(">LBLLL", data)
         return cls(index, begin, length)
 
-    def to_bytes(self) -> bytes:
+    def to_bytes(self):
         return struct.pack(
             ">LBLLL", self.prefix, self.value, self.index, self.begin, self.length
         )
@@ -185,16 +183,16 @@ class Block:
     data: bytes
 
     @classmethod
-    def from_block(cls, block: _metadata.Block, data: bytes):
+    def from_block(cls, block, data):
         return cls(block.piece.index, block.begin, data)
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> Block:
+    def from_bytes(cls, data):
         # TODO: Don't shadow `data`!
         _, _, index, begin, data = struct.unpack(f">LBLL{len(data) - 13}s", data)
         return cls(index, begin, data)
 
-    def to_bytes(self) -> bytes:
+    def to_bytes(self):
         n = len(self.data)
         return struct.pack(
             f">LBLL{n}s", n + 9, self.value, self.index, self.begin, self.data
@@ -206,7 +204,7 @@ class Cancel:
     value: ClassVar[int] = 8
 
     @classmethod
-    def from_bytes(cls, _: bytes) -> Cancel:
+    def from_bytes(cls, _):
         return cls()
 
 
@@ -215,7 +213,7 @@ class Port:
     value: ClassVar[int] = 9
 
     @classmethod
-    def from_bytes(cls, _: bytes) -> Port:
+    def from_bytes(cls, _):
         return cls()
 
 
@@ -229,7 +227,7 @@ class ExtensionProtocol:
     value: ClassVar[int] = 20
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> ExtensionMessage:
+    def from_bytes(cls, data):
         if data[5] == ExtensionHandshake.extension_value:
             return ExtensionHandshake.from_bytes(data)
         if data[5] == MetadataProtocol.extension_value:
@@ -243,8 +241,7 @@ class ExtensionHandshake(ExtensionProtocol):
     ut_metadata: int = 3
     metadata_size: Optional[int] = None
 
-    def to_bytes(self) -> bytes:
-        d: Dict[bytes, Union[Dict[bytes, int], int]]
+    def to_bytes(self):
         d = {b"m": {b"ut_metadata": self.ut_metadata}}
         if self.metadata_size is not None:
             d[b"metadata_size"] = self.metadata_size
@@ -255,7 +252,7 @@ class ExtensionHandshake(ExtensionProtocol):
         )
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> ExtensionHandshake:
+    def from_bytes(cls, data):
         d = bencoding.decode(data[6:])
         return cls(d[b"m"][b"ut_metadata"], d[b"metadata_size"])
 
@@ -270,7 +267,7 @@ class MetadataProtocol:
     extension_value: ClassVar[int] = 3
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> MetadataMessage:
+    def from_bytes(cls, data):
         i, d = bencoding.decode_from(data, 6)
         if b"msg_type" not in d:
             raise ValueError("Missing key b'msg_type'.")
@@ -301,7 +298,7 @@ class MetadataRequest:
         if ut_metadata is not None:
             self.extension_value = ut_metadata
 
-    def to_bytes(self) -> bytes:
+    def to_bytes(self):
         payload = bencoding.encode(
             {b"msg_type": self.metadata_value, b"piece": self.index}
         )
@@ -325,7 +322,7 @@ class MetadataData:
         if ut_metadata is not None:
             self.extension_value = ut_metadata
 
-    def to_bytes(self) -> bytes:
+    def to_bytes(self):
         payload = bencoding.encode(
             {
                 b"msg_type": self.metadata_value,
@@ -357,7 +354,7 @@ class MetadataReject(MetadataProtocol):
         if ut_metadata is not None:
             self.extension_value = ut_metadata
 
-    def to_bytes(self) -> bytes:
+    def to_bytes(self):
         payload = bencoding.encode(
             {b"msg_type": self.metadata_value, b"piece": self.index}
         )
@@ -380,30 +377,14 @@ MESSAGE_TYPE = {
     9: Port,
     20: ExtensionProtocol,
 }
-Message = Union[
-    Keepalive,
-    Choke,
-    Unchoke,
-    Interested,
-    NotInterested,
-    Have,
-    Bitfield,
-    Request,
-    Block,
-    Cancel,
-    Port,
-    ExtensionProtocol,
-]
-MetadataMessage = Union[MetadataRequest, MetadataData, MetadataReject]
-ExtensionMessage = Union[ExtensionHandshake, MetadataMessage]
 
 
-def parse_handshake(data: bytes) -> Handshake:
+def parse_handshake(data):
     """Parse a BitTorrent handshake."""
     return Handshake.from_bytes(data)
 
 
-def parse(data: bytes) -> Message:
+def parse(data):
     """Parse a BitTorrent message.
 
     Raise `ValueError` if `data` is not a valid BitTorrent message.

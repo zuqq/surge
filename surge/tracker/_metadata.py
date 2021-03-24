@@ -5,8 +5,7 @@ Supports compact peer lists as defined in [BEP 0023].
 [BEP 0023]: http://www.bittorrent.org/beps/bep_0023.html
 """
 
-from __future__ import annotations
-from typing import Any, Dict, List
+from typing import List
 
 import dataclasses
 
@@ -31,11 +30,11 @@ class Peer:
     port: int
 
     @classmethod
-    def from_bytes(cls, bs: bytes) -> Peer:
+    def from_bytes(cls, bs):
         return cls(".".join(str(b) for b in bs[:4]), int.from_bytes(bs[4:], "big"))
 
     @classmethod
-    def from_dict(cls, d: Dict[bytes, Any]) -> Peer:
+    def from_dict(cls, d):
         return cls(d[b"ip"].decode(), d[b"port"])
 
 
@@ -52,11 +51,11 @@ class Result:
     peers: List[Peer]
 
     @classmethod
-    def from_bytes(cls, interval: int, raw_peers: bytes) -> Result:
+    def from_bytes(cls, interval, raw_peers):
         return cls(interval, _parse_peers(raw_peers))
 
     @classmethod
-    def from_dict(cls, resp: Dict[bytes, Any]) -> Result:
+    def from_dict(cls, resp):
         if isinstance(resp[b"peers"], list):
             # Dictionary model, as defined in BEP 3.
             peers = [Peer.from_dict(d) for d in resp[b"peers"]]

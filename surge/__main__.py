@@ -17,14 +17,14 @@ import asyncio
 import secrets
 import sys
 
-import docopt  # type: ignore
-import uvloop  # type: ignore
+import docopt
+import uvloop
 
 from . import _metadata
 from . import protocol
 
 
-def main() -> None:
+def main():
     args = docopt.docopt(__doc__)
     peer_id = secrets.token_bytes(20)
     max_peers = int(args["--peers"])

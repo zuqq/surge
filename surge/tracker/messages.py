@@ -9,37 +9,30 @@ top of UDP, with a custom retransmission mechanism using exponential backoff.
 [BEP 0015]: http://bittorrent.org/beps/bep_0015.html
 """
 
-from __future__ import annotations
-from typing import Union
+from typing import ClassVar
 
+import dataclasses
 import secrets
 import struct
 
 from . import _metadata
 
 
+@dataclasses.dataclass
 class ConnectRequest:
-    value = 0
+    value: ClassVar[int] = 0
+    transaction_id: bytes
 
-    def __init__(self, transaction_id: bytes):
-        self.transaction_id = transaction_id
-
-    def to_bytes(self) -> bytes:
+    def to_bytes(self):
         return struct.pack(">ql4s", 0x41727101980, self.value, self.transaction_id)
 
 
+@dataclasses.dataclass
 class AnnounceRequest:
-    value = 1
-
-    def __init__(
-        self,
-        transaction_id: bytes,
-        connection_id: bytes,
-        parameters: _metadata.Parameters,
-    ):
-        self.transaction_id = transaction_id
-        self.connection_id = connection_id
-        self.parameters = parameters
+    value: ClassVar[int] = 1
+    transaction_id: bytes
+    connection_id: bytes
+    parameters: _metadata.Parameters
 
     def to_bytes(self) -> bytes:
         return struct.pack(
@@ -60,37 +53,29 @@ class AnnounceRequest:
         )
 
 
-Request = Union[ConnectRequest, AnnounceRequest]
-
-
+@dataclasses.dataclass
 class ConnectResponse:
-    value = 0
-
-    def __init__(self, connection_id: bytes):
-        self.connection_id = connection_id
+    value: ClassVar[int] = 0
+    connection_id: bytes
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> ConnectResponse:
+    def from_bytes(cls, data):
         _, _, connection_id = struct.unpack(">l4s8s", data)
         return cls(connection_id)
 
 
+@dataclasses.dataclass
 class AnnounceResponse:
-    value = 1
-
-    def __init__(self, result: _metadata.Result):
-        self.result = result
+    value: ClassVar[int] = 1
+    result: _metadata.Result
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> AnnounceResponse:
+    def from_bytes(cls, data):
         _, _, interval, _, _ = struct.unpack(">l4slll", data[:20])
         return cls(_metadata.Result.from_bytes(interval, data[20:]))
 
 
-Response = Union[ConnectResponse, AnnounceResponse]
-
-
-def parse(data: bytes) -> Response:
+def parse(data):
     if len(data) < 4:
         raise ValueError("Not enough bytes.")
     value = int.from_bytes(data[:4], "big")

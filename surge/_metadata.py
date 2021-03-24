@@ -12,8 +12,7 @@ block consisting of 16 KiB.
 [BEP 0012]: http://bittorrent.org/beps/bep_0010.html
 """
 
-from __future__ import annotations
-from typing import Dict, Generator, Iterable, List, Sequence
+from typing import List
 
 import dataclasses
 import hashlib
@@ -31,7 +30,7 @@ class File:
     path: pathlib.Path
 
 
-def build_file_tree(files: Iterable[File]) -> None:
+def build_file_tree(files):
     """Create the files that don't exist and truncate the ones that do.
 
     Existing files need to be truncated because later writes only happen inside
@@ -53,14 +52,12 @@ class Piece:
     hash: bytes  # SHA-1 digest of the piece's data.
 
 
-def valid(piece: Piece, data: bytes) -> bool:
+def valid(piece, data):
     """Check whether `data`'s SHA-1 digest is equal to `piece.hash`."""
     return hashlib.sha1(data).digest() == piece.hash
 
 
-def available(
-    pieces: Sequence[Piece], files: Sequence[File]
-) -> Generator[Piece, None, None]:
+def available(pieces, files):
     """Yield all valid pieces."""
     chunks = chunk(pieces, files)
     for piece in pieces:
@@ -91,9 +88,9 @@ class Chunk:
     length: int
 
 
-def chunk(pieces: Sequence[Piece], files: Sequence[File]) -> Dict[Piece, List[Chunk]]:
+def chunk(pieces, files):
     """Map each element of `pieces` to a list of its `Chunk`s."""
-    result: Dict[Piece, List[Chunk]] = {piece: [] for piece in pieces}
+    result = {piece: [] for piece in pieces}
     i = 0
     j = 0
     begin = 0
@@ -113,7 +110,7 @@ def chunk(pieces: Sequence[Piece], files: Sequence[File]) -> Dict[Piece, List[Ch
     return result
 
 
-def write(chunk: Chunk, data: bytes) -> None:
+def write(chunk, data):
     """Write `data` to `chunk`."""
     with chunk.file.path.open("rb+") as f:
         f.seek(chunk.begin - chunk.file.begin)
@@ -130,7 +127,7 @@ class Block:
     length: int
 
 
-def blocks(piece: Piece) -> Generator[Block, None, None]:
+def blocks(piece):
     """Yields `piece`'s `Block`s."""
     block_length = 2 ** 14
     for begin in range(0, piece.length, block_length):
@@ -152,7 +149,7 @@ class Metadata:
     files: List[File]
 
     @classmethod
-    def from_bytes(cls, raw_metadata: bytes) -> Metadata:
+    def from_bytes(cls, raw_metadata):
         """Parse a `.torrent` file."""
         d = bencoding.decode(raw_metadata)
 
