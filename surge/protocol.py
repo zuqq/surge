@@ -53,11 +53,11 @@ async def download(metadata, peer_id, missing_pieces, max_peers, max_requests):
             await loop.run_in_executor(
                 None, functools.partial(_metadata.build_file_tree, metadata.files)
             )
-            chunks = _metadata.chunk(metadata.pieces, metadata.files)
+            chunks = _metadata.make_chunks(metadata.pieces, metadata.files)
             async for piece, data in root.results:
                 for chunk in chunks[piece]:
                     await loop.run_in_executor(
-                        None, functools.partial(_metadata.write, chunk, data)
+                        None, functools.partial(_metadata.write_chunk, chunk, data)
                     )
     finally:
         await root.stop()

@@ -59,14 +59,12 @@ def valid(piece, data):
 
 def available(pieces, files):
     """Yield all valid pieces."""
-    chunks = chunk(pieces, files)
+    chunks = make_chunks(pieces, files)
     for piece in pieces:
         data = []
-        for c in chunks[piece]:
+        for chunk in chunks[piece]:
             try:
-                with c.file.path.open("rb") as f:
-                    f.seek(c.begin - c.file.begin)
-                    data.append(f.read(c.length))
+                data.append(read_chunk(chunk))
             except FileNotFoundError:
                 continue
         if valid(piece, b"".join(data)):
@@ -88,7 +86,7 @@ class Chunk:
     length: int
 
 
-def chunk(pieces, files):
+def make_chunks(pieces, files):
     """Map each element of `pieces` to a list of its `Chunk`s."""
     result = {piece: [] for piece in pieces}
     i = 0
@@ -110,7 +108,14 @@ def chunk(pieces, files):
     return result
 
 
-def write(chunk, data):
+def read_chunk(chunk):
+    """Read `chunk`."""
+    with chunk.file.path.open("rb") as f:
+        f.seek(chunk.begin - chunk.file.begin)
+        return f.read(chunk.length)
+
+
+def write_chunk(chunk, data):
     """Write `data` to `chunk`."""
     with chunk.file.path.open("rb+") as f:
         f.seek(chunk.begin - chunk.file.begin)
