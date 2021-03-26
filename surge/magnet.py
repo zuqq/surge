@@ -53,8 +53,7 @@ def parse(magnet):
     return info_hash, announce_list
 
 
-def main():
-    args = docopt.docopt(__doc__)
+def main(args):
     peer_id = secrets.token_bytes(20)
     max_peers = int(args["--peers"])
     info_hash, announce_list = parse(args["<URI>"])
@@ -221,6 +220,6 @@ async def download_from_peer(root, peer):
 
 if __name__ == "__main__":
     try:
-        main()
+        main(docopt.docopt(__doc__))
     except KeyboardInterrupt:
         sys.exit(130)

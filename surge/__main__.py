@@ -24,8 +24,7 @@ from . import _metadata
 from . import protocol
 
 
-def main():
-    args = docopt.docopt(__doc__)
+def main(args):
     peer_id = secrets.token_bytes(20)
     max_peers = int(args["--peers"])
     max_requests = int(args["--requests"])
@@ -43,6 +42,6 @@ def main():
 
 if __name__ == "__main__":
     try:
-        main()
+        main(docopt.docopt(__doc__))
     except KeyboardInterrupt:
         sys.exit(130)
