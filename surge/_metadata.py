@@ -45,20 +45,6 @@ def valid(piece, data):
     return hashlib.sha1(data).digest() == piece.hash
 
 
-def available(pieces, files):
-    """Yield all valid pieces."""
-    chunks = make_chunks(pieces, files)
-    for piece in pieces:
-        data = []
-        for chunk in chunks[piece]:
-            try:
-                data.append(read_chunk(chunk))
-            except FileNotFoundError:
-                continue
-        if valid(piece, b"".join(data)):
-            yield piece
-
-
 @dataclasses.dataclass(frozen=True)
 class Chunk:
     """The part of a `Piece` belonging to a single `File`.
@@ -101,6 +87,20 @@ def read_chunk(chunk):
     with chunk.file.path.open("rb") as f:
         f.seek(chunk.begin - chunk.file.begin)
         return f.read(chunk.length)
+
+
+def available(pieces, files):
+    """Yield all valid pieces."""
+    chunks = make_chunks(pieces, files)
+    for piece in pieces:
+        data = []
+        for chunk in chunks[piece]:
+            try:
+                data.append(read_chunk(chunk))
+            except FileNotFoundError:
+                continue
+        if valid(piece, b"".join(data)):
+            yield piece
 
 
 def write_chunk(chunk, data):
