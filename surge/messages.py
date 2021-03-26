@@ -254,7 +254,7 @@ class ExtensionHandshake(ExtensionProtocol):
     @classmethod
     def from_bytes(cls, data):
         d = bencoding.decode(data[6:])
-        return cls(d[b"m"][b"ut_metadata"], d[b"metadata_size"])
+        return cls(d[b"m"][b"ut_metadata"], d.get(b"metadata_size", None))
 
 
 @dataclasses.dataclass
