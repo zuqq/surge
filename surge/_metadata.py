@@ -30,18 +30,6 @@ class File:
     path: pathlib.Path
 
 
-def build_file_tree(files):
-    """Create the files that don't exist and truncate the ones that do.
-
-    Existing files need to be truncated because later writes only happen inside
-    of the boundaries defined by the `File` instance.
-    """
-    for file in files:
-        file.path.parent.mkdir(exist_ok=True)
-        with file.path.open("a+b") as f:
-            f.truncate(file.length)
-
-
 @dataclasses.dataclass(frozen=True)
 class Piece:
     """Piece metadata."""

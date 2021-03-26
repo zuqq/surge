@@ -40,6 +40,13 @@ async def print_progress(root):
         raise
 
 
+def build_file_tree(files):
+    for file in files:
+        file.path.parent.mkdir(exist_ok=True)
+        with file.path.open("a+b") as f:
+            f.truncate(file.length)
+
+
 async def download(metadata, peer_id, missing_pieces, max_peers, max_requests):
     """Spin up a `Root` and write downloaded pieces to the file system."""
     root = Root(metadata, peer_id, missing_pieces, max_peers, max_requests)
@@ -51,7 +58,7 @@ async def download(metadata, peer_id, missing_pieces, max_peers, max_requests):
             # Delegate to a thread pool because asyncio has no direct support for
             # asynchronous file system operations.
             await loop.run_in_executor(
-                None, functools.partial(_metadata.build_file_tree, metadata.files)
+                None, functools.partial(build_file_tree, metadata.files)
             )
             chunks = _metadata.make_chunks(metadata.pieces, metadata.files)
             async for piece, data in root.results:
