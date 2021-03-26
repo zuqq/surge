@@ -177,14 +177,14 @@ async def download_from_peer(root, peer):
             await stream.write(
                 messages.Handshake(extension_protocol, info_hash, peer_id)
             )
-            received = await stream.read_handshake()
+            received = await asyncio.wait_for(stream.read_handshake(), 30)
             if not received.reserved & extension_protocol:
                 raise ValueError("Extension protocol not supported.")
             if received.info_hash != info_hash:
                 raise ValueError("Wrong 'info_hash'.")
             await stream.write(messages.ExtensionHandshake())
             while True:
-                received = await stream.read()
+                received = await asyncio.wait_for(stream.read(), 30)
                 if isinstance(received, messages.ExtensionHandshake):
                     ut_metadata = received.ut_metadata
                     metadata_size = received.metadata_size
@@ -199,7 +199,7 @@ async def download_from_peer(root, peer):
             for i in range((metadata_size + piece_length - 1) // piece_length):
                 await stream.write(messages.MetadataRequest(i, ut_metadata))
                 while True:
-                    received = await stream.read()
+                    received = await asyncio.wait_for(stream.read(), 30)
                     if isinstance(received, messages.MetadataData):
                         # We assume that the peer sends us data for the piece that we
                         # just requested; if not, the result of the transaction will be

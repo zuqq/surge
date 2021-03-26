@@ -286,7 +286,7 @@ class Node:
                 info_hash = self.root.info_hash
                 peer_id = self.root.peer_id
                 await stream.write(messages.Handshake(0, info_hash, peer_id))
-                received = await stream.read_handshake()
+                received = await asyncio.wait_for(stream.read_handshake(), 30)
                 if received.info_hash != info_hash:
                     raise ValueError("Wrong 'info_hash'.")
                 available = set()
@@ -294,7 +294,7 @@ class Node:
                 # mandated by the specification, but makes requesting pieces
                 # much easier.
                 while True:
-                    received = await stream.read()
+                    received = await asyncio.wait_for(stream.read(), 30)
                     if isinstance(received, messages.Have):
                         available.add(pieces[received.index])
                         break
@@ -320,7 +320,7 @@ class Node:
                         else:
                             await stream.write(messages.Request.from_block(block))
                     else:
-                        received = await stream.read()
+                        received = await asyncio.wait_for(stream.read(), 30)
                         if isinstance(received, messages.Choke):
                             self.reset_progress()
                             state = State.CHOKED
