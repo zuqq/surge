@@ -116,7 +116,7 @@ class Block:
     """Block metadata."""
 
     piece: Piece
-    begin: int
+    begin: int  # Relative offset.
     length: int
 
 
