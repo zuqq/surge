@@ -120,6 +120,7 @@ class Root:
         self._seen_peers = set()
         self._new_peers = asyncio.Queue(max_peers)
 
+        self._stopped = False
         self._nodes = set()
 
         # Future that will hold the metadata.
@@ -136,6 +137,8 @@ class Root:
         self._trackers.remove(task)
 
     def maybe_add_node(self):
+        if self._stopped:
+            return
         if len(self._nodes) < self.max_peers and self._new_peers.qsize():
             peer = self._new_peers.get_nowait()
             self._nodes.add(asyncio.create_task(download_from_peer(self, peer)))
@@ -157,6 +160,7 @@ class Root:
             self._trackers.add(asyncio.create_task(coroutine))
 
     async def stop(self):
+        self._stopped = True
         for task in itertools.chain(self._trackers, self._nodes):
             task.cancel()
         await asyncio.gather(*self._trackers, *self._nodes, return_exceptions=True)

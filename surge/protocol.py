@@ -90,6 +90,7 @@ class Root:
         self._seen_peers = set()
         self._new_peers = asyncio.Queue(max_peers)
 
+        self._stopped = False
         self._nodes = set()
         # In endgame mode, multiple `Node`s can be downloading the same piece;
         # as soon as one finishes downloading that piece, the other `Node`s
@@ -157,6 +158,8 @@ class Root:
         self._trackers.remove(task)
 
     def maybe_add_node(self):
+        if self._stopped:
+            return
         if len(self._nodes) < self.max_peers and self._new_peers.qsize():
             node = Node(self, self._new_peers.get_nowait())
             node.start()
@@ -184,6 +187,7 @@ class Root:
             self._trackers.add(asyncio.create_task(coroutine))
 
     async def stop(self):
+        self._stopped = True
         for task in self._trackers:
             task.cancel()
         asyncio.gather(
