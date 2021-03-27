@@ -67,10 +67,8 @@ async def download(metadata, peer_id, missing_pieces, max_peers, max_requests):
                         None, functools.partial(_metadata.write_chunk, chunk, data)
                     )
     finally:
-        await root.stop()
         printer.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await printer
+        await asyncio.gather(printer, root.stop(), return_exceptions=True)
 
 
 class Root:
@@ -186,12 +184,13 @@ class Root:
             self._trackers.add(asyncio.create_task(coroutine))
 
     async def stop(self):
-        for task in tuple(self._trackers):
+        for task in self._trackers:
             task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
-        for node in tuple(self._nodes):
-            await node.stop()
+        asyncio.gather(
+            *self._trackers,
+            *(node.stop() for node in self._nodes),
+            return_exceptions=True,
+        )
 
 
 class Progress:

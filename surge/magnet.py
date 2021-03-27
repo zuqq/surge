@@ -12,7 +12,6 @@ Options:
 """
 
 import asyncio
-import contextlib
 import itertools
 import hashlib
 import secrets
@@ -158,10 +157,9 @@ class Root:
             self._trackers.add(asyncio.create_task(coroutine))
 
     async def stop(self):
-        for task in itertools.chain(tuple(self._trackers), tuple(self._nodes)):
+        for task in itertools.chain(self._trackers, self._nodes):
             task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+        await asyncio.gather(*self._trackers, *self._nodes, return_exceptions=True)
 
     def put_result(self, raw_info):
         if not self.result.done():

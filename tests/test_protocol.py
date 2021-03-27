@@ -1,5 +1,4 @@
 import asyncio
-import contextlib
 import os
 import unittest
 
@@ -77,10 +76,8 @@ class TestProtocol(unittest.TestCase):
                     missing.remove(piece)
                 self.assertFalse(missing)
             finally:
-                await root.stop()
                 for task in tasks:
                     task.cancel()
-                    with contextlib.suppress(asyncio.CancelledError):
-                        await task
+                await asyncio.gather(*tasks, root.stop(), return_exceptions=True)
 
         asyncio.run(_main())

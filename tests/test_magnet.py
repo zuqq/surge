@@ -1,5 +1,4 @@
 import asyncio
-import contextlib
 import os
 import unittest
 
@@ -102,10 +101,8 @@ class TestMagnet(unittest.TestCase):
                 result = _metadata.Metadata.from_bytes(await root.result)
                 self.assertEqual(metadata, result)
             finally:
-                await root.stop()
                 for task in tasks:
                     task.cancel()
-                    with contextlib.suppress(asyncio.CancelledError):
-                        await task
+                await asyncio.gather(*tasks, root.stop(), return_exceptions=True)
 
         asyncio.run(_main())
