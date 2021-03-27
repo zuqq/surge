@@ -174,10 +174,9 @@ async def download_from_peer(root, peer):
     try:
         async with open_stream(peer) as stream:
             info_hash = root.info_hash
-            peer_id = root.peer_id
             extension_protocol = 1 << 20
             await stream.write(
-                messages.Handshake(extension_protocol, info_hash, peer_id)
+                messages.Handshake(extension_protocol, info_hash, root.peer_id)
             )
             received = await asyncio.wait_for(stream.read_handshake(), 30)
             if not received.reserved & extension_protocol:

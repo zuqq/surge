@@ -287,8 +287,7 @@ class Node:
             async with open_stream(self.peer) as stream:
                 pieces = self.root.pieces
                 info_hash = self.root.info_hash
-                peer_id = self.root.peer_id
-                await stream.write(messages.Handshake(0, info_hash, peer_id))
+                await stream.write(messages.Handshake(0, info_hash, self.root.peer_id))
                 received = await asyncio.wait_for(stream.read_handshake(), 30)
                 if received.info_hash != info_hash:
                     raise ValueError("Wrong 'info_hash'.")
