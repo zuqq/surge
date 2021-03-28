@@ -12,12 +12,18 @@ from . import _tracker
 
 
 async def upload(info_hash, raw_info):
+    extension_protocol = 1 << 20
+
     async def _main(reader, writer):
         stream = Stream(reader, writer)
-        await stream.read_handshake()
+        received = await stream.read_handshake()
+        if not received.reserved & extension_protocol:
+            raise ValueError("Extension protocol not supported.")
+        if received.info_hash != info_hash:
+            raise ValueError("Wrong 'info_hash'.")
         await stream.write(
             messages.Handshake(
-                1 << 20,
+                extension_protocol,
                 info_hash,
                 b".\xbb\xde\x16\x08\xb0\xc9NK\x19[E\xf5g\xa9\x84!Z\xe5\x15",
             )

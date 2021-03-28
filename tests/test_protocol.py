@@ -11,9 +11,11 @@ from . import _tracker
 
 
 async def upload(metadata):
-    chunks = _metadata.make_chunks(metadata.pieces, metadata.files)
+    pieces = metadata.pieces
+    info_hash = metadata.info_hash
+    chunks = _metadata.make_chunks(pieces, metadata.files)
     store = []
-    for piece in metadata.pieces:
+    for piece in pieces:
         data = []
         for chunk in chunks[piece]:
             data.append(_metadata.read_chunk(chunk))
@@ -21,15 +23,17 @@ async def upload(metadata):
 
     async def _main(reader, writer):
         stream = Stream(reader, writer)
-        await stream.read_handshake()
+        received = await stream.read_handshake()
+        if received.info_hash != info_hash:
+            raise ValueError("Wrong 'info_hash'.")
         await stream.write(
             messages.Handshake(
                 0,
-                metadata.info_hash,
+                info_hash,
                 b".\xbb\xde\x16\x08\xb0\xc9NK\x19[E\xf5g\xa9\x84!Z\xe5\x15",
             )
         )
-        n = len(metadata.pieces)
+        n = len(pieces)
         await stream.write(messages.Bitfield.from_indices(range(n), n))
         while True:
             try:
