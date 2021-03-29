@@ -30,14 +30,16 @@ def main(args):
     max_requests = int(args["--requests"])
     with open(args["<file>"], "rb") as f:
         metadata = _metadata.Metadata.from_bytes(f.read())
-    missing = set(metadata.pieces)
+    missing_pieces = set(metadata.pieces)
 
     if args["--resume"]:
         for piece in _metadata.available(metadata.pieces, metadata.files):
-            missing.remove(piece)
+            missing_pieces.remove(piece)
 
     uvloop.install()
-    asyncio.run(protocol.download(metadata, peer_id, missing, max_peers, max_requests))
+    asyncio.run(
+        protocol.download(metadata, peer_id, missing_pieces, max_peers, max_requests)
+    )
 
 
 if __name__ == "__main__":

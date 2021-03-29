@@ -76,7 +76,7 @@ class Root:
         self.pieces = metadata.pieces
         self.info_hash = metadata.info_hash
         self.peer_id = peer_id
-        self.missing_pieces = missing_pieces
+        self.missing_pieces = set(missing_pieces)
         self.max_peers = max_peers
         self.max_requests = max_requests
 
