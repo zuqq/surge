@@ -1,3 +1,10 @@
+"""Tracker protocol.
+
+This module provides the `request_peers_http` and `request_peers_udp` coroutine
+functions that implement the original tracker protocol over HTTP and its
+UDP-based variant.
+"""
+
 import asyncio
 import collections
 import contextlib
@@ -13,12 +20,12 @@ from .. import bencoding
 from ._metadata import Parameters, Peer, Result
 
 
-__all__ = ("Parameters", "Peer", "Result", "request_peers_http", "request_peers_udp")
+__all__ = ("Parameters", "Peer", "request_peers_http", "request_peers_udp")
 
 
 def get(url, parameters):
-    # This uses `http.client` instead of the `urllib.request` wrapper because
-    # the latter is not thread-safe.
+    # I'm using `http.client` instead of the `urllib.request` wrapper here
+    # because the latter is not thread-safe.
     q = urllib.parse.parse_qs(url.query)
     q.update(dataclasses.asdict(parameters))
     path = url._replace(scheme="", netloc="", query=urllib.parse.urlencode(q)).geturl()

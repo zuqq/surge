@@ -48,15 +48,15 @@ def build_file_tree(files):
 
 
 async def download(metadata, peer_id, missing_pieces, max_peers, max_requests):
-    """Spin up a `Root` and write downloaded pieces to the file system."""
+    """Download the torrent represented by `metadata`."""
     root = Root(metadata, peer_id, missing_pieces, max_peers, max_requests)
     root.start()
     printer = asyncio.create_task(print_progress(root))
     try:
         if missing_pieces:
             loop = asyncio.get_running_loop()
-            # Delegate to a thread pool because asyncio has no direct support for
-            # asynchronous file system operations.
+            # Delegate to a thread pool because asyncio has no direct support
+            # for asynchronous file system operations.
             await loop.run_in_executor(
                 None, functools.partial(build_file_tree, metadata.files)
             )
@@ -117,9 +117,9 @@ class Root:
         self.maybe_add_node()
 
     def get_piece(self, node, available):
-        """Return a fresh piece to download.
+        """Return a piece to download next.
 
-        Raise `IndexError` if there are no more pieces to download.
+        Raise `IndexError` if there are no additional pieces to download.
         """
         in_progress = set(self._piece_to_nodes)
         # Strict endgame mode: only send duplicate requests if every missing
@@ -175,6 +175,7 @@ class Root:
         self.maybe_add_node()
 
     def start(self):
+        # TODO: Update this as the download progresses.
         parameters = tracker.Parameters(self.info_hash, self.peer_id)
         for announce in self._announce_list:
             url = urllib.parse.urlparse(announce)
@@ -198,7 +199,7 @@ class Root:
 
 
 class Progress:
-    """Helper class that keeps track of a single piece's progress."""
+    """A single piece's progress."""
 
     def __init__(self, piece, blocks):
         self._missing_blocks = set(blocks)
@@ -218,9 +219,12 @@ class Progress:
 
 
 class State(enum.IntEnum):
+    """Connection state after handshakes are exchanged."""
     CHOKED = enum.auto()
     INTERESTED = enum.auto()
     UNCHOKED = enum.auto()
+    # There are no more pieces to download, but we might still be waiting for
+    # messages from the peer.
     NO_REQUESTS_POSSIBLE = enum.auto()
 
 
@@ -233,6 +237,7 @@ class Node:
         self._requested = set()
         self._stack = []
 
+        # Task running the `_main` coroutine.
         self._task = None
 
     def add_piece(self, piece):
@@ -264,11 +269,19 @@ class Node:
         return len(self._requested) < self.root.max_requests
 
     def get_block(self):
+        """Return a block to download next.
+
+        Raise `IndexError` if the block queue is empty.
+        """
         block = self._stack.pop()
         self._requested.add(block)
         return block
 
     def put_block(self, block, data):
+        """Deliver a downloaded block.
+
+        Return the piece and its data if this block completes its piece.
+        """
         if block not in self._requested:
             return None
         self._requested.remove(block)
