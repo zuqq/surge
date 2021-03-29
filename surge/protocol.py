@@ -235,16 +235,16 @@ class Node:
 
         self._progress = {}
         self._requested = set()
-        self._stack = []
+        self._queue = collections.deque()
 
         # Task running the `_main` coroutine.
         self._task = None
 
     def add_piece(self, piece):
         """Add `piece` to the download queue."""
-        blocks = tuple(_metadata.blocks(piece))
+        blocks = set(_metadata.blocks(piece))
         self._progress[piece] = Progress(piece, blocks)
-        self._stack.extend(reversed(blocks))
+        self._queue.extendleft(blocks)
 
     def remove_piece(self, piece):
         """Remove `piece` from the download queue."""
@@ -254,13 +254,13 @@ class Node:
             return block.piece != piece
 
         self._requested = set(filter(predicate, self._requested))
-        self._stack = list(filter(predicate, self._stack))
+        self._queue = collections.deque(filter(predicate, self._queue))
 
     def reset_progress(self):
         in_progress = tuple(self._progress)
         self._progress.clear()
         self._requested.clear()
-        self._stack.clear()
+        self._queue.clear()
         for piece in in_progress:
             self.add_piece(piece)
 
@@ -273,7 +273,7 @@ class Node:
 
         Raise `IndexError` if the block queue is empty.
         """
-        block = self._stack.pop()
+        block = self._queue.pop()
         self._requested.add(block)
         return block
 
