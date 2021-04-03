@@ -115,7 +115,11 @@ class Root:
         self.peer_id = peer_id
         self.max_peers = max_peers
 
+        # Future that will hold the metadata.
+        self.result = asyncio.get_event_loop().create_future()
+
         self._announce_list = announce_list
+        self._parameters = tracker.Parameters(info_hash, peer_id)
         self._trackers = set()
         self._seen_peers = set()
         self._new_peers = asyncio.Queue(max_peers)
@@ -123,38 +127,42 @@ class Root:
         self._stopped = False
         self._nodes = set()
 
-        # Future that will hold the metadata.
-        self.result = asyncio.get_event_loop().create_future()
+    def _maybe_add_node(self):
+        if self._stopped:
+            return
+        if len(self._nodes) < self.max_peers and self._new_peers.qsize():
+            self._nodes.add(
+                asyncio.create_task(
+                    download_from_peer(
+                        self, self._new_peers.get_nowait(), self.info_hash, self.peer_id
+                    )
+                )
+            )
 
     async def put_peer(self, peer):
         if peer in self._seen_peers:
             return
         self._seen_peers.add(peer)
         await self._new_peers.put(peer)
-        self.maybe_add_node()
+        self._maybe_add_node()
 
     def remove_tracker(self, task):
         self._trackers.remove(task)
 
-    def maybe_add_node(self):
-        if self._stopped:
-            return
-        if len(self._nodes) < self.max_peers and self._new_peers.qsize():
-            peer = self._new_peers.get_nowait()
-            self._nodes.add(asyncio.create_task(download_from_peer(self, peer)))
+    def put_result(self, raw_info):
+        if not self.result.done():
+            self.result.set_result(assemble(self._announce_list, raw_info))
 
     def remove_node(self, task):
         self._nodes.remove(task)
-        self.maybe_add_node()
+        self._maybe_add_node()
 
     def start(self):
-        parameters = tracker.Parameters(self.info_hash, self.peer_id)
-        for announce in self._announce_list:
-            url = urllib.parse.urlparse(announce)
+        for url in map(urllib.parse.urlparse, self._announce_list):
             if url.scheme in ("http", "https"):
-                coroutine = tracker.request_peers_http(self, url, parameters)
+                coroutine = tracker.request_peers_http(self, url, self._parameters)
             elif url.scheme == "udp":
-                coroutine = tracker.request_peers_udp(self, url, parameters)
+                coroutine = tracker.request_peers_udp(self, url, self._parameters)
             else:
                 raise ValueError("Unsupported announce.")
             self._trackers.add(asyncio.create_task(coroutine))
@@ -165,18 +173,13 @@ class Root:
             task.cancel()
         await asyncio.gather(*self._trackers, *self._nodes, return_exceptions=True)
 
-    def put_result(self, raw_info):
-        if not self.result.done():
-            self.result.set_result(assemble(self._announce_list, raw_info))
 
-
-async def download_from_peer(root, peer):
+async def download_from_peer(root, peer, info_hash, peer_id):
     try:
         async with open_stream(peer) as stream:
-            info_hash = root.info_hash
             extension_protocol = 1 << 20
             await stream.write(
-                messages.Handshake(extension_protocol, info_hash, root.peer_id)
+                messages.Handshake(extension_protocol, info_hash, peer_id)
             )
             received = await asyncio.wait_for(stream.read_handshake(), 30)
             if not received.reserved & extension_protocol:

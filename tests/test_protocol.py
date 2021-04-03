@@ -67,8 +67,10 @@ class TestProtocol(unittest.TestCase):
             }
             missing_pieces = set(metadata.pieces)
             root = protocol.Root(
-                metadata,
+                metadata.info_hash,
                 b"\xad6n\x84\xb3a\xa4\xc1\xa1\xde\xd4H\x01J\xc0]\x1b\x88\x92I",
+                metadata.announce_list,
+                metadata.pieces,
                 missing_pieces,
                 50,
                 50,
