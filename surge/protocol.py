@@ -163,18 +163,8 @@ class Root:
 
         Raise `IndexError` if there are no additional pieces to download.
         """
-        in_progress = set(self._piece_to_nodes)
-        # Strict endgame mode: only send duplicate requests if every missing
-        # piece is already being requested from some peer.
-        piece = random.choice(
-            tuple(
-                (
-                    (self._missing_pieces - in_progress or in_progress)
-                    - self._node_to_pieces[node]
-                )
-                & available
-            )
-        )
+        pool = self._missing_pieces & (available - self._node_to_pieces[node])
+        piece = random.choice(tuple(pool - set(self._piece_to_nodes) or pool))
         self._piece_to_nodes[piece].add(node)
         self._node_to_pieces[node].add(piece)
         return piece
@@ -251,9 +241,8 @@ class State(enum.IntEnum):
     CHOKED = enum.auto()
     INTERESTED = enum.auto()
     UNCHOKED = enum.auto()
-    # There are no more pieces to download, but we might still be waiting for
-    # messages from the peer.
-    NO_REQUESTS_POSSIBLE = enum.auto()
+    # There are no more blocks to request.
+    PASSIVE = enum.auto()
 
 
 class Node:
@@ -360,7 +349,7 @@ class Node:
                             try:
                                 piece = self.root.get_piece(self, available)
                             except IndexError:
-                                state = State.NO_REQUESTS_POSSIBLE
+                                state = State.PASSIVE
                             else:
                                 self.add_piece(piece)
                         else:
@@ -375,7 +364,7 @@ class Node:
                                 state = State.UNCHOKED
                         elif isinstance(received, messages.Have):
                             available.add(self.pieces[received.index])
-                            if state is State.NO_REQUESTS_POSSIBLE:
+                            if state is State.PASSIVE:
                                 state = State.UNCHOKED
                         elif isinstance(received, messages.Block):
                             result = self._put_block(
