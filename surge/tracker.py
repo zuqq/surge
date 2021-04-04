@@ -25,13 +25,12 @@ from . import bencoding
 class Parameters:
     info_hash: bytes
     peer_id: bytes
-    port: int = 6881
+    port: int = 0
     uploaded: int = 0
     downloaded: int = 0
     # This is initialized to 0 because we also need to connect to the tracker
     # before downloading the metadata.
     left: int = 0
-    event: str = "started"
     compact: int = 1  # See BEP 23.
 
 
@@ -207,7 +206,7 @@ class AnnounceRequest:
     connection_id: bytes
     parameters: Parameters
 
-    def to_bytes(self) -> bytes:
+    def to_bytes(self):
         return struct.pack(
             ">8sl4s20s20sqqqlL4slH",
             self.connection_id,
