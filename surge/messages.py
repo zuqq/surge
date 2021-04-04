@@ -258,7 +258,7 @@ class ExtensionHandshake(ExtensionProtocol):
 
 
 @dataclasses.dataclass
-class MetadataProtocol:
+class MetadataProtocol(ExtensionProtocol):
     """Base class for [metadata exchange protocol][BEP 0009] messages.
 
     [BEP 0009]: http://bittorrent.org/beps/bep_0009.html
@@ -287,9 +287,7 @@ class MetadataProtocol:
 
 
 @dataclasses.dataclass
-class MetadataRequest:
-    value: ClassVar[int] = 20
-    extension_value: ClassVar[int] = 3
+class MetadataRequest(MetadataProtocol):
     metadata_value: ClassVar[int] = 0
     index: int
     ut_metadata: dataclasses.InitVar[Optional[int]] = None
@@ -309,9 +307,7 @@ class MetadataRequest:
 
 
 @dataclasses.dataclass
-class MetadataData:
-    value: ClassVar[int] = 20
-    extension_value: ClassVar[int] = 3
+class MetadataData(MetadataProtocol):
     metadata_value: ClassVar[int] = 1
     index: int
     total_size: int
@@ -344,8 +340,6 @@ class MetadataData:
 
 @dataclasses.dataclass
 class MetadataReject(MetadataProtocol):
-    value: ClassVar[int] = 20
-    extension_value: ClassVar[int] = 3
     metadata_value: ClassVar[int] = 2
     index: int
     ut_metadata: dataclasses.InitVar[Optional[int]] = None
