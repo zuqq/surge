@@ -360,7 +360,7 @@ class Node:
                             self._reset_progress()
                             state = State.CHOKED
                         elif isinstance(received, messages.Unchoke):
-                            if state is State.INTERESTED:
+                            if state is not State.PASSIVE:
                                 state = State.UNCHOKED
                         elif isinstance(received, messages.Have):
                             available.add(self.pieces[received.index])
