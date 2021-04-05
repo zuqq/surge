@@ -201,7 +201,7 @@ async def download_from_peer(root, peer, info_hash, peer_id):
             piece_length = 2 ** 14
             pieces = []
             for i in range((metadata_size + piece_length - 1) // piece_length):
-                await stream.write(messages.MetadataRequest(i, ut_metadata))
+                await stream.write(messages.MetadataRequest(i, ut_metadata=ut_metadata))
                 while True:
                     received = await asyncio.wait_for(stream.read(), 30)
                     if isinstance(received, messages.MetadataData):
