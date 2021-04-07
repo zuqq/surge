@@ -45,7 +45,7 @@ class Keepalive:
 
     @classmethod
     def from_bytes(cls, _):
-        return cls()
+        return cls()  # pragma: no cover
 
     def to_bytes(self):
         return struct.pack(">L", self.prefix)
@@ -201,20 +201,25 @@ class Block:
 
 @dataclasses.dataclass
 class Cancel:
+    prefix: ClassVar[int] = 13
     value: ClassVar[int] = 8
+    index: int
+    begin: int
+    length: int
 
     @classmethod
-    def from_bytes(cls, _):
-        return cls()
-
-
-@dataclasses.dataclass
-class Port:
-    value: ClassVar[int] = 9
+    def from_block(cls, block):
+        return cls(block.piece.index, block.begin, block.length)
 
     @classmethod
-    def from_bytes(cls, _):
-        return cls()
+    def from_bytes(cls, data):
+        _, _, index, begin, length = struct.unpack(">LBLLL", data)
+        return cls(index, begin, length)
+
+    def to_bytes(self):
+        return struct.pack(
+            ">LBLLL", self.prefix, self.value, self.index, self.begin, self.length
+        )
 
 
 @dataclasses.dataclass
@@ -368,7 +373,6 @@ MESSAGE_TYPE = {
     6: Request,
     7: Block,
     8: Cancel,
-    9: Port,
     20: ExtensionProtocol,
 }
 
