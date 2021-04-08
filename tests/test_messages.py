@@ -13,38 +13,40 @@ def _extension_message(extension_value, payload):
 
 
 class TestMessages(unittest.TestCase):
+    piece_data = b"a\n"
+    n = len(piece_data)
+    piece = _metadata.Piece(0, 0, n, hashlib.sha1(piece_data).digest())
+    raw_info = bencoding.encode(
+        {
+            b"length": n,
+            b"name": b"a",
+            b"piece_length": 2 ** 18,
+            b"pieces": piece.hash,
+        }
+    )
+
     reserved = 1 << 20
-    info_hash = b"O\xd2\xd3Y\x8a\x11\x01\xa1U\xdd\x86|\x91\x04\xfc\xd2\xd9\xe4$+"
-    peer_id = b"\xa7\x88\x06\x8b\xeb6i~=//\x1e\xc8\x1d\xbb\x12\x023\xa58"
+    info_hash = hashlib.sha1(raw_info).digest()
+    peer_id = b"\xad6n\x84\xb3a\xa4\xc1\xa1\xde\xd4H\x01J\xc0]\x1b\x88\x92I"
     handshake_reference = struct.pack(
         ">B19sQ20s20s", 19, b"BitTorrent protocol", reserved, info_hash, peer_id
     )
     handshake = messages.Handshake(reserved, info_hash, peer_id)
 
-    valid = []
+    valid = [
+        (struct.pack(">L", 0), messages.Keepalive()),
+        (struct.pack(">LB", 1, 0), messages.Choke()),
+        (struct.pack(">LB", 1, 1), messages.Unchoke()),
+        (struct.pack(">LB", 1, 2), messages.Interested()),
+        (struct.pack(">LB", 1, 3), messages.NotInterested()),
+        (struct.pack(">LBL", 5, 4, piece.index), messages.Have(piece.index)),
+    ]
 
-    valid.append((struct.pack(">L", 0), messages.Keepalive()))
-
-    valid.append((struct.pack(">LB", 1, 0), messages.Choke()))
-
-    valid.append((struct.pack(">LB", 1, 1), messages.Unchoke()))
-
-    valid.append((struct.pack(">LB", 1, 2), messages.Interested()))
-
-    valid.append((struct.pack(">LB", 1, 3), messages.NotInterested()))
-
-    index = 0
-    valid.append((struct.pack(">LBL", 5, 4, index), messages.Have(index)))
-
-    indices = {0}
-    bitfield = messages.Bitfield.from_indices(indices, len(indices))
+    piece_indices = {0}
+    bitfield = messages.Bitfield.from_indices(piece_indices, len(piece_indices))
     valid.append((struct.pack(">LBB", 2, 5, 1 << 7), bitfield))
 
-    data = b"a"
-    begin = 0
-    length = len(data)
-    piece = _metadata.Piece(index, begin, length, hashlib.sha1(data).digest())
-    block = _metadata.Block(piece, begin, length)
+    block = _metadata.Block(piece, 0, n)
 
     valid.append(
         (
@@ -53,11 +55,12 @@ class TestMessages(unittest.TestCase):
         )
     )
 
-    n = len(data)
     valid.append(
         (
-            struct.pack(f">LBLL{n}s", n + 9, 7, block.piece.index, block.begin, data),
-            messages.Block.from_block(block, data),
+            struct.pack(
+                f">LBLL{n}s", n + 9, 7, block.piece.index, block.begin, piece_data
+            ),
+            messages.Block.from_block(block, piece_data),
         )
     )
 
@@ -68,14 +71,6 @@ class TestMessages(unittest.TestCase):
         )
     )
 
-    raw_info = bencoding.encode(
-        {
-            b"length": len(data),
-            b"name": data,
-            b"piece length": 2 ** 18,
-            b"pieces": piece.hash,
-        }
-    )
     ut_metadata = 3
     metadata_size = len(raw_info)
 
@@ -94,7 +89,8 @@ class TestMessages(unittest.TestCase):
         )
     )
 
-    index = 0
+    metadata_index = 0
+
     valid.append(
         (
             _extension_message(
@@ -104,7 +100,7 @@ class TestMessages(unittest.TestCase):
                         bencoding.encode(
                             {
                                 b"msg_type": 1,
-                                b"piece": index,
+                                b"piece": metadata_index,
                                 b"total_size": metadata_size,
                             }
                         ),
@@ -113,28 +109,28 @@ class TestMessages(unittest.TestCase):
                 ),
             ),
             messages.MetadataData(
-                index, metadata_size, raw_info, ut_metadata=ut_metadata
+                metadata_index, metadata_size, raw_info, ut_metadata=ut_metadata
             ),
         )
     )
 
-    index = 0
     valid.append(
         (
             _extension_message(
-                ut_metadata, bencoding.encode({b"msg_type": 2, b"piece": index})
+                ut_metadata,
+                bencoding.encode({b"msg_type": 2, b"piece": metadata_index}),
             ),
-            messages.MetadataReject(index, ut_metadata=ut_metadata),
+            messages.MetadataReject(metadata_index, ut_metadata=ut_metadata),
         )
     )
 
-    index = 0
     valid.append(
         (
             _extension_message(
-                ut_metadata, bencoding.encode({b"msg_type": 0, b"piece": index})
+                ut_metadata,
+                bencoding.encode({b"msg_type": 0, b"piece": metadata_index}),
             ),
-            messages.MetadataRequest(index, ut_metadata=ut_metadata),
+            messages.MetadataRequest(metadata_index, ut_metadata=ut_metadata),
         )
     )
 
@@ -147,7 +143,7 @@ class TestMessages(unittest.TestCase):
                 self.assertEqual(y.to_bytes(), x)
 
     def test_to_indices(self):
-        self.assertEqual(self.bitfield.to_indices(), self.indices)
+        self.assertEqual(self.bitfield.to_indices(), self.piece_indices)
 
     def test_parse_handshake(self):
         self.assertEqual(
