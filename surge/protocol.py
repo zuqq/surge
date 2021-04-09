@@ -42,7 +42,7 @@ async def print_progress(root):
 
 def build_file_tree(files):
     for file in files:
-        file.path.parent.mkdir(exist_ok=True)
+        file.path.parent.mkdir(parents=True, exist_ok=True)
         with file.path.open("a+b") as f:
             f.truncate(file.length)
 
