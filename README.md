@@ -11,7 +11,6 @@ Please note that Surge is download-only for now.
 
 [BitTorrent protocol]: https://en.wikipedia.org/wiki/BitTorrent
 
-
 ## Installation
 
 Surge requires Python 3.8 with [docopt] and [uvloop]. The recommended way of
@@ -22,7 +21,6 @@ new virtual environment.
 [docopt]: https://pypi.org/project/docopt/
 [uvloop]: https://pypi.org/project/uvloop/
 [poetry]: https://python-poetry.org/
-
 
 ## Example
 
@@ -37,7 +35,6 @@ $ md5sum debian-10.6.0-amd64-netinst.iso
 ```
 
 [Debian release]: https://cdimage.debian.org/debian-cd/current/amd64/bt-cd/
-
 
 ## Features
 
