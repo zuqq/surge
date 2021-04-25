@@ -6,14 +6,15 @@ BEncoding is a serialization format defined in the [BitTorrent specification].
 """
 
 
-def _int(bs, start):
-    # TODO: This doesn't adhere to the specification in BEP 3, because it
-    # ignores leading zeros instead of raising an exception.
+
+def _decode_int(bs, start):
+    # More lenient than the specification in BEP 3: ignores leading zeros
+    # instead of raising an exception.
     end = bs.index(b"e", start)
     return end + 1, int(bs[start + 1 : end].decode("ascii"))
 
 
-def _list(bs, start):
+def _decode_list(bs, start):
     result = []
     start += 1
     while bs[start] != ord("e"):
@@ -22,17 +23,18 @@ def _list(bs, start):
     return start + 1, result
 
 
-def _dict(bs, start):
-    # TODO: The specification only allows dictionaries with sorted keys!
+def _decode_dict(bs, start):
+    # More lenient than the specification in BEP 3: doesn't check that the
+    # dictionary keys are sorted.
     result = {}
     start += 1
     while bs[start] != ord("e"):
-        start, key = _str(bs, start)
+        start, key = _decode_bytes(bs, start)
         start, result[key] = decode_from(bs, start)
     return start + 1, result
 
 
-def _str(bs, start):
+def _decode_bytes(bs, start):
     sep_index = bs.index(b":", start)
     end = sep_index + int(bs[start:sep_index].decode("ascii")) + 1
     return end, bs[sep_index + 1 : end]
@@ -45,25 +47,25 @@ def decode_from(bs, start):
     except (TypeError, IndexError, KeyError) as exc:
         raise ValueError(bs[start:]) from exc
     if token == ord("i"):
-        return _int(bs, start)
+        return _decode_int(bs, start)
     if token == ord("l"):
-        return _list(bs, start)
+        return _decode_list(bs, start)
     if token == ord("d"):
-        return _dict(bs, start)
+        return _decode_dict(bs, start)
     if ord("0") <= token <= ord("9"):
-        return _str(bs, start)
+        return _decode_bytes(bs, start)
     raise ValueError(bs[start:])
 
 
 def decode(bs):
-    """Return the Python object corresponding to the encoded value `bs`.
+    """Return the Python object corresponding to `bs`.
 
     Raise `ValueError` if `bs` is not valid BEncoding.
     """
     start, rval = decode_from(bs, 0)
     if start == len(bs):
         return rval
-    raise ValueError("Not enough bytes.")
+    raise ValueError("Too many bytes.")
 
 
 def raw_val(bs, key):
@@ -73,7 +75,7 @@ def raw_val(bs, key):
     """
     start = 1
     while start < len(bs) and bs[start] != ord("e"):
-        start, curr_key = _str(bs, start)
+        start, curr_key = _decode_bytes(bs, start)
         next_start, _ = decode_from(bs, start)
         if curr_key == key:
             return bs[start:next_start]
