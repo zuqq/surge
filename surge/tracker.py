@@ -123,7 +123,7 @@ class UDPTrackerProtocol(asyncio.DatagramProtocol):
             waiter = asyncio.get_running_loop().create_future()
             self._waiter = waiter
             await waiter
-        return parse(self._queue.popleft())
+        return parse_udp_message(self._queue.popleft())
 
     def write(self, message):
         # I'm omitting flow control because every write is followed by a read.
@@ -191,7 +191,7 @@ async def request_peers_http(root, url, parameters):
 
 
 @dataclasses.dataclass
-class ConnectRequest:
+class UDPConnectRequest:
     value: ClassVar[int] = 0
     transaction_id: bytes
 
@@ -200,7 +200,7 @@ class ConnectRequest:
 
 
 @dataclasses.dataclass
-class AnnounceRequest:
+class UDPAnnounceRequest:
     value: ClassVar[int] = 1
     transaction_id: bytes
     connection_id: bytes
@@ -226,7 +226,7 @@ class AnnounceRequest:
 
 
 @dataclasses.dataclass
-class ConnectResponse:
+class UDPConnectResponse:
     value: ClassVar[int] = 0
     connection_id: bytes
 
@@ -237,7 +237,7 @@ class ConnectResponse:
 
 
 @dataclasses.dataclass
-class AnnounceResponse:
+class UDPAnnounceResponse:
     value: ClassVar[int] = 1
     result: Result
 
@@ -247,14 +247,14 @@ class AnnounceResponse:
         return cls(Result.from_bytes(interval, data[20:]))
 
 
-def parse(data):
+def parse_udp_message(data):
     if len(data) < 4:
         raise ValueError("Not enough bytes.")
     value = int.from_bytes(data[:4], "big")
-    if value == ConnectResponse.value:
-        return ConnectResponse.from_bytes(data)
-    if value == AnnounceResponse.value:
-        return AnnounceResponse.from_bytes(data)
+    if value == UDPConnectResponse.value:
+        return UDPConnectResponse.from_bytes(data)
+    if value == UDPAnnounceResponse.value:
+        return UDPAnnounceResponse.from_bytes(data)
     raise ValueError("Unkown message identifier.")
 
 
@@ -267,24 +267,26 @@ async def request_peers_udp(root, url, parameters):
                     timeout = 15 * 2 ** n
                     if not connected:
                         transaction_id = secrets.token_bytes(4)
-                        protocol.write(ConnectRequest(transaction_id))
+                        protocol.write(UDPConnectRequest(transaction_id))
                         try:
                             received = await asyncio.wait_for(protocol.read(), timeout)
                         except asyncio.TimeoutError:
                             continue
-                        if isinstance(received, ConnectResponse):
+                        if isinstance(received, UDPConnectResponse):
                             connected = True
                             connection_id = received.connection_id
                             connection_time = time.monotonic()
                     if connected:
                         protocol.write(
-                            AnnounceRequest(transaction_id, connection_id, parameters)
+                            UDPAnnounceRequest(
+                                transaction_id, connection_id, parameters
+                            )
                         )
                         try:
                             received = await asyncio.wait_for(protocol.read(), timeout)
                         except asyncio.TimeoutError:
                             continue
-                        if isinstance(received, AnnounceResponse):
+                        if isinstance(received, UDPAnnounceResponse):
                             result = received.result
                             break
                         if time.monotonic() - connection_time >= 60:
