@@ -5,6 +5,7 @@ BEncoding is a serialization format defined in the [BitTorrent specification].
 [BitTorrent specification]: http://bittorrent.org/beps/bep_0003.html
 """
 
+import io
 
 
 def _decode_int(bs, start):
@@ -83,42 +84,48 @@ def raw_val(bs, key):
     raise KeyError(key)
 
 
-def _encode_int(n):
-    return b"i" + str(n).encode("ascii") + b"e"
+def _encode_int(n, buf):
+    buf.write(b"i%de" % n)
 
 
-def _encode_list(l):  # noqa: E741
-    result = [b"l"]
+def _encode_list(l, buf):  # noqa: E741
+    buf.write(b"l")
     for obj in l:
-        result.append(encode(obj))
-    result.append(b"e")
-    return b"".join(result)
+        _encode(obj, buf)
+    buf.write(b"e")
 
 
-def _encode_dict(d):
-    result = [b"d"]
+def _encode_dict(d, buf):
+    buf.write(b"d")
     for key, value in sorted(d.items()):
-        result.append(_encode_str(key))
-        result.append(encode(value))
-    result.append(b"e")
-    return b"".join(result)
+        _encode_bytes(key, buf)
+        _encode(value, buf)
+    buf.write(b"e")
 
 
-def _encode_str(bs):
-    return str(len(bs)).encode("ascii") + b":" + bs
+def _encode_bytes(bs, buf):
+    buf.write(b"%d:" % len(bs))
+    buf.write(bs)
+
+
+def _encode(obj, buf):
+    if isinstance(obj, int):
+        _encode_int(obj, buf)
+    elif isinstance(obj, list):
+        _encode_list(obj, buf)
+    elif isinstance(obj, dict):
+        _encode_dict(obj, buf)
+    elif isinstance(obj, bytes):
+        _encode_bytes(obj, buf)
+    else:
+        raise TypeError(obj)
 
 
 def encode(obj):
-    """Return the encoded value corresponding to `obj`.
+    """Encode `obj`.
 
     Raise `TypeError` if `obj` is not representable in BEncoding.
     """
-    if isinstance(obj, int):
-        return _encode_int(obj)
-    if isinstance(obj, list):
-        return _encode_list(obj)
-    if isinstance(obj, dict):
-        return _encode_dict(obj)
-    if isinstance(obj, bytes):
-        return _encode_str(obj)
-    raise TypeError(obj)
+    buf = io.BytesIO()
+    _encode(obj, buf)
+    return buf.getvalue()
