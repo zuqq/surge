@@ -40,7 +40,7 @@ class Piece:
     hash: bytes  # SHA-1 digest of the piece's data.
 
 
-def valid(piece, data):
+def valid_piece_data(piece, data):
     """Check whether `data`'s SHA-1 digest is equal to `piece.hash`."""
     return hashlib.sha1(data).digest() == piece.hash
 
@@ -58,6 +58,19 @@ class Chunk:
     piece: Piece
     begin: int  # Absolute offset.
     length: int
+
+    def read(self):
+        """Read the chunk's data from the file system."""
+        with self.file.path.open("rb") as f:
+            f.seek(self.begin - self.file.begin)
+            return f.read(self.length)
+
+    def write(self, data):
+        """Write the chunk's data to the file system."""
+        with self.file.path.open("rb+") as f:
+            f.seek(self.begin - self.file.begin)
+            begin = self.begin - self.piece.begin
+            f.write(data[begin : begin + self.length])
 
 
 def make_chunks(pieces, files):
@@ -82,33 +95,17 @@ def make_chunks(pieces, files):
     return result
 
 
-def read_chunk(chunk):
-    """Read `chunk`."""
-    with chunk.file.path.open("rb") as f:
-        f.seek(chunk.begin - chunk.file.begin)
-        return f.read(chunk.length)
-
-
-def available(pieces, files):
-    """Yield all valid pieces."""
+def yield_available_pieces(pieces, files):
     chunks = make_chunks(pieces, files)
     for piece in pieces:
         data = []
         for chunk in chunks[piece]:
             try:
-                data.append(read_chunk(chunk))
+                data.append(chunk.read())
             except FileNotFoundError:
                 continue
-        if valid(piece, b"".join(data)):
+        if valid_piece_data(piece, b"".join(data)):
             yield piece
-
-
-def write_chunk(chunk, data):
-    """Write `data` to `chunk`."""
-    with chunk.file.path.open("rb+") as f:
-        f.seek(chunk.begin - chunk.file.begin)
-        begin = chunk.begin - chunk.piece.begin
-        f.write(data[begin : begin + chunk.length])
 
 
 @dataclasses.dataclass(frozen=True)
@@ -120,8 +117,8 @@ class Block:
     length: int
 
 
-def blocks(piece):
-    """Yields `piece`'s `Block`s."""
+def yield_blocks(piece):
+    """Yield `piece`'s blocks."""
     block_length = 2 ** 14
     for begin in range(0, piece.length, block_length):
         yield Block(piece, begin, min(block_length, piece.length - begin))

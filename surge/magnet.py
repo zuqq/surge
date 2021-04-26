@@ -75,13 +75,11 @@ async def download(info_hash, announce_list, peer_id, max_peers):
         await root.stop()
 
 
-def valid(info_hash, raw_info):
-    """Check that the `b"info"` value is valid."""
+def valid_raw_info(info_hash, raw_info):
     return hashlib.sha1(raw_info).digest() == info_hash
 
 
-def assemble(announce_list, raw_info):
-    """Build the metadata from list of trackers and the `b"info"` value."""
+def assemble_raw_metadata(announce_list, raw_info):
     # We can't just decode and re-encode, because the value associated with
     # the key `b"info"` needs to be preserved exactly.
     return b"".join(
@@ -151,7 +149,7 @@ class Root:
 
     def put_result(self, raw_info):
         if not self.result.done():
-            self.result.set_result(assemble(self._announce_list, raw_info))
+            self.result.set_result(assemble_raw_metadata(self._announce_list, raw_info))
 
     def remove_node(self, task):
         self._nodes.remove(task)
@@ -212,7 +210,7 @@ async def download_from_peer(root, peer, info_hash, peer_id):
                         pieces.append(received.data)
                         break
             raw_info = b"".join(pieces)
-            if valid(info_hash, raw_info):
+            if valid_raw_info(info_hash, raw_info):
                 root.put_result(raw_info)
             else:
                 raise ValueError("Invalid data.")

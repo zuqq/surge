@@ -18,7 +18,7 @@ async def upload(metadata):
     for piece in pieces:
         data = []
         for chunk in chunks[piece]:
-            data.append(_metadata.read_chunk(chunk))
+            data.append(chunk.read())
         store.append(b"".join(data))
 
     async def _main(reader, writer):
@@ -78,7 +78,7 @@ class TestProtocol(unittest.TestCase):
             root.start()
             try:
                 async for piece, data in root.results:
-                    self.assertTrue(_metadata.valid(piece, data))
+                    self.assertTrue(_metadata.valid_piece_data(piece, data))
                     missing_pieces.remove(piece)
                 self.assertFalse(missing_pieces)
             finally:

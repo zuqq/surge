@@ -33,7 +33,7 @@ def main(args):
     missing_pieces = set(metadata.pieces)
 
     if args["--resume"]:
-        for piece in _metadata.available(metadata.pieces, metadata.files):
+        for piece in _metadata.yield_available_pieces(metadata.pieces, metadata.files):
             missing_pieces.remove(piece)
 
     uvloop.install()

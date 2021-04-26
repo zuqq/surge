@@ -72,7 +72,7 @@ async def download(metadata, peer_id, missing_pieces, max_peers, max_requests):
             async for piece, data in root.results:
                 for chunk in chunks[piece]:
                     await loop.run_in_executor(
-                        None, functools.partial(_metadata.write_chunk, chunk, data)
+                        None, functools.partial(chunk.write, data)
                     )
     finally:
         printer.cancel()
@@ -264,7 +264,7 @@ class Node:
 
     def add_piece(self, piece):
         """Add `piece` to the download queue."""
-        blocks = set(_metadata.blocks(piece))
+        blocks = set(_metadata.yield_blocks(piece))
         self._progress[piece] = Progress(piece, blocks)
         self._queue.extendleft(blocks)
 
@@ -313,7 +313,7 @@ class Node:
         if not progress.done:
             return None
         data = self._progress.pop(piece).data
-        if _metadata.valid(piece, data):
+        if _metadata.valid_piece_data(piece, data):
             return (piece, data)
         raise ValueError("Invalid data.")
 
