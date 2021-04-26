@@ -8,7 +8,8 @@ class Stream:
     """A stream interface for BitTorrent connections.
 
     This class wraps `asyncio.StreamReader` and `asyncio.StreamWriter`; instead
-    of bytes, it reads and writes BitTorrent messages.
+    of bytes, it reads and writes BitTorrent messages (i.e., the classes defined
+    in the `messages` module).
     """
 
     def __init__(self, reader, writer):

@@ -27,16 +27,16 @@ from . import tracker
 from .stream import open_stream
 
 
-def parse(magnet):
-    """Parse a magnet URI.
+def parse(magnet_uri):
+    """Return the info hash and announce list of a magnet URI.
 
-    Raise `ValueError` if `magnet` is not a valid magnet link.
+    Raise `ValueError` if `magnet_uri` is not a valid magnet URI.
 
     Specification: [BEP 009]
 
     [BEP 009]: http://www.bittorrent.org/beps/bep_0009.html
     """
-    url = urllib.parse.urlparse(magnet)
+    url = urllib.parse.urlparse(magnet_uri)
     qs = urllib.parse.parse_qs(url.query)
     if url.scheme != "magnet":
         raise ValueError("Invalid scheme.")
@@ -101,9 +101,8 @@ class Root:
 
     The metadata exchange protocol is a mechanism to exchange metadata (i.e.,
     `.torrent` files) with peers. It uses the extension protocol to transmit its
-    messages as part of a BitTorrent connection; see `messages.MetadataMessage`.
-    Therefore the implementation uses the same approach as that of the main
-    protocol.
+    messages as part of a BitTorrent connection. Therefore the implementation
+    uses the same approach as that of the main protocol.
 
     [BEP 0009]: http://bittorrent.org/beps/bep_0009.html
     """

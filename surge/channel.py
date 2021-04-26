@@ -21,5 +21,4 @@ class Channel(asyncio.Queue):
         return item
 
     async def close(self):
-        # TODO: Actually close the channel.
         await self.put(self._sentinel)

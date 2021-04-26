@@ -1,10 +1,11 @@
 """BitTorrent message types and parser.
 
 Every supported message has its own class, with methods `from_bytes` and
-`to_bytes` for (de-)serialization. In order to parse a message of unknown
-type that is not a `Handshake`, use the function `parse`. Handshakes are
-handled by the separate function `parse_handshake` because they are the only
-type of message without length prefix and identifier byte.
+`to_bytes` for (de-)serialization.
+
+Handshakes are special because they are only type of message without length
+prefix and identifier byte; use `parse_handshake` to parse them. All other
+messages are handled by the function `parse`.
 """
 
 from typing import ClassVar, Optional
@@ -188,9 +189,8 @@ class Block:
 
     @classmethod
     def from_bytes(cls, data):
-        # TODO: Don't shadow `data`!
-        _, _, index, begin, data = struct.unpack(f">LBLL{len(data) - 13}s", data)
-        return cls(index, begin, data)
+        _, _, index, begin, data_ = struct.unpack(f">LBLL{len(data) - 13}s", data)
+        return cls(index, begin, data_)
 
     def to_bytes(self):
         n = len(self.data)

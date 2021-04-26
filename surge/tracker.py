@@ -1,7 +1,7 @@
 """Tracker protocol.
 
 This module provides the `request_peers_http` and `request_peers_udp` coroutine
-functions that implement the original tracker protocol over HTTP and its
+functions that implement the original tracker protocol that uses HTTP and its
 UDP-based variant.
 """
 

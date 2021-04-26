@@ -201,7 +201,7 @@ class Root:
             elif url.scheme == "udp":
                 coroutine = tracker.request_peers_udp(self, url, self._parameters)
             else:
-                raise ValueError("Unsupported announce.")
+                raise ValueError("Wrong scheme.")
             self._trackers.add(asyncio.create_task(coroutine))
 
     async def stop(self):
