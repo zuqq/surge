@@ -196,6 +196,8 @@ class Root:
 
     def start(self):
         for url in map(urllib.parse.urlparse, self._announce_list):
+            # Note that `urllib.parse.urlparse` lower-cases the scheme, so
+            # exact comparison is correct here (and elsewhere).
             if url.scheme in ("http", "https"):
                 coroutine = tracker.request_peers_http(self, url, self._parameters)
             elif url.scheme == "udp":
