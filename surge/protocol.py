@@ -3,6 +3,7 @@ import collections
 import contextlib
 import enum
 import functools
+import os
 import random
 
 from . import _metadata
@@ -15,8 +16,12 @@ from .stream import open_stream
 async def print_progress(root):
     """Periodically poll `root` and print the download progress to stdout."""
     total = len(root.pieces)
-    progress_template = "\r\x1b[KDownload progress: {{}}/{} pieces".format(total)
-    connections_template = "({} tracker{}, {} peer{})"
+    progress_template = "Download progress: {{}}/{} pieces".format(total)
+    connections_template = "({} tracker{}, {} peer{})."
+    if os.name != "nt":
+        progress_template = "\r\x1b[K" + progress_template
+    else:
+        connections_template += "\n"
     try:
         while True:
             print(
@@ -27,7 +32,7 @@ async def print_progress(root):
                     root.connected_peers,
                     "s" if root.connected_peers != 1 else "",
                 ),
-                end=".",
+                end="",
                 flush=True,
             )
             await asyncio.sleep(0.5)
