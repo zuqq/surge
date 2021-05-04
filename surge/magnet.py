@@ -190,11 +190,8 @@ async def download_from_peer(root, peer, info_hash, peer_id):
                     ut_metadata = received.ut_metadata
                     metadata_size = received.metadata_size
                     break
-            # The metadata is partitioned into pieces of size `2 ** 14`, except for the
-            # last piece which may be smaller. The peer knows this partition, so we only
-            # need to tell it the indices of the pieces that we want. Because the total
-            # number of pieces is typically very small, a simple stop-and-wait protocol
-            # is fast enough.
+            # Because the number of pieces is small, a simple stop-and-wait
+            # protocol is fast enough.
             piece_length = 2 ** 14
             pieces = []
             for i in range((metadata_size + piece_length - 1) // piece_length):
@@ -202,10 +199,6 @@ async def download_from_peer(root, peer, info_hash, peer_id):
                 while True:
                     received = await asyncio.wait_for(stream.read(), 30)
                     if isinstance(received, messages.MetadataData):
-                        # We assume that the peer sends us data for the piece that we
-                        # just requested; if not, the result of the transaction will be
-                        # invalid. This assumption is reasonable because we request one
-                        # piece at a time.
                         pieces.append(received.data)
                         break
             raw_info = b"".join(pieces)
