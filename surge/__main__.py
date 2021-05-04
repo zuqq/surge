@@ -3,8 +3,6 @@ import asyncio
 import secrets
 import sys
 
-import uvloop
-
 from . import _metadata
 from . import protocol
 
@@ -19,7 +17,13 @@ def main(args):
         for piece in _metadata.yield_available_pieces(metadata.pieces, metadata.files):
             missing_pieces.remove(piece)
 
-    uvloop.install()
+    try:
+        import uvloop
+    except ImportError:
+        pass
+    else:
+        uvloop.install()
+
     asyncio.run(
         protocol.download(metadata, peer_id, missing_pieces, args.peers, args.requests)
     )

@@ -6,9 +6,12 @@ authors = ["zuqq"]
 
 [tool.poetry.dependencies]
 python = "^3.8"
-uvloop = "^0.14.0"
+uvloop = {version = "^0.15.2", optional = true}
 
 [tool.poetry.dev-dependencies]
+
+[tool.poetry.extras]
+uvloop = ["uvloop"]
 
 [build-system]
 requires = ["poetry>=0.12"]

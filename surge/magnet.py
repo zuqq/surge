@@ -5,8 +5,6 @@ import secrets
 import sys
 import urllib.parse
 
-import uvloop
-
 from . import bencoding
 from . import messages
 from . import tracker
@@ -42,7 +40,13 @@ def main(args):
     info_hash, announce_list = parse(args.uri)
     peer_id = secrets.token_bytes(20)
 
-    uvloop.install()
+    try:
+        import uvloop
+    except ImportError:
+        pass
+    else:
+        uvloop.install()
+
     raw_metadata = asyncio.run(download(info_hash, announce_list, peer_id, args.peers))
 
     path = f"{info_hash.hex()}.torrent"

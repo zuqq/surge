@@ -11,20 +11,17 @@ Please note that Surge is download-only for now.
 
 [BitTorrent protocol]: https://en.wikipedia.org/wiki/BitTorrent
 
-## Installation
+## Requirements
 
-Surge requires Python 3.8 with [docopt] and [uvloop]. The recommended way of
-installing these dependencies is to use [Poetry]. Run `poetry install`, which
-reads the dependencies from the provided `pyproject.toml` and installs them in a
-new virtual environment.
+Surge requires Python 3.8. It features optional support for [uvloop], which you
+can via [Poetry] by running `poetry install -E uvloop`.
 
-[docopt]: https://pypi.org/project/docopt/
-[uvloop]: https://pypi.org/project/uvloop/
 [poetry]: https://python-poetry.org/
+[uvloop]: https://pypi.org/project/uvloop/
 
 ## Example
 
-Inside of a `poetry shell`, downloading the latest [Debian release] looks like this:
+Downloading the latest [Debian release] looks like this:
 
 ```bash
 $ python -m surge.magnet 'magnet:?xt=urn:btih:be00b2943b4228bdae969ddae01e89c34932255e&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce'
