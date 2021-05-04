@@ -1,23 +1,10 @@
-"""Download .torrent files from peers.
-
-Usage:
-    magnet.py <URI> [--peers=<peers>]
-    magnet.py (-h | --help)
-
-Options:
-    <URI>             The magnet URI to use.
-    --peers=<peers>   Number of peers to connect to [default: 50].
-    -h, --help        Show this screen.
-
-"""
-
+import argparse
 import asyncio
 import hashlib
 import secrets
 import sys
 import urllib.parse
 
-import docopt
 import uvloop
 
 from . import bencoding
@@ -52,12 +39,11 @@ def parse(magnet_uri):
 
 
 def main(args):
+    info_hash, announce_list = parse(args.uri)
     peer_id = secrets.token_bytes(20)
-    max_peers = int(args["--peers"])
-    info_hash, announce_list = parse(args["<URI>"])
 
     uvloop.install()
-    raw_metadata = asyncio.run(download(info_hash, announce_list, peer_id, max_peers))
+    raw_metadata = asyncio.run(download(info_hash, announce_list, peer_id, args.peers))
 
     path = f"{info_hash.hex()}.torrent"
     with open(path, "wb") as f:
@@ -197,7 +183,16 @@ async def download_from_peer(root, peer, info_hash, peer_id):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Download .torrent files from peers.")
+    parser.add_argument("uri", help="The magnet URI to use.", metavar="<URI>")
+    parser.add_argument(
+        "--peers",
+        help="Number of peers to connect to.",
+        default=50,
+        type=int,
+        metavar="<peers>",
+    )
     try:
-        main(docopt.docopt(__doc__))
+        main(parser.parse_args())
     except KeyboardInterrupt:
         sys.exit(130)
