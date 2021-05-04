@@ -4,7 +4,6 @@ import contextlib
 import enum
 import functools
 import random
-import urllib.parse
 
 from . import _metadata
 from . import messages
@@ -101,11 +100,7 @@ class Root:
         # until the file system has caught up.
         self.results = Channel(max_peers)
 
-        self._announce_list = announce_list
-        self._parameters = tracker.Parameters(info_hash, peer_id)
-        self._trackers = set()
-        self._seen_peers = set()
-        self._new_peers = asyncio.Queue(max_peers)
+        self._tracker_root = tracker.Root(self, announce_list, info_hash, peer_id)
 
         self._stopped = False
         self._nodes = set()
@@ -125,20 +120,20 @@ class Root:
     @property
     def connected_trackers(self):
         """The number of connected trackers."""
-        return len(self._trackers)
+        return self._tracker_root.connected_trackers
 
     @property
     def connected_peers(self):
         """The number of connected peers."""
         return len(self._nodes)
 
-    def _maybe_add_node(self):
+    def maybe_add_node(self):
         if self._stopped:
             return
-        if len(self._nodes) < self.max_peers and self._new_peers.qsize():
+        if len(self._nodes) < self.max_peers and self._tracker_root.new_peers:
             node = Node(
                 self,
-                self._new_peers.get_nowait(),
+                self._tracker_root.get_peer(),
                 self.info_hash,
                 self.peer_id,
                 self.pieces,
@@ -147,16 +142,6 @@ class Root:
             node.start()
             self._nodes.add(node)
             self._node_to_pieces[node] = set()
-
-    async def put_peer(self, peer):
-        if peer in self._seen_peers:
-            return
-        self._seen_peers.add(peer)
-        await self._new_peers.put(peer)
-        self._maybe_add_node()
-
-    def remove_tracker(self, task):
-        self._trackers.remove(task)
 
     def get_piece(self, node, available):
         """Return a piece to download next.
@@ -192,26 +177,15 @@ class Root:
             self._piece_to_nodes[piece].remove(node)
             if not self._piece_to_nodes[piece]:
                 self._piece_to_nodes.pop(piece)
-        self._maybe_add_node()
+        self.maybe_add_node()
 
     def start(self):
-        for url in map(urllib.parse.urlparse, self._announce_list):
-            # Note that `urllib.parse.urlparse` lower-cases the scheme, so
-            # exact comparison is correct here (and elsewhere).
-            if url.scheme in ("http", "https"):
-                coroutine = tracker.request_peers_http(self, url, self._parameters)
-            elif url.scheme == "udp":
-                coroutine = tracker.request_peers_udp(self, url, self._parameters)
-            else:
-                raise ValueError("Wrong scheme.")
-            self._trackers.add(asyncio.create_task(coroutine))
+        self._tracker_root.start()
 
     async def stop(self):
         self._stopped = True
-        for task in self._trackers:
-            task.cancel()
         asyncio.gather(
-            *self._trackers,
+            self._tracker_root.stop(),
             *(node.stop() for node in self._nodes),
             return_exceptions=True,
         )

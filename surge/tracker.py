@@ -21,6 +21,55 @@ import urllib.parse
 from . import bencoding
 
 
+class Root:
+    def __init__(self, root, announce_list, info_hash, peer_id):
+        self.root = root
+        self.announce_list = announce_list
+        self.parameters = Parameters(info_hash, peer_id)
+
+        self._trackers = set()
+        self._seen_peers = set()
+        self._new_peers = asyncio.Queue(len(announce_list))
+
+    @property
+    def connected_trackers(self):
+        return len(self._trackers)
+
+    @property
+    def new_peers(self):
+        return self._new_peers.qsize()
+
+    def get_peer(self):
+        return self._new_peers.get_nowait()
+
+    async def put_peer(self, peer):
+        if peer in self._seen_peers:
+            return
+        self._seen_peers.add(peer)
+        await self._new_peers.put(peer)
+        self.root.maybe_add_node()
+
+    def remove_tracker(self, task):
+        self._trackers.remove(task)
+
+    def start(self):
+        for url in map(urllib.parse.urlparse, self.announce_list):
+            # Note that `urllib.parse.urlparse` lower-cases the scheme, so
+            # exact comparison is correct here (and elsewhere).
+            if url.scheme in ("http", "https"):
+                coroutine = request_peers_http(self, url, self.parameters)
+            elif url.scheme == "udp":
+                coroutine = request_peers_udp(self, url, self.parameters)
+            else:
+                raise ValueError("Wrong scheme.")
+            self._trackers.add(asyncio.create_task(coroutine))
+
+    async def stop(self):
+        for task in self._trackers:
+            task.cancel()
+        asyncio.gather(*self._trackers, return_exceptions=True)
+
+
 @dataclasses.dataclass
 class Parameters:
     info_hash: bytes
