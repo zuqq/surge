@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 import secrets
-import sys
 
 from . import _metadata
 from . import protocol
@@ -51,7 +50,4 @@ if __name__ == "__main__":
         default=50,
         metavar="<requests>",
     )
-    try:
-        main(parser.parse_args())
-    except KeyboardInterrupt:
-        sys.exit(130)
+    main(parser.parse_args())

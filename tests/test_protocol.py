@@ -61,10 +61,8 @@ class TestProtocol(unittest.TestCase):
             metadata = _metadata.Metadata.from_bytes(f.read())
 
         async def _main():
-            tasks = {
-                asyncio.create_task(_tracker.serve_peers_http()),
-                asyncio.create_task(upload(metadata)),
-            }
+            asyncio.create_task(_tracker.serve_peers_http())
+            asyncio.create_task(upload(metadata))
             missing_pieces = set(metadata.pieces)
             root = protocol.Root(
                 metadata.info_hash,
@@ -75,15 +73,9 @@ class TestProtocol(unittest.TestCase):
                 50,
                 50,
             )
-            root.start()
-            try:
-                async for piece, data in root.results:
-                    self.assertTrue(_metadata.valid_piece_data(piece, data))
-                    missing_pieces.remove(piece)
-                self.assertFalse(missing_pieces)
-            finally:
-                for task in tasks:
-                    task.cancel()
-                await asyncio.gather(*tasks, root.stop(), return_exceptions=True)
+            async for piece, data in root.results:
+                self.assertTrue(_metadata.valid_piece_data(piece, data))
+                missing_pieces.remove(piece)
+            self.assertFalse(missing_pieces)
 
         asyncio.run(_main())

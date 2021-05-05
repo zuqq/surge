@@ -2,7 +2,6 @@ import argparse
 import asyncio
 import hashlib
 import secrets
-import sys
 import urllib.parse
 
 from . import bencoding
@@ -57,11 +56,7 @@ def main(args):
 async def download(info_hash, announce_list, peer_id, max_peers):
     """Return the content of the `.torrent` file."""
     root = Root(info_hash, announce_list, peer_id, max_peers)
-    root.start()
-    try:
-        return await root.result
-    finally:
-        await root.stop()
+    return await root.result
 
 
 def valid_raw_info(info_hash, raw_info):
@@ -105,14 +100,13 @@ class Root:
         # Future that will hold the metadata.
         self.result = asyncio.get_event_loop().create_future()
 
-        self._tracker_root = tracker.Root(self, announce_list, info_hash, peer_id)
+        self._tracker_root = tracker.Root(
+            self, announce_list, info_hash, peer_id, max_peers
+        )
 
-        self._stopped = False
         self._nodes = set()
 
     def maybe_add_node(self):
-        if self._stopped:
-            return
         if len(self._nodes) < self.max_peers and self._tracker_root.new_peers:
             self._nodes.add(
                 asyncio.create_task(
@@ -132,17 +126,6 @@ class Root:
     def remove_node(self, task):
         self._nodes.remove(task)
         self.maybe_add_node()
-
-    def start(self):
-        self._tracker_root.start()
-
-    async def stop(self):
-        self._stopped = True
-        for task in self._nodes:
-            task.cancel()
-        await asyncio.gather(
-            self._tracker_root.stop(), *self._nodes, return_exceptions=True
-        )
 
 
 async def download_from_peer(root, peer, info_hash, peer_id):
@@ -196,7 +179,4 @@ if __name__ == "__main__":
         type=int,
         metavar="<peers>",
     )
-    try:
-        main(parser.parse_args())
-    except KeyboardInterrupt:
-        sys.exit(130)
+    main(parser.parse_args())

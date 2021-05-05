@@ -62,7 +62,6 @@ async def download(metadata, peer_id, missing_pieces, max_peers, max_requests):
         max_peers,
         max_requests,
     )
-    root.start()
     printer = asyncio.create_task(print_progress(root))
     try:
         if missing_pieces:
@@ -80,7 +79,8 @@ async def download(metadata, peer_id, missing_pieces, max_peers, max_requests):
                     )
     finally:
         printer.cancel()
-        await asyncio.gather(printer, root.stop(), return_exceptions=True)
+        with contextlib.suppress(asyncio.CancelledError):
+            await printer
 
 
 class Root:
@@ -105,9 +105,10 @@ class Root:
         # until the file system has caught up.
         self.results = Channel(max_peers)
 
-        self._tracker_root = tracker.Root(self, announce_list, info_hash, peer_id)
+        self._tracker_root = tracker.Root(
+            self, announce_list, info_hash, peer_id, max_peers
+        )
 
-        self._stopped = False
         self._nodes = set()
         self._missing_pieces = set(missing_pieces)
         # In endgame mode, multiple `Node`s can be downloading the same piece;
@@ -133,8 +134,6 @@ class Root:
         return len(self._nodes)
 
     def maybe_add_node(self):
-        if self._stopped:
-            return
         if len(self._nodes) < self.max_peers and self._tracker_root.new_peers:
             node = Node(
                 self,
@@ -144,7 +143,6 @@ class Root:
                 self.pieces,
                 self.max_requests,
             )
-            node.start()
             self._nodes.add(node)
             self._node_to_pieces[node] = set()
 
@@ -183,17 +181,6 @@ class Root:
             if not self._piece_to_nodes[piece]:
                 self._piece_to_nodes.pop(piece)
         self.maybe_add_node()
-
-    def start(self):
-        self._tracker_root.start()
-
-    async def stop(self):
-        self._stopped = True
-        asyncio.gather(
-            self._tracker_root.stop(),
-            *(node.stop() for node in self._nodes),
-            return_exceptions=True,
-        )
 
 
 class Progress:
@@ -240,8 +227,7 @@ class Node:
         self._requested = set()
         self._queue = collections.deque()
 
-        # Task running the `_main` coroutine.
-        self._task = None
+        self._task = asyncio.create_task(self._main())
 
     def add_piece(self, piece):
         """Add `piece` to the download queue."""
@@ -362,16 +348,3 @@ class Node:
             pass
         finally:
             self.root.remove_node(self)
-
-    def start(self):
-        if self._task is not None:
-            return
-        self._task = asyncio.create_task(self._main())
-
-    async def stop(self):
-        if (task := self._task) is None:
-            return
-        self._task = None
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task

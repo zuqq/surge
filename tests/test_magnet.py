@@ -91,21 +91,14 @@ class TestMagnet(unittest.TestCase):
         raw_info = bencoding.raw_val(raw_metadata, b"info")
 
         async def _main():
-            tasks = {
-                asyncio.create_task(_tracker.serve_peers_http()),
-                asyncio.create_task(upload(info_hash, raw_info)),
-            }
-            try:
-                raw_metadata_ = await magnet.download(
-                    info_hash,
-                    ["http://127.0.0.1:8080/announce"],
-                    b"\xad6n\x84\xb3a\xa4\xc1\xa1\xde\xd4H\x01J\xc0]\x1b\x88\x92I",
-                    50,
-                )
-                self.assertEqual(_metadata.Metadata.from_bytes(raw_metadata_), metadata)
-            finally:
-                for task in tasks:
-                    task.cancel()
-                await asyncio.gather(*tasks, return_exceptions=True)
+            asyncio.create_task(_tracker.serve_peers_http())
+            asyncio.create_task(upload(info_hash, raw_info))
+            raw_metadata_ = await magnet.download(
+                info_hash,
+                ["http://127.0.0.1:8080/announce"],
+                b"\xad6n\x84\xb3a\xa4\xc1\xa1\xde\xd4H\x01J\xc0]\x1b\x88\x92I",
+                50,
+            )
+            self.assertEqual(_metadata.Metadata.from_bytes(raw_metadata_), metadata)
 
         asyncio.run(_main())
