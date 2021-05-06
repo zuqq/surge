@@ -93,12 +93,12 @@ class TestMagnet(unittest.TestCase):
         async def _main():
             asyncio.create_task(_tracker.serve_peers_http())
             asyncio.create_task(upload(info_hash, raw_info))
-            raw_metadata_ = await magnet.download(
+            actual = await magnet.download(
                 info_hash,
                 ["http://127.0.0.1:8080/announce"],
                 b"\xad6n\x84\xb3a\xa4\xc1\xa1\xde\xd4H\x01J\xc0]\x1b\x88\x92I",
                 50,
             )
-            self.assertEqual(_metadata.Metadata.from_bytes(raw_metadata_), metadata)
+            self.assertEqual(_metadata.Metadata.from_bytes(actual), metadata)
 
         asyncio.run(_main())
