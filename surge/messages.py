@@ -25,8 +25,8 @@ class Handshake:
     peer_id: bytes
 
     @classmethod
-    def from_bytes(cls, data):
-        _, _, reserved, info_hash, peer_id = struct.unpack(">B19sQ20s20s", data)
+    def from_bytes(cls, raw_message):
+        _, _, reserved, info_hash, peer_id = struct.unpack(">B19sQ20s20s", raw_message)
         return cls(reserved, info_hash, peer_id)
 
     def to_bytes(self):
@@ -111,8 +111,8 @@ class Have:
     index: int
 
     @classmethod
-    def from_bytes(cls, data):
-        _, _, index = struct.unpack(">LBL", data)
+    def from_bytes(cls, raw_message):
+        _, _, index = struct.unpack(">LBL", raw_message)
         return cls(index)
 
     def to_bytes(self):
@@ -122,12 +122,12 @@ class Have:
 @dataclasses.dataclass
 class Bitfield:
     value: ClassVar[int] = 5
-    payload: bytes
+    bitfield: bytes
 
     @classmethod
-    def from_bytes(cls, data):
-        _, _, payload = struct.unpack(f">LB{len(data) - 5}s", data)
-        return cls(payload)
+    def from_bytes(cls, raw_message):
+        _, _, bitfield = struct.unpack(f">LB{len(raw_message) - 5}s", raw_message)
+        return cls(bitfield)
 
     @classmethod
     def from_indices(cls, indices, length):
@@ -137,13 +137,13 @@ class Bitfield:
         return cls(bytes(result))
 
     def to_bytes(self):
-        n = len(self.payload)
-        return struct.pack(f">LB{n}s", n + 1, self.value, self.payload)
+        n = len(self.bitfield)
+        return struct.pack(f">LB{n}s", n + 1, self.value, self.bitfield)
 
     def to_indices(self):
         result = set()
         i = 0
-        for b in self.payload:
+        for b in self.bitfield:
             mask = 1 << 7
             while mask:
                 if b & mask:
@@ -166,8 +166,8 @@ class Request:
         return cls(block.piece.index, block.begin, block.length)
 
     @classmethod
-    def from_bytes(cls, data):
-        _, _, index, begin, length = struct.unpack(">LBLLL", data)
+    def from_bytes(cls, raw_message):
+        _, _, index, begin, length = struct.unpack(">LBLLL", raw_message)
         return cls(index, begin, length)
 
     def to_bytes(self):
@@ -184,13 +184,15 @@ class Block:
     data: bytes
 
     @classmethod
-    def from_block(cls, block, data):
-        return cls(block.piece.index, block.begin, data)
+    def from_block(cls, block, raw_message):
+        return cls(block.piece.index, block.begin, raw_message)
 
     @classmethod
-    def from_bytes(cls, data):
-        _, _, index, begin, data_ = struct.unpack(f">LBLL{len(data) - 13}s", data)
-        return cls(index, begin, data_)
+    def from_bytes(cls, raw_message):
+        _, _, index, begin, data = struct.unpack(
+            f">LBLL{len(raw_message) - 13}s", raw_message
+        )
+        return cls(index, begin, data)
 
     def to_bytes(self):
         n = len(self.data)
@@ -212,8 +214,8 @@ class Cancel:
         return cls(block.piece.index, block.begin, block.length)
 
     @classmethod
-    def from_bytes(cls, data):
-        _, _, index, begin, length = struct.unpack(">LBLLL", data)
+    def from_bytes(cls, raw_message):
+        _, _, index, begin, length = struct.unpack(">LBLLL", raw_message)
         return cls(index, begin, length)
 
     def to_bytes(self):
@@ -232,11 +234,11 @@ class ExtensionProtocol:
     value: ClassVar[int] = 20
 
     @classmethod
-    def from_bytes(cls, data):
-        if data[5] == ExtensionHandshake.extension_value:
-            return ExtensionHandshake.from_bytes(data)
-        if data[5] == MetadataProtocol.extension_value:
-            return MetadataProtocol.from_bytes(data)
+    def from_bytes(cls, raw_message):
+        if raw_message[5] == ExtensionHandshake.extension_value:
+            return ExtensionHandshake.from_bytes(raw_message)
+        if raw_message[5] == MetadataProtocol.extension_value:
+            return MetadataProtocol.from_bytes(raw_message)
         raise ValueError("Unknown extension protocol identifier.")
 
 
@@ -257,8 +259,8 @@ class ExtensionHandshake(ExtensionProtocol):
         )
 
     @classmethod
-    def from_bytes(cls, data):
-        d = bencoding.decode(data[6:])
+    def from_bytes(cls, raw_message):
+        d = bencoding.decode(raw_message[6:])
         return cls(d[b"m"][b"ut_metadata"], d.get(b"metadata_size", None))
 
 
@@ -272,8 +274,8 @@ class MetadataProtocol(ExtensionProtocol):
     extension_value: ClassVar[int] = 3
 
     @classmethod
-    def from_bytes(cls, data):
-        i, d = bencoding.decode_from(data, 6)
+    def from_bytes(cls, raw_message):
+        i, d = bencoding.decode_from(raw_message, 6)
         if b"msg_type" not in d:
             raise ValueError("Missing key b'msg_type'.")
         metadata_value = d[b"msg_type"]
@@ -285,7 +287,7 @@ class MetadataProtocol(ExtensionProtocol):
         if metadata_value == MetadataData.metadata_value:
             if b"total_size" not in d:
                 raise ValueError("Missing key b'total_size'.")
-            return MetadataData(index, d[b"total_size"], data[i:])
+            return MetadataData(index, d[b"total_size"], raw_message[i:])
         if metadata_value == MetadataReject.metadata_value:
             return MetadataReject(index)
         raise ValueError("Invalid value for b'msg_type'.")
@@ -377,23 +379,23 @@ MESSAGE_TYPE = {
 }
 
 
-def parse_handshake(data):
+def parse_handshake(raw_message):
     """Parse a BitTorrent handshake."""
-    return Handshake.from_bytes(data)
+    return Handshake.from_bytes(raw_message)
 
 
-def parse(data):
+def parse(raw_message):
     """Parse a BitTorrent message.
 
-    Raise `ValueError` if `data` is not a valid BitTorrent message.
+    Raise `ValueError` if `raw_message` is not a valid BitTorrent message.
     """
-    n = int.from_bytes(data[:4], "big")
-    if len(data) != 4 + n:
+    n = int.from_bytes(raw_message[:4], "big")
+    if len(raw_message) != 4 + n:
         raise ValueError("Incorrect length prefix.")
     try:
-        cls = MESSAGE_TYPE[data[4]]
+        cls = MESSAGE_TYPE[raw_message[4]]
     except IndexError:
         return Keepalive()
     except KeyError as exc:
         raise ValueError("Unknown message identifier.") from exc
-    return cls.from_bytes(data)
+    return cls.from_bytes(raw_message)
