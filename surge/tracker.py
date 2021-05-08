@@ -334,7 +334,7 @@ async def request_peers_udp(root, url, parameters):
                         if time.monotonic() - connection_time >= 60:
                             connected = False
                 else:
-                    raise RuntimeError("Maximal number of retries reached.")
+                    raise ConnectionError("Maximal number of retries reached.")
             for peer in result.peers:
                 await root.put_peer(peer)
             await asyncio.sleep(result.interval)
