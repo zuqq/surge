@@ -44,9 +44,8 @@ def _decode_bytes(bs, start):
 def decode_from(bs, start):
     try:
         token = bs[start]
-    # These are the exceptions that should be raised by `__getitem__`.
-    except (TypeError, IndexError, KeyError) as exc:
-        raise ValueError(bs[start:]) from exc
+    except IndexError:
+        raise ValueError(f"Expected more input at index {start}.")
     if token == ord("i"):
         return _decode_int(bs, start)
     if token == ord("l"):
@@ -55,7 +54,7 @@ def decode_from(bs, start):
         return _decode_dict(bs, start)
     if ord("0") <= token <= ord("9"):
         return _decode_bytes(bs, start)
-    raise ValueError(bs[start:])
+    raise ValueError(f"Unexpected token at index {start}.")
 
 
 def decode(bs):
@@ -66,7 +65,7 @@ def decode(bs):
     start, rval = decode_from(bs, 0)
     if start == len(bs):
         return rval
-    raise ValueError("Too many bytes.")
+    raise ValueError(f"Leftover bytes at index {start}.")
 
 
 def raw_val(bs, key):
@@ -118,7 +117,7 @@ def _encode(obj, buf):
     elif isinstance(obj, bytes):
         _encode_bytes(obj, buf)
     else:
-        raise TypeError(obj)
+        raise TypeError(type(obj))
 
 
 def encode(obj):
