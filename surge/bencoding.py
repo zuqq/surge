@@ -9,8 +9,8 @@ import io
 
 
 def _decode_int(bs, start):
-    # More lenient than the specification in BEP 3: ignores leading zeros
-    # instead of raising an exception.
+    # More lenient than the specification: ignores leading zeros instead of
+    # raising an exception.
     end = bs.index(b"e", start)
     return end + 1, int(bs[start + 1 : end].decode("ascii"))
 
@@ -25,8 +25,8 @@ def _decode_list(bs, start):
 
 
 def _decode_dict(bs, start):
-    # More lenient than the specification in BEP 3: doesn't check that the
-    # dictionary keys are sorted.
+    # More lenient than the specification: doesn't check that the dictionary
+    # keys are sorted.
     result = {}
     start += 1
     while bs[start] != ord("e"):

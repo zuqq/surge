@@ -85,8 +85,7 @@ class Root:
 
     The metadata exchange protocol is a mechanism to exchange metadata (i.e.,
     `.torrent` files) with peers. It uses the extension protocol to transmit its
-    messages as part of a BitTorrent connection. Therefore the implementation
-    uses the same approach as that of the main protocol.
+    messages as part of a BitTorrent connection.
 
     [BEP 0009]: http://bittorrent.org/beps/bep_0009.html
     """
