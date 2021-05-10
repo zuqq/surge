@@ -10,7 +10,7 @@ from surge.stream import Stream
 from . import _tracker
 
 
-async def upload(metadata):
+async def upload(uploader_started, metadata):
     pieces = metadata.pieces
     info_hash = metadata.info_hash
     chunks = _metadata.make_chunks(pieces, metadata.files)
@@ -51,6 +51,7 @@ async def upload(metadata):
 
     server = await asyncio.start_server(_main, "127.0.0.1", 6881)
     async with server:
+        uploader_started.set()
         await server.serve_forever()
 
 
@@ -61,8 +62,11 @@ class TestProtocol(unittest.TestCase):
             metadata = _metadata.Metadata.from_bytes(f.read())
 
         async def _main():
-            asyncio.create_task(_tracker.serve_peers_http())
-            asyncio.create_task(upload(metadata))
+            tracker_started = asyncio.Event()
+            asyncio.create_task(_tracker.serve_peers_http(tracker_started))
+            uploader_started = asyncio.Event()
+            asyncio.create_task(upload(uploader_started, metadata))
+            await asyncio.gather(tracker_started.wait(), uploader_started.wait())
             missing_pieces = set(metadata.pieces)
             root = protocol.Root(
                 metadata.info_hash,

@@ -22,9 +22,10 @@ class HTTPTracker(http.server.BaseHTTPRequestHandler):
         pass
 
 
-async def serve_peers_http():
+async def serve_peers_http(tracker_started):
     with http.server.HTTPServer(("127.0.0.1", 8080), HTTPTracker) as server:
         loop = asyncio.get_running_loop()
+        tracker_started.set()
         try:
             await loop.run_in_executor(None, server.serve_forever)
         finally:

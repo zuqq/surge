@@ -11,7 +11,7 @@ from surge.stream import Stream
 from . import _tracker
 
 
-async def upload(info_hash, raw_info):
+async def upload(uploader_started, info_hash, raw_info):
     extension_protocol = 1 << 20
 
     async def _main(reader, writer):
@@ -52,6 +52,7 @@ async def upload(info_hash, raw_info):
 
     server = await asyncio.start_server(_main, "127.0.0.1", 6881)
     async with server:
+        uploader_started.set()
         await server.serve_forever()
 
 
@@ -91,8 +92,11 @@ class TestMagnet(unittest.TestCase):
         raw_info = bencoding.raw_val(raw_metadata, b"info")
 
         async def _main():
-            asyncio.create_task(_tracker.serve_peers_http())
-            asyncio.create_task(upload(info_hash, raw_info))
+            tracker_started = asyncio.Event()
+            asyncio.create_task(_tracker.serve_peers_http(tracker_started))
+            uploader_started = asyncio.Event()
+            asyncio.create_task(upload(uploader_started, info_hash, raw_info))
+            await asyncio.gather(tracker_started.wait(), uploader_started.wait())
             actual = await magnet.download(
                 info_hash,
                 ["http://127.0.0.1:8080/announce"],
