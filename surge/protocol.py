@@ -106,7 +106,7 @@ class Root:
         self.results = Channel(max_peers)
 
         self._tracker_root = tracker.Root(
-            self, announce_list, info_hash, peer_id, max_peers
+            self, info_hash, peer_id, announce_list, max_peers
         )
 
         self._nodes = set()

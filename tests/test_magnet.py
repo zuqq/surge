@@ -99,8 +99,8 @@ class TestMagnet(unittest.TestCase):
             await asyncio.gather(tracker_started.wait(), uploader_started.wait())
             actual = await magnet.download(
                 info_hash,
-                ["http://127.0.0.1:8080/announce"],
                 b"\xad6n\x84\xb3a\xa4\xc1\xa1\xde\xd4H\x01J\xc0]\x1b\x88\x92I",
+                ["http://127.0.0.1:8080/announce"],
                 50,
             )
             self.assertEqual(_metadata.Metadata.from_bytes(actual), metadata)

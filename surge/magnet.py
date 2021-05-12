@@ -46,16 +46,16 @@ def main(args):
     else:
         uvloop.install()
 
-    raw_metadata = asyncio.run(download(info_hash, announce_list, peer_id, args.peers))
+    raw_metadata = asyncio.run(download(info_hash, peer_id, announce_list, args.peers))
 
     path = f"{info_hash.hex()}.torrent"
     with open(path, "wb") as f:
         f.write(raw_metadata)
 
 
-async def download(info_hash, announce_list, peer_id, max_peers):
+async def download(info_hash, peer_id, announce_list, max_peers):
     """Return the content of the `.torrent` file."""
-    root = Root(info_hash, announce_list, peer_id, max_peers)
+    root = Root(info_hash, peer_id, announce_list, max_peers)
     return await root.result
 
 
@@ -90,7 +90,7 @@ class Root:
     [BEP 0009]: http://bittorrent.org/beps/bep_0009.html
     """
 
-    def __init__(self, info_hash, announce_list, peer_id, max_peers):
+    def __init__(self, info_hash, peer_id, announce_list, max_peers):
         self.info_hash = info_hash
         self.announce_list = announce_list
         self.peer_id = peer_id
@@ -100,7 +100,7 @@ class Root:
         self.result = asyncio.get_event_loop().create_future()
 
         self._tracker_root = tracker.Root(
-            self, announce_list, info_hash, peer_id, max_peers
+            self, info_hash, peer_id, announce_list, max_peers
         )
 
         self._nodes = set()

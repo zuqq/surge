@@ -17,7 +17,7 @@ from . import bencoding
 
 
 class Root:
-    def __init__(self, root, announce_list, info_hash, peer_id, max_peers):
+    def __init__(self, root, info_hash, peer_id, announce_list, max_peers):
         self.root = root
 
         self._trackers = set()
