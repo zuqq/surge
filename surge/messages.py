@@ -184,8 +184,8 @@ class Block:
     data: bytes
 
     @classmethod
-    def from_block(cls, block, raw_message):
-        return cls(block.piece.index, block.begin, raw_message)
+    def from_block(cls, block, data):
+        return cls(block.piece.index, block.begin, data)
 
     @classmethod
     def from_bytes(cls, raw_message):
