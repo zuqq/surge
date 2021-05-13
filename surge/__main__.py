@@ -7,9 +7,9 @@ from . import protocol
 
 
 def main(args):
-    peer_id = secrets.token_bytes(20)
     with open(args.file, "rb") as f:
         metadata = _metadata.Metadata.from_bytes(f.read())
+
     missing_pieces = set(metadata.pieces)
 
     if args.resume:
@@ -24,7 +24,9 @@ def main(args):
         uvloop.install()
 
     asyncio.run(
-        protocol.download(metadata, peer_id, missing_pieces, args.peers, args.requests)
+        protocol.download(
+            metadata, secrets.token_bytes(20), missing_pieces, args.peers, args.requests
+        )
     )
 
 

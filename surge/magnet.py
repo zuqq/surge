@@ -37,7 +37,6 @@ def parse(magnet_uri):
 
 def main(args):
     info_hash, announce_list = parse(args.uri)
-    peer_id = secrets.token_bytes(20)
 
     try:
         import uvloop
@@ -46,10 +45,11 @@ def main(args):
     else:
         uvloop.install()
 
-    raw_metadata = asyncio.run(download(info_hash, peer_id, announce_list, args.peers))
+    raw_metadata = asyncio.run(
+        download(info_hash, secrets.token_bytes(20), announce_list, args.peers)
+    )
 
-    path = f"{info_hash.hex()}.torrent"
-    with open(path, "wb") as f:
+    with open(f"{info_hash.hex()}.torrent", "wb") as f:
         f.write(raw_metadata)
 
 

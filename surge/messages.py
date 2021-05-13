@@ -389,8 +389,7 @@ def parse(raw_message):
 
     Raise `ValueError` if `raw_message` is not a valid BitTorrent message.
     """
-    n = int.from_bytes(raw_message[:4], "big")
-    if len(raw_message) != 4 + n:
+    if len(raw_message) != 4 + int.from_bytes(raw_message[:4], "big"):
         raise ValueError("Incorrect length prefix.")
     try:
         cls = MESSAGE_TYPE[raw_message[4]]
