@@ -136,7 +136,7 @@ async def download_from_peer(root, peer, info_hash, peer_id):
             )
             received = await asyncio.wait_for(stream.read_handshake(), 30)
             if not received.reserved & extension_protocol:
-                raise ConnectionError()("Extension protocol not supported.")
+                raise ConnectionError("Extension protocol not supported.")
             if received.info_hash != info_hash:
                 raise ConnectionError("Wrong 'info_hash'.")
             await stream.write(messages.ExtensionHandshake())
