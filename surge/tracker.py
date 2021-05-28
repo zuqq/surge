@@ -1,5 +1,3 @@
-"""Provides the `Root` class that orchestrates a set of tracker connections."""
-
 from typing import ClassVar, List
 
 import asyncio
@@ -14,48 +12,6 @@ import time
 import urllib.parse
 
 from . import bencoding
-
-
-class Root:
-    def __init__(self, root, info_hash, peer_id, announce_list, max_peers):
-        self.root = root
-
-        self._trackers = set()
-        self._seen_peers = set()
-        self._new_peers = asyncio.Queue(max_peers)
-
-        parameters = Parameters(info_hash, peer_id)
-        for url in map(urllib.parse.urlparse, announce_list):
-            # Note that `urllib.parse.urlparse` lower-cases the scheme, so
-            # exact comparison is correct here (and elsewhere).
-            if url.scheme in ("http", "https"):
-                coroutine = request_peers_http(self, url, parameters)
-            elif url.scheme == "udp":
-                coroutine = request_peers_udp(self, url, parameters)
-            else:
-                raise ValueError("Wrong scheme.")
-            self._trackers.add(asyncio.create_task(coroutine))
-
-    @property
-    def connected_trackers(self):
-        return len(self._trackers)
-
-    @property
-    def new_peers(self):
-        return self._new_peers.qsize()
-
-    def get_peer(self):
-        return self._new_peers.get_nowait()
-
-    async def put_peer(self, peer):
-        if peer in self._seen_peers:
-            return
-        self._seen_peers.add(peer)
-        await self._new_peers.put(peer)
-        self.root.maybe_add_node()
-
-    def remove_tracker(self, task):
-        self._trackers.remove(task)
 
 
 @dataclasses.dataclass
@@ -204,27 +160,20 @@ async def create_udp_tracker_protocol(url):
 
 
 async def request_peers_http(root, url, parameters):
-    try:
-        loop = asyncio.get_running_loop()
-        while True:
-            # I'm running the synchronous HTTP client from the standard library
-            # in a separate thread here because HTTP requests only happen
-            # sporadically and `aiohttp` is a hefty dependency.
-            d = bencoding.decode(
-                await loop.run_in_executor(
-                    None, functools.partial(get, url, parameters)
-                )
-            )
-            if b"failure reason" in d:
-                raise ConnectionError(d[b"failure reason"].decode())
-            result = Result.from_dict(d)
-            for peer in result.peers:
-                await root.put_peer(peer)
-            await asyncio.sleep(result.interval)
-    except Exception:
-        pass
-    finally:
-        root.remove_tracker(asyncio.current_task())
+    loop = asyncio.get_running_loop()
+    while True:
+        # I'm running the synchronous HTTP client from the standard library
+        # in a separate thread here because HTTP requests only happen
+        # sporadically and `aiohttp` is a hefty dependency.
+        d = bencoding.decode(
+            await loop.run_in_executor(None, functools.partial(get, url, parameters))
+        )
+        if b"failure reason" in d:
+            raise ConnectionError(d[b"failure reason"].decode())
+        result = Result.from_dict(d)
+        for peer in result.peers:
+            await root.put_peer(peer)
+        await asyncio.sleep(result.interval)
 
 
 @dataclasses.dataclass
@@ -296,44 +245,88 @@ def parse_udp_message(data):
 
 
 async def request_peers_udp(root, url, parameters):
+    while True:
+        async with create_udp_tracker_protocol(url) as protocol:
+            connected = False
+            for n in range(9):
+                timeout = 15 * 2 ** n
+                if not connected:
+                    transaction_id = secrets.token_bytes(4)
+                    protocol.write(UDPConnectRequest(transaction_id))
+                    try:
+                        received = await asyncio.wait_for(protocol.read(), timeout)
+                    except asyncio.TimeoutError:
+                        continue
+                    if isinstance(received, UDPConnectResponse):
+                        connected = True
+                        connection_id = received.connection_id
+                        connection_time = time.monotonic()
+                if connected:
+                    protocol.write(
+                        UDPAnnounceRequest(transaction_id, connection_id, parameters)
+                    )
+                    try:
+                        received = await asyncio.wait_for(protocol.read(), timeout)
+                    except asyncio.TimeoutError:
+                        continue
+                    if isinstance(received, UDPAnnounceResponse):
+                        result = received.result
+                        break
+                    if time.monotonic() - connection_time >= 60:
+                        connected = False
+            else:
+                raise ConnectionError("Maximal number of retries reached.")
+        for peer in result.peers:
+            await root.put_peer(peer)
+        await asyncio.sleep(result.interval)
+
+
+async def request_peers(root, url, parameters):
     try:
-        while True:
-            async with create_udp_tracker_protocol(url) as protocol:
-                connected = False
-                for n in range(9):
-                    timeout = 15 * 2 ** n
-                    if not connected:
-                        transaction_id = secrets.token_bytes(4)
-                        protocol.write(UDPConnectRequest(transaction_id))
-                        try:
-                            received = await asyncio.wait_for(protocol.read(), timeout)
-                        except asyncio.TimeoutError:
-                            continue
-                        if isinstance(received, UDPConnectResponse):
-                            connected = True
-                            connection_id = received.connection_id
-                            connection_time = time.monotonic()
-                    if connected:
-                        protocol.write(
-                            UDPAnnounceRequest(
-                                transaction_id, connection_id, parameters
-                            )
-                        )
-                        try:
-                            received = await asyncio.wait_for(protocol.read(), timeout)
-                        except asyncio.TimeoutError:
-                            continue
-                        if isinstance(received, UDPAnnounceResponse):
-                            result = received.result
-                            break
-                        if time.monotonic() - connection_time >= 60:
-                            connected = False
-                else:
-                    raise ConnectionError("Maximal number of retries reached.")
-            for peer in result.peers:
-                await root.put_peer(peer)
-            await asyncio.sleep(result.interval)
-    except Exception:
-        pass
+        if url.scheme in ("http", "https"):
+            return await request_peers_http(root, url, parameters)
+        if url.scheme == "udp":
+            return await request_peers_udp(root, url, parameters)
+        raise ValueError("Invalid scheme.")
     finally:
-        root.remove_tracker(asyncio.current_task())
+        root.tracker_disconnected(url)
+
+
+class TrackerMixin:
+    def __init__(self, info_hash, peer_id, announce_list, max_peers):
+        self.announce_list = announce_list
+        self.parameters = Parameters(info_hash, peer_id)
+
+        self._new_peers = asyncio.Queue(max_peers)
+        self._seen_peers = set()
+
+        self._trackers = {}
+
+    @property
+    def connected_trackers(self):
+        """The number of connected trackers."""
+        return len(self._trackers)
+
+    async def get_peer(self):
+        return await self._new_peers.get()
+
+    async def put_peer(self, peer):
+        if peer in self._seen_peers:
+            return
+        self._seen_peers.add(peer)
+        await self._new_peers.put(peer)
+
+    def tracker_disconnected(self, url):
+        self._trackers.pop(url)
+
+    def start(self):
+        for url in map(urllib.parse.urlparse, self.announce_list):
+            self._trackers[url] = asyncio.create_task(
+                request_peers(self, url, self.parameters)
+            )
+
+    async def stop(self):
+        tasks = self._trackers.values()
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)

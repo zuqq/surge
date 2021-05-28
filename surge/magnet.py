@@ -1,3 +1,14 @@
+"""Implementation of the metadata exchange protocol.
+
+Specification: [BEP 0009]
+
+The metadata exchange protocol is a mechanism to exchange metadata (i.e.,
+`.torrent` files) with peers. It uses the extension protocol to transmit its
+messages as part of a BitTorrent connection.
+
+[BEP 0009]: http://bittorrent.org/beps/bep_0009.html
+"""
+
 import argparse
 import asyncio
 import hashlib
@@ -56,7 +67,11 @@ def main(args):
 async def download(info_hash, peer_id, announce_list, max_peers):
     """Return the content of the `.torrent` file."""
     root = Root(info_hash, peer_id, announce_list, max_peers)
-    return await root.result
+    root.start()
+    try:
+        return await root.result
+    finally:
+        await root.stop()
 
 
 def valid_raw_info(info_hash, raw_info):
@@ -78,94 +93,79 @@ def assemble_raw_metadata(announce_list, raw_info):
     )
 
 
-class Root:
-    """Implementation of the metadata exchange protocol.
-
-    Specification: [BEP 0009]
-
-    The metadata exchange protocol is a mechanism to exchange metadata (i.e.,
-    `.torrent` files) with peers. It uses the extension protocol to transmit its
-    messages as part of a BitTorrent connection.
-
-    [BEP 0009]: http://bittorrent.org/beps/bep_0009.html
-    """
-
+class Root(tracker.TrackerMixin):
     def __init__(self, info_hash, peer_id, announce_list, max_peers):
+        super().__init__(info_hash, peer_id, announce_list, max_peers)
+
         self.info_hash = info_hash
-        self.announce_list = announce_list
         self.peer_id = peer_id
         self.max_peers = max_peers
 
-        # Future that will hold the metadata.
         self.result = asyncio.get_event_loop().create_future()
 
-        self._tracker_root = tracker.Root(
-            self, info_hash, peer_id, announce_list, max_peers
-        )
-
-        self._nodes = set()
-
-    def maybe_add_node(self):
-        if len(self._nodes) < self.max_peers and self._tracker_root.new_peers:
-            self._nodes.add(
-                asyncio.create_task(
-                    download_from_peer(
-                        self,
-                        self._tracker_root.get_peer(),
-                        self.info_hash,
-                        self.peer_id,
-                    )
-                )
-            )
+        self._tasks = set()
 
     def put_result(self, raw_info):
         if not self.result.done():
             self.result.set_result(assemble_raw_metadata(self.announce_list, raw_info))
 
-    def remove_node(self, task):
-        self._nodes.remove(task)
-        self.maybe_add_node()
+    def start(self):
+        super().start()
+        for _ in range(self.max_peers):
+            self._tasks.add(
+                asyncio.create_task(
+                    download_from_peer_loop(self, self.info_hash, self.peer_id)
+                )
+            )
+
+    async def stop(self):
+        for task in self._tasks:
+            task.cancel()
+        await asyncio.gather(super().stop(), *self._tasks, return_exceptions=True)
+        self._tasks.clear()
 
 
 async def download_from_peer(root, peer, info_hash, peer_id):
-    try:
-        async with open_stream(peer) as stream:
-            extension_protocol = 1 << 20
-            await stream.write(
-                messages.Handshake(extension_protocol, info_hash, peer_id)
-            )
-            received = await asyncio.wait_for(stream.read_handshake(), 30)
-            if not received.reserved & extension_protocol:
-                raise ConnectionError("Extension protocol not supported.")
-            if received.info_hash != info_hash:
-                raise ConnectionError("Wrong 'info_hash'.")
-            await stream.write(messages.ExtensionHandshake())
+    async with open_stream(peer) as stream:
+        extension_protocol = 1 << 20
+        await stream.write(messages.Handshake(extension_protocol, info_hash, peer_id))
+        received = await asyncio.wait_for(stream.read_handshake(), 30)
+        if not received.reserved & extension_protocol:
+            raise ConnectionError("Extension protocol not supported.")
+        if received.info_hash != info_hash:
+            raise ConnectionError("Wrong 'info_hash'.")
+        await stream.write(messages.ExtensionHandshake())
+        while True:
+            received = await asyncio.wait_for(stream.read(), 30)
+            if isinstance(received, messages.ExtensionHandshake):
+                ut_metadata = received.ut_metadata
+                metadata_size = received.metadata_size
+                break
+        # Because the number of pieces is small, a simple stop-and-wait protocol
+        # is fast enough.
+        piece_length = 2 ** 14
+        pieces = []
+        for i in range((metadata_size + piece_length - 1) // piece_length):
+            await stream.write(messages.MetadataRequest(i, ut_metadata=ut_metadata))
             while True:
                 received = await asyncio.wait_for(stream.read(), 30)
-                if isinstance(received, messages.ExtensionHandshake):
-                    ut_metadata = received.ut_metadata
-                    metadata_size = received.metadata_size
+                if isinstance(received, messages.MetadataData):
+                    pieces.append(received.data)
                     break
-            # Because the number of pieces is small, a simple stop-and-wait
-            # protocol is fast enough.
-            piece_length = 2 ** 14
-            pieces = []
-            for i in range((metadata_size + piece_length - 1) // piece_length):
-                await stream.write(messages.MetadataRequest(i, ut_metadata=ut_metadata))
-                while True:
-                    received = await asyncio.wait_for(stream.read(), 30)
-                    if isinstance(received, messages.MetadataData):
-                        pieces.append(received.data)
-                        break
-            raw_info = b"".join(pieces)
-            if valid_raw_info(info_hash, raw_info):
-                root.put_result(raw_info)
-            else:
-                raise ConnectionError("Invalid data.")
-    except Exception:
-        pass
-    finally:
-        root.remove_node(asyncio.current_task())
+        raw_info = b"".join(pieces)
+        if valid_raw_info(info_hash, raw_info):
+            root.put_result(raw_info)
+        else:
+            raise ConnectionError("Invalid data.")
+
+
+async def download_from_peer_loop(root, info_hash, peer_id):
+    while True:
+        peer = await root.get_peer()
+        try:
+            return await download_from_peer(root, peer, info_hash, peer_id)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

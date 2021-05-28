@@ -1,6 +1,5 @@
 import asyncio
 import collections
-import contextlib
 import enum
 import functools
 import os
@@ -62,6 +61,7 @@ async def download(metadata, peer_id, missing_pieces, max_peers, max_requests):
         max_peers,
         max_requests,
     )
+    root.start()
     printer = asyncio.create_task(print_progress(root))
     try:
         if missing_pieces:
@@ -79,11 +79,10 @@ async def download(metadata, peer_id, missing_pieces, max_peers, max_requests):
                     )
     finally:
         printer.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await printer
+        await asyncio.gather(printer, root.stop(), return_exceptions=True)
 
 
-class Root:
+class Root(tracker.TrackerMixin):
     def __init__(
         self,
         info_hash,
@@ -94,29 +93,21 @@ class Root:
         max_peers,
         max_requests,
     ):
+        super().__init__(info_hash, peer_id, announce_list, max_peers)
+
         self.info_hash = info_hash
         self.peer_id = peer_id
         self.pieces = pieces
         self.max_peers = max_peers
         self.max_requests = max_requests
 
-        # A `Channel` that holds up to `max_peers` downloaded pieces. If the
-        # channel fills up, `Node`s will hold off on downloading more pieces
-        # until the file system has caught up.
         self.results = Channel(max_peers)
 
-        self._tracker_root = tracker.Root(
-            self, info_hash, peer_id, announce_list, max_peers
-        )
-
-        self._nodes = set()
         self._missing_pieces = set(missing_pieces)
-        # In endgame mode, multiple `Node`s can be downloading the same piece;
-        # as soon as one finishes downloading that piece, the other `Node`s
-        # need to be notified. Therefore we keep track of which `Node`s are
-        # downloading any given piece.
-        self._node_to_pieces = {}
-        self._piece_to_nodes = collections.defaultdict(set)
+        self._peer_to_pieces = {}
+        self._piece_to_peers = collections.defaultdict(set)
+
+        self._tasks = set()
 
     @property
     def missing_pieces(self):
@@ -124,63 +115,63 @@ class Root:
         return len(self._missing_pieces)
 
     @property
-    def connected_trackers(self):
-        """The number of connected trackers."""
-        return self._tracker_root.connected_trackers
-
-    @property
     def connected_peers(self):
         """The number of connected peers."""
-        return len(self._nodes)
+        return len(self._peer_to_pieces)
 
-    def maybe_add_node(self):
-        if len(self._nodes) < self.max_peers and self._tracker_root.new_peers:
-            node = Node(
-                self,
-                self._tracker_root.get_peer(),
-                self.info_hash,
-                self.peer_id,
-                self.pieces,
-                self.max_requests,
-            )
-            self._nodes.add(node)
-            self._node_to_pieces[node] = set()
+    def peer_connected(self, peer):
+        self._peer_to_pieces[peer] = set()
 
-    def get_piece(self, node, available):
+    def peer_disconnected(self, peer):
+        for piece in self._peer_to_pieces.pop(peer):
+            self._piece_to_peers[piece].remove(peer)
+            if not self._piece_to_peers[piece]:
+                self._piece_to_peers.pop(piece)
+
+    def get_piece(self, peer, available):
         """Return a piece to download next.
 
         Raise `IndexError` if there are no additional pieces to download.
         """
-        pool = self._missing_pieces & (available - self._node_to_pieces[node])
-        piece = random.choice(tuple(pool - set(self._piece_to_nodes) or pool))
-        self._piece_to_nodes[piece].add(node)
-        self._node_to_pieces[node].add(piece)
+        pool = self._missing_pieces & (available - self._peer_to_pieces[peer])
+        piece = random.choice(tuple(pool - set(self._piece_to_peers) or pool))
+        self._peer_to_pieces[peer].add(piece)
+        self._piece_to_peers[piece].add(peer)
         return piece
 
-    async def put_piece(self, node, piece, data):
-        """Deliver a downloaded piece.
-
-        If any other nodes are in the process of downloading `piece`, those
-        downloads are canceled.
-        """
+    async def put_piece(self, peer, piece, data):
+        """Deliver a downloaded piece."""
         if piece not in self._missing_pieces:
             return
         self._missing_pieces.remove(piece)
-        self._node_to_pieces[node].remove(piece)
-        for other in self._piece_to_nodes.pop(piece) - {node}:
-            self._node_to_pieces[other].remove(piece)
-            other.remove_piece(piece)
+        self._peer_to_pieces[peer].remove(piece)
+        self._piece_to_peers[piece].remove(peer)
+        if not self._piece_to_peers[piece]:
+            self._piece_to_peers.pop(piece)
         await self.results.put((piece, data))
         if not self._missing_pieces:
             await self.results.close()
 
-    def remove_node(self, node):
-        self._nodes.remove(node)
-        for piece in self._node_to_pieces.pop(node):
-            self._piece_to_nodes[piece].remove(node)
-            if not self._piece_to_nodes[piece]:
-                self._piece_to_nodes.pop(piece)
-        self.maybe_add_node()
+    def start(self):
+        super().start()
+        for _ in range(self.max_peers):
+            self._tasks.add(
+                asyncio.create_task(
+                    download_from_peer_loop(
+                        self,
+                        self.info_hash,
+                        self.peer_id,
+                        self.pieces,
+                        self.max_requests,
+                    )
+                )
+            )
+
+    async def stop(self):
+        for task in self._tasks:
+            task.cancel()
+        await asyncio.gather(super().stop(), *self._tasks, return_exceptions=True)
+        self._tasks.clear()
 
 
 class Progress:
@@ -213,21 +204,17 @@ class State(enum.IntEnum):
     PASSIVE = enum.auto()
 
 
-class Node:
-    def __init__(self, root, peer, info_hash, peer_id, pieces, max_requests):
-        self.root = root
+class Queue:
+    """Download queue."""
 
-        self.peer = peer
-        self.info_hash = info_hash
-        self.peer_id = peer_id
-        self.pieces = pieces
-        self.max_requests = max_requests
-
+    def __init__(self):
         self._progress = {}
         self._requested = set()
         self._queue = collections.deque()
 
-        self._task = asyncio.create_task(self._main())
+    @property
+    def requested(self):
+        return len(self._requested)
 
     def add_piece(self, piece):
         """Add `piece` to the download queue."""
@@ -235,17 +222,8 @@ class Node:
         self._progress[piece] = Progress(piece, blocks)
         self._queue.extendleft(blocks)
 
-    def remove_piece(self, piece):
-        """Remove `piece` from the download queue."""
-        self._progress.pop(piece)
-
-        def predicate(block):
-            return block.piece != piece
-
-        self._requested = set(filter(predicate, self._requested))
-        self._queue = collections.deque(filter(predicate, self._queue))
-
-    def _reset_progress(self):
+    def reset_progress(self):
+        """Reset the progress of all pieces in the download queue."""
         in_progress = tuple(self._progress)
         self._progress.clear()
         self._requested.clear()
@@ -253,11 +231,7 @@ class Node:
         for piece in in_progress:
             self.add_piece(piece)
 
-    @property
-    def _can_request(self):
-        return len(self._requested) < self.max_requests
-
-    def _get_block(self):
+    def get_block(self):
         """Return a block to download next.
 
         Raise `IndexError` if the block queue is empty.
@@ -266,7 +240,7 @@ class Node:
         self._requested.add(block)
         return block
 
-    def _put_block(self, block, data):
+    def put_block(self, block, data):
         """Deliver a downloaded block.
 
         Return the piece and its data if this block completes its piece.
@@ -284,67 +258,77 @@ class Node:
             return (piece, data)
         raise ValueError("Invalid data.")
 
-    async def _main(self):
-        try:
-            async with open_stream(self.peer) as stream:
-                await stream.write(messages.Handshake(0, self.info_hash, self.peer_id))
-                received = await asyncio.wait_for(stream.read_handshake(), 30)
-                if received.info_hash != self.info_hash:
-                    raise ValueError("Wrong 'info_hash'.")
-                available = set()
-                # Wait for the peer to tell us which pieces it has. This is not
-                # mandated by the specification, but makes requesting pieces
-                # much easier.
-                while True:
-                    received = await asyncio.wait_for(stream.read(), 30)
-                    if isinstance(received, messages.Have):
-                        available.add(self.pieces[received.index])
-                        break
-                    if isinstance(received, messages.Bitfield):
-                        for i in received.to_indices():
-                            available.add(self.pieces[i])
-                        break
-                state = State.CHOKED
-                while True:
-                    if state is State.CHOKED:
-                        await stream.write(messages.Interested())
-                        state = State.INTERESTED
-                    elif state is State.UNCHOKED and self._can_request:
-                        try:
-                            block = self._get_block()
-                        except IndexError:
-                            try:
-                                piece = self.root.get_piece(self, available)
-                            except IndexError:
-                                state = State.PASSIVE
-                            else:
-                                self.add_piece(piece)
-                        else:
-                            await stream.write(messages.Request.from_block(block))
+
+async def download_from_peer(root, peer, info_hash, peer_id, pieces, max_requests):
+    async with open_stream(peer) as stream:
+        await stream.write(messages.Handshake(0, info_hash, peer_id))
+        received = await asyncio.wait_for(stream.read_handshake(), 30)
+        if received.info_hash != info_hash:
+            raise ValueError("Wrong 'info_hash'.")
+        available = set()
+        # Wait for the peer to tell us which pieces it has. This is not mandated
+        # by the specification, but makes requesting pieces much easier.
+        while True:
+            received = await asyncio.wait_for(stream.read(), 30)
+            if isinstance(received, messages.Have):
+                available.add(pieces[received.index])
+                break
+            if isinstance(received, messages.Bitfield):
+                for i in received.to_indices():
+                    available.add(pieces[i])
+                break
+        state = State.CHOKED
+        queue = Queue()
+        while True:
+            if state is State.CHOKED:
+                await stream.write(messages.Interested())
+                state = State.INTERESTED
+            elif state is State.UNCHOKED and queue.requested < max_requests:
+                try:
+                    block = queue.get_block()
+                except IndexError:
+                    try:
+                        piece = root.get_piece(peer, available)
+                    except IndexError:
+                        state = State.PASSIVE
                     else:
-                        received = await asyncio.wait_for(stream.read(), 30)
-                        if isinstance(received, messages.Choke):
-                            self._reset_progress()
-                            state = State.CHOKED
-                        elif isinstance(received, messages.Unchoke):
-                            if state is not State.PASSIVE:
-                                state = State.UNCHOKED
-                        elif isinstance(received, messages.Have):
-                            available.add(self.pieces[received.index])
-                            if state is State.PASSIVE:
-                                state = State.UNCHOKED
-                        elif isinstance(received, messages.Block):
-                            result = self._put_block(
-                                _metadata.Block(
-                                    self.pieces[received.index],
-                                    received.begin,
-                                    len(received.data),
-                                ),
-                                received.data,
-                            )
-                            if result is not None:
-                                await self.root.put_piece(self, *result)
+                        queue.add_piece(piece)
+                else:
+                    await stream.write(messages.Request.from_block(block))
+            else:
+                received = await asyncio.wait_for(stream.read(), 30)
+                if isinstance(received, messages.Choke):
+                    queue.reset_progress()
+                    state = State.CHOKED
+                elif isinstance(received, messages.Unchoke):
+                    if state is not State.PASSIVE:
+                        state = State.UNCHOKED
+                elif isinstance(received, messages.Have):
+                    available.add(pieces[received.index])
+                    if state is State.PASSIVE:
+                        state = State.UNCHOKED
+                elif isinstance(received, messages.Block):
+                    result = queue.put_block(
+                        _metadata.Block(
+                            pieces[received.index],
+                            received.begin,
+                            len(received.data),
+                        ),
+                        received.data,
+                    )
+                    if result is not None:
+                        await root.put_piece(peer, *result)
+
+
+async def download_from_peer_loop(root, info_hash, peer_id, pieces, max_requests):
+    while True:
+        peer = await root.get_peer()
+        try:
+            root.peer_connected(peer)
+            await download_from_peer(
+                root, peer, info_hash, peer_id, pieces, max_requests
+            )
         except Exception:
             pass
         finally:
-            self.root.remove_node(self)
+            root.peer_disconnected(peer)

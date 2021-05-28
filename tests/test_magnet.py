@@ -93,9 +93,11 @@ class TestMagnet(unittest.TestCase):
 
         async def _main():
             tracker_started = asyncio.Event()
-            asyncio.create_task(_tracker.serve_peers_http(tracker_started))
             uploader_started = asyncio.Event()
-            asyncio.create_task(upload(uploader_started, info_hash, raw_info))
+            tasks = {
+                asyncio.create_task(_tracker.serve_peers_http(tracker_started)),
+                asyncio.create_task(upload(uploader_started, info_hash, raw_info)),
+            }
             await asyncio.gather(tracker_started.wait(), uploader_started.wait())
             actual = await magnet.download(
                 info_hash,
@@ -104,5 +106,8 @@ class TestMagnet(unittest.TestCase):
                 50,
             )
             self.assertEqual(_metadata.Metadata.from_bytes(actual), metadata)
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
         asyncio.run(_main())
