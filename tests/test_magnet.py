@@ -15,40 +15,47 @@ async def upload(uploader_started, info_hash, raw_info):
     extension_protocol = 1 << 20
 
     async def _main(reader, writer):
-        stream = Stream(reader, writer)
-        received = await stream.read_handshake()
-        if not received.reserved & extension_protocol:
-            raise ValueError("Extension protocol not supported.")
-        if received.info_hash != info_hash:
-            raise ValueError("Wrong 'info_hash'.")
-        await stream.write(
-            messages.Handshake(
-                extension_protocol,
-                info_hash,
-                b".\xbb\xde\x16\x08\xb0\xc9NK\x19[E\xf5g\xa9\x84!Z\xe5\x15",
-            )
-        )
-        while True:
-            received = await stream.read()
-            if isinstance(received, messages.ExtensionHandshake):
-                ut_metadata = received.ut_metadata
-                break
-        n = len(raw_info)
-        await stream.write(messages.ExtensionHandshake(metadata_size=n))
-        piece_length = 2 ** 14
-        while True:
-            try:
-                received = await stream.read()
-            except asyncio.IncompleteReadError:
-                break
-            if isinstance(received, messages.MetadataRequest):
-                i = received.index
-                k = i * piece_length
-                await stream.write(
-                    messages.MetadataData(
-                        i, n, raw_info[k : k + piece_length], ut_metadata=ut_metadata
-                    )
+        try:
+            stream = Stream(reader, writer)
+            received = await stream.read_handshake()
+            if not received.reserved & extension_protocol:
+                raise ValueError("Extension protocol not supported.")
+            if received.info_hash != info_hash:
+                raise ValueError("Wrong 'info_hash'.")
+            await stream.write(
+                messages.Handshake(
+                    extension_protocol,
+                    info_hash,
+                    b".\xbb\xde\x16\x08\xb0\xc9NK\x19[E\xf5g\xa9\x84!Z\xe5\x15",
                 )
+            )
+            while True:
+                received = await stream.read()
+                if isinstance(received, messages.ExtensionHandshake):
+                    ut_metadata = received.ut_metadata
+                    break
+            n = len(raw_info)
+            await stream.write(messages.ExtensionHandshake(metadata_size=n))
+            piece_length = 2 ** 14
+            while True:
+                try:
+                    received = await stream.read()
+                except asyncio.IncompleteReadError:
+                    break
+                if isinstance(received, messages.MetadataRequest):
+                    i = received.index
+                    k = i * piece_length
+                    await stream.write(
+                        messages.MetadataData(
+                            i,
+                            n,
+                            raw_info[k : k + piece_length],
+                            ut_metadata=ut_metadata,
+                        )
+                    )
+        finally:
+            writer.close()
+            await writer.wait_closed()
 
     server = await asyncio.start_server(_main, "127.0.0.1", 6881)
     async with server:
