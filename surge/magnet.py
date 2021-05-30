@@ -65,12 +65,17 @@ def assemble_raw_metadata(announce_list, raw_info):
     )
 
 
+# Length of a metadata piece.
+PIECE_LENGTH = 2 ** 14
+
+
 async def download_from_peer(root, peer, info_hash, peer_id):
     async with open_stream(peer) as stream:
-        extension_protocol = 1 << 20
-        await stream.write(messages.Handshake(extension_protocol, info_hash, peer_id))
+        await stream.write(
+            messages.Handshake(messages.EXTENSION_PROTOCOL_BIT, info_hash, peer_id)
+        )
         received = await stream.read_handshake()
-        if not received.reserved & extension_protocol:
+        if not received.reserved & messages.EXTENSION_PROTOCOL_BIT:
             raise ConnectionError("Extension protocol not supported.")
         if received.info_hash != info_hash:
             raise ConnectionError("Wrong 'info_hash'.")
@@ -83,9 +88,8 @@ async def download_from_peer(root, peer, info_hash, peer_id):
                 break
         # Because the number of pieces is small, a simple stop-and-wait protocol
         # is fast enough.
-        piece_length = 2 ** 14
         pieces = []
-        for i in range((metadata_size + piece_length - 1) // piece_length):
+        for i in range((metadata_size + PIECE_LENGTH - 1) // PIECE_LENGTH):
             await stream.write(messages.MetadataRequest(i, ut_metadata=ut_metadata))
             while True:
                 received = await stream.read()

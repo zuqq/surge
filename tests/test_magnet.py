@@ -12,19 +12,17 @@ from . import _tracker
 
 
 async def upload(uploader_started, info_hash, raw_info):
-    extension_protocol = 1 << 20
-
     async def _main(reader, writer):
         try:
             stream = Stream(reader, writer)
             received = await stream.read_handshake()
-            if not received.reserved & extension_protocol:
+            if not received.reserved & messages.EXTENSION_PROTOCOL_BIT:
                 raise ValueError("Extension protocol not supported.")
             if received.info_hash != info_hash:
                 raise ValueError("Wrong 'info_hash'.")
             await stream.write(
                 messages.Handshake(
-                    extension_protocol,
+                    messages.EXTENSION_PROTOCOL_BIT,
                     info_hash,
                     b".\xbb\xde\x16\x08\xb0\xc9NK\x19[E\xf5g\xa9\x84!Z\xe5\x15",
                 )
@@ -36,7 +34,6 @@ async def upload(uploader_started, info_hash, raw_info):
                     break
             n = len(raw_info)
             await stream.write(messages.ExtensionHandshake(metadata_size=n))
-            piece_length = 2 ** 14
             while True:
                 try:
                     received = await stream.read()
@@ -44,12 +41,12 @@ async def upload(uploader_started, info_hash, raw_info):
                     break
                 if isinstance(received, messages.MetadataRequest):
                     i = received.index
-                    k = i * piece_length
+                    k = i * magnet.PIECE_LENGTH
                     await stream.write(
                         messages.MetadataData(
                             i,
                             n,
-                            raw_info[k : k + piece_length],
+                            raw_info[k : k + magnet.PIECE_LENGTH],
                             ut_metadata=ut_metadata,
                         )
                     )

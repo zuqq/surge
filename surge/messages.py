@@ -224,6 +224,9 @@ class Cancel:
         )
 
 
+EXTENSION_PROTOCOL_BIT = 1 << 20
+
+
 @dataclasses.dataclass
 class ExtensionProtocol:
     """Base class for [extension protocol][BEP 0010] messages.
