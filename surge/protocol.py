@@ -262,14 +262,14 @@ class Queue:
 async def download_from_peer(root, peer, info_hash, peer_id, pieces, max_requests):
     async with open_stream(peer) as stream:
         await stream.write(messages.Handshake(0, info_hash, peer_id))
-        received = await asyncio.wait_for(stream.read_handshake(), 30)
+        received = await stream.read_handshake()
         if received.info_hash != info_hash:
             raise ValueError("Wrong 'info_hash'.")
         available = set()
         # Wait for the peer to tell us which pieces it has. This is not mandated
         # by the specification, but makes requesting pieces much easier.
         while True:
-            received = await asyncio.wait_for(stream.read(), 30)
+            received = await stream.read()
             if isinstance(received, messages.Have):
                 available.add(pieces[received.index])
                 break
@@ -296,7 +296,7 @@ async def download_from_peer(root, peer, info_hash, peer_id, pieces, max_request
                 else:
                     await stream.write(messages.Request.from_block(block))
             else:
-                received = await asyncio.wait_for(stream.read(), 30)
+                received = await stream.read()
                 if isinstance(received, messages.Choke):
                     queue.reset_progress()
                     state = State.CHOKED
