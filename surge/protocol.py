@@ -199,6 +199,11 @@ class Root(tracker.TrackerMixin):
 
         self._tasks = set()
 
+        # This check is necessary because `put_piece` is never called if there
+        # are no pieces to download.
+        if not self._missing_pieces:
+            self.results.close_nowait()
+
     @property
     def missing_pieces(self):
         """The number of missing pieces."""
@@ -316,19 +321,15 @@ async def download(metadata, peer_id, missing_pieces, max_peers, max_requests):
     root.start()
     printer = asyncio.create_task(print_progress(root))
     try:
-        if missing_pieces:
-            loop = asyncio.get_running_loop()
-            # Delegate to a thread pool because asyncio has no direct support
-            # for asynchronous file system operations.
-            await loop.run_in_executor(
-                None, functools.partial(build_file_tree, metadata.files)
-            )
-            chunks = _metadata.make_chunks(metadata.pieces, metadata.files)
-            async for piece, data in root.results:
-                for chunk in chunks[piece]:
-                    await loop.run_in_executor(
-                        None, functools.partial(chunk.write, data)
-                    )
+        loop = asyncio.get_running_loop()
+        files = metadata.files
+        # Delegate to a thread pool because asyncio has no direct support for
+        # asynchronous file system operations.
+        await loop.run_in_executor(None, functools.partial(build_file_tree, files))
+        chunks = _metadata.make_chunks(metadata.pieces, files)
+        async for piece, data in root.results:
+            for chunk in chunks[piece]:
+                await loop.run_in_executor(None, functools.partial(chunk.write, data))
     finally:
         printer.cancel()
         await asyncio.gather(printer, root.stop(), return_exceptions=True)
