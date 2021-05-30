@@ -46,34 +46,6 @@ def parse(magnet_uri):
     return info_hash, announce_list
 
 
-def main(args):
-    info_hash, announce_list = parse(args.uri)
-
-    try:
-        import uvloop
-    except ImportError:
-        pass
-    else:
-        uvloop.install()
-
-    raw_metadata = asyncio.run(
-        download(info_hash, secrets.token_bytes(20), announce_list, args.peers)
-    )
-
-    with open(f"{info_hash.hex()}.torrent", "wb") as f:
-        f.write(raw_metadata)
-
-
-async def download(info_hash, peer_id, announce_list, max_peers):
-    """Return the content of the `.torrent` file."""
-    root = Root(info_hash, peer_id, announce_list, max_peers)
-    root.start()
-    try:
-        return await root.result
-    finally:
-        await root.stop()
-
-
 def valid_raw_info(info_hash, raw_info):
     return hashlib.sha1(raw_info).digest() == info_hash
 
@@ -91,38 +63,6 @@ def assemble_raw_metadata(announce_list, raw_info):
             b"e",
         )
     )
-
-
-class Root(tracker.TrackerMixin):
-    def __init__(self, info_hash, peer_id, announce_list, max_peers):
-        super().__init__(info_hash, peer_id, announce_list, max_peers)
-
-        self.info_hash = info_hash
-        self.peer_id = peer_id
-        self.max_peers = max_peers
-
-        self.result = asyncio.get_event_loop().create_future()
-
-        self._tasks = set()
-
-    def put_result(self, raw_info):
-        if not self.result.done():
-            self.result.set_result(assemble_raw_metadata(self.announce_list, raw_info))
-
-    def start(self):
-        super().start()
-        for _ in range(self.max_peers):
-            self._tasks.add(
-                asyncio.create_task(
-                    download_from_peer_loop(self, self.info_hash, self.peer_id)
-                )
-            )
-
-    async def stop(self):
-        for task in self._tasks:
-            task.cancel()
-        await asyncio.gather(super().stop(), *self._tasks, return_exceptions=True)
-        self._tasks.clear()
 
 
 async def download_from_peer(root, peer, info_hash, peer_id):
@@ -166,6 +106,66 @@ async def download_from_peer_loop(root, info_hash, peer_id):
             return await download_from_peer(root, peer, info_hash, peer_id)
         except Exception:
             pass
+
+
+class Root(tracker.TrackerMixin):
+    def __init__(self, info_hash, peer_id, announce_list, max_peers):
+        super().__init__(info_hash, peer_id, announce_list, max_peers)
+
+        self.info_hash = info_hash
+        self.peer_id = peer_id
+        self.max_peers = max_peers
+
+        self.result = asyncio.get_event_loop().create_future()
+
+        self._tasks = set()
+
+    def put_result(self, raw_info):
+        if not self.result.done():
+            self.result.set_result(assemble_raw_metadata(self.announce_list, raw_info))
+
+    def start(self):
+        super().start()
+        for _ in range(self.max_peers):
+            self._tasks.add(
+                asyncio.create_task(
+                    download_from_peer_loop(self, self.info_hash, self.peer_id)
+                )
+            )
+
+    async def stop(self):
+        for task in self._tasks:
+            task.cancel()
+        await asyncio.gather(super().stop(), *self._tasks, return_exceptions=True)
+        self._tasks.clear()
+
+
+async def download(info_hash, peer_id, announce_list, max_peers):
+    """Return the content of the `.torrent` file."""
+    root = Root(info_hash, peer_id, announce_list, max_peers)
+    root.start()
+    try:
+        return await root.result
+    finally:
+        await root.stop()
+
+
+def main(args):
+    info_hash, announce_list = parse(args.uri)
+
+    try:
+        import uvloop
+    except ImportError:
+        pass
+    else:
+        uvloop.install()
+
+    raw_metadata = asyncio.run(
+        download(info_hash, secrets.token_bytes(20), announce_list, args.peers)
+    )
+
+    with open(f"{info_hash.hex()}.torrent", "wb") as f:
+        f.write(raw_metadata)
 
 
 if __name__ == "__main__":
