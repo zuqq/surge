@@ -118,7 +118,6 @@ class Block:
 
 
 def yield_blocks(piece):
-    """Yield `piece`'s blocks."""
     block_length = 2 ** 14
     for begin in range(0, piece.length, block_length):
         yield Block(piece, begin, min(block_length, piece.length - begin))

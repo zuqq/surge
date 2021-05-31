@@ -30,7 +30,7 @@ from .stream import open_stream
 
 
 def parse(magnet_uri):
-    """Return the info hash and announce list of a magnet URI.
+    """Return `(info_hash, announce_list)` of a magnet URI.
 
     Raise `ValueError` if `magnet_uri` is not a valid magnet URI.
 
@@ -49,7 +49,7 @@ def parse(magnet_uri):
         raise ValueError("Invalid value for 'xt'.")
     info_hash = bytes.fromhex(xt[9:])
     if len(info_hash) != 20:
-        raise ValueError("Invalid info hash.")
+        raise ValueError("Invalid value for 'btih'.")
     announce_list = qs.get("tr", [])
     return info_hash, announce_list
 
@@ -153,7 +153,7 @@ class Root(tracker.TrackerMixin):
 
 
 async def download(info_hash, peer_id, announce_list, max_peers):
-    """Return the content of the `.torrent` file."""
+    """Download the `.torrent` file corresponding to `info_hash`."""
     root = Root(info_hash, peer_id, announce_list, max_peers)
     root.start()
     try:

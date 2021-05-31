@@ -13,8 +13,6 @@ from .stream import open_stream
 
 
 class State(enum.IntEnum):
-    """Connection state after handshakes are exchanged."""
-
     CHOKED = enum.auto()
     INTERESTED = enum.auto()
     UNCHOKED = enum.auto()
@@ -23,8 +21,6 @@ class State(enum.IntEnum):
 
 
 class Progress:
-    """A single piece's progress."""
-
     def __init__(self, piece, blocks):
         self._missing_blocks = set(blocks)
         self._data = bytearray(piece.length)
@@ -43,8 +39,6 @@ class Progress:
 
 
 class Queue:
-    """Download queue."""
-
     def __init__(self):
         self._progress = {}
         self._requested = set()
@@ -52,6 +46,7 @@ class Queue:
 
     @property
     def requested(self):
+        """The number of open requests."""
         return len(self._requested)
 
     def add_piece(self, piece):
@@ -270,7 +265,7 @@ class Root(tracker.TrackerMixin):
 
 
 async def print_progress(root):
-    """Periodically poll `root` and print the download progress to stdout."""
+    """Periodically poll `root` and `print` the download progress."""
     total = len(root.pieces)
     progress_template = "Download progress: {{}}/{} pieces".format(total)
     connections_template = "({} tracker{}, {} peer{})."
@@ -294,8 +289,7 @@ async def print_progress(root):
             await asyncio.sleep(0.5)
     except asyncio.CancelledError:
         if not root.missing_pieces:
-            # Print one last time, so that the terminal output reflects the
-            # final state.
+            # Print one last time, so that the output reflects the final state.
             print(progress_template.format(total), end=".\n", flush=True)
         raise
 
@@ -308,7 +302,7 @@ def build_file_tree(files):
 
 
 async def download(metadata, peer_id, missing_pieces, max_peers, max_requests):
-    """Download the torrent represented by `metadata`."""
+    """Download the files represented by `metadata` to the file system."""
     root = Root(
         metadata.info_hash,
         peer_id,
