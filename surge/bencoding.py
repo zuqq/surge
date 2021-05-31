@@ -44,8 +44,8 @@ def _decode_bytes(bs, start):
 def decode_from(bs, start):
     try:
         token = bs[start]
-    except IndexError:
-        raise ValueError(f"Expected more input at index {start}.")
+    except IndexError as exc:
+        raise ValueError(f"Expected more input at index {start}.") from exc
     if token == ord("i"):
         return _decode_int(bs, start)
     if token == ord("l"):
