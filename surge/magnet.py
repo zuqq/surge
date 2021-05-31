@@ -15,6 +15,13 @@ import hashlib
 import secrets
 import urllib.parse
 
+try:
+    import uvloop
+except ImportError:
+    pass
+else:
+    uvloop.install()
+
 from . import bencoding
 from . import messages
 from . import tracker
@@ -156,13 +163,6 @@ async def download(info_hash, peer_id, announce_list, max_peers):
 
 def main(args):
     info_hash, announce_list = parse(args.uri)
-
-    try:
-        import uvloop
-    except ImportError:
-        pass
-    else:
-        uvloop.install()
 
     raw_metadata = asyncio.run(
         download(info_hash, secrets.token_bytes(20), announce_list, args.peers)

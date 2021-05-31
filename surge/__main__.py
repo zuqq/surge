@@ -2,6 +2,13 @@ import argparse
 import asyncio
 import secrets
 
+try:
+    import uvloop
+except ImportError:
+    pass
+else:
+    uvloop.install()
+
 from . import _metadata
 from . import protocol
 
@@ -15,13 +22,6 @@ def main(args):
     if args.resume:
         for piece in _metadata.yield_available_pieces(metadata.pieces, metadata.files):
             missing_pieces.remove(piece)
-
-    try:
-        import uvloop
-    except ImportError:
-        pass
-    else:
-        uvloop.install()
 
     asyncio.run(
         protocol.download(
