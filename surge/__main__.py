@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import secrets
+import sys
 
 try:
     import uvloop
@@ -52,4 +53,7 @@ if __name__ == "__main__":
         default=50,
         metavar="<requests>",
     )
-    main(parser.parse_args())
+    try:
+        main(parser.parse_args())
+    except KeyboardInterrupt:
+        sys.exit(130)

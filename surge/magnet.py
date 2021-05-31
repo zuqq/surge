@@ -13,6 +13,7 @@ import argparse
 import asyncio
 import hashlib
 import secrets
+import sys
 import urllib.parse
 
 try:
@@ -182,4 +183,7 @@ if __name__ == "__main__":
         type=int,
         metavar="<peers>",
     )
-    main(parser.parse_args())
+    try:
+        main(parser.parse_args())
+    except KeyboardInterrupt:
+        sys.exit(130)
