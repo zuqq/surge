@@ -1,8 +1,14 @@
 """Functions for converting to and from BEncoding.
 
-BEncoding is a serialization format defined in the [BitTorrent specification].
+Specification: [BEP 0003]
 
-[BitTorrent specification]: http://bittorrent.org/beps/bep_0003.html
+BEncoding is a serialization format that is used to exchange dictionary-like
+data with peers.
+
+This module provides the functions `decode` and `encode`, as well as the
+lower-level `decode_from` and `raw_val`.
+
+[BEP 0003]: http://bittorrent.org/beps/bep_0003.html
 """
 
 import io

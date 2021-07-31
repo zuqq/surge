@@ -1,11 +1,11 @@
 """BitTorrent message types and parser.
 
-Every supported message has its own class, with methods `from_bytes` and
-`to_bytes` for (de-)serialization.
+Every message type has its own class, with methods `from_bytes` and `to_bytes`
+for (de-)serialization.
 
-Handshakes are special because they are only type of message without length
-prefix and identifier byte; use `parse_handshake` to parse them. All other
-messages are handled by the function `parse`.
+There are two functions for parsing messages: `parse_handshake` handles
+handshakes, which are special because they are the only type of message without
+length prefix and identifier byte; `parse` handles all other types of messages.
 """
 
 from typing import ClassVar, Optional
@@ -14,6 +14,10 @@ import dataclasses
 import struct
 
 from . import bencoding
+
+
+# The bit in `Handshake.reserved` that indicates extension protocol support.
+EXTENSION_PROTOCOL_BIT = 1 << 20
 
 
 @dataclasses.dataclass
@@ -224,9 +228,6 @@ class Cancel:
         )
 
 
-EXTENSION_PROTOCOL_BIT = 1 << 20
-
-
 @dataclasses.dataclass
 class ExtensionProtocol:
     """Base class for [extension protocol][BEP 0010] messages.
@@ -368,7 +369,7 @@ class MetadataReject(MetadataProtocol):
         )
 
 
-MESSAGE_TYPE = {
+_MESSAGE_TYPE = {
     0: Choke,
     1: Unchoke,
     2: Interested,
@@ -395,7 +396,7 @@ def parse(raw_message):
     if len(raw_message) != 4 + int.from_bytes(raw_message[:4], "big"):
         raise ValueError("Incorrect length prefix.")
     try:
-        cls = MESSAGE_TYPE[raw_message[4]]
+        cls = _MESSAGE_TYPE[raw_message[4]]
     except IndexError:
         return Keepalive()
     except KeyError as exc:

@@ -9,10 +9,7 @@ class Channel(asyncio.Queue):
     """
 
     def __init__(self, maxsize=0):
-        # Note that an `asyncio.Queue` with `maxsize <= 0` is unbounded, so we
-        # are still able to close it by enqueuing a sentinel object.
         super().__init__(maxsize)
-
         self._sentinel = object()
 
     def __aiter__(self):

@@ -2,9 +2,11 @@
 
 Specification: [BEP 0009]
 
-The metadata exchange protocol is a mechanism to exchange metadata (i.e.,
+The metadata exchange protocol is a mechanism for exchanging metadata (i.e.,
 `.torrent` files) with peers. It uses the extension protocol to transmit its
 messages as part of a BitTorrent connection.
+
+This module is a command-line application with entry point `main`.
 
 [BEP 0009]: http://bittorrent.org/beps/bep_0009.html
 """
@@ -27,6 +29,10 @@ from . import bencoding
 from . import messages
 from . import tracker
 from .stream import open_stream
+
+
+# Length of a metadata piece.
+PIECE_LENGTH = 2 ** 14
 
 
 def parse(magnet_uri):
@@ -71,10 +77,6 @@ def assemble_raw_metadata(announce_list, raw_info):
             b"e",
         )
     )
-
-
-# Length of a metadata piece.
-PIECE_LENGTH = 2 ** 14
 
 
 async def download_from_peer(root, peer, info_hash, peer_id):

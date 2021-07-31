@@ -2,14 +2,12 @@
 
 Specification: [BEP 0003], [BEP 0012]
 
-A `.torrent` file contains tracker URLs and file metadata. For transmission,
-files are concatenated and split into equally sized pieces; the pieces' SHA-1
-digest is used to verify downloaded data. In order to keep `.torrent` files
-small, pieces are typically relatively large; the actual transmission unit is a
-block consisting of 16 KiB.
+A `.torrent` file contains tracker URLs and file metadata; the method
+`Metadata.from_bytes` parses it into the structured representation that is used
+in the rest of the program.
 
 [BEP 0003]: http://bittorrent.org/beps/bep_0003.html
-[BEP 0012]: http://bittorrent.org/beps/bep_0010.html
+[BEP 0012]: http://bittorrent.org/beps/bep_0012.html
 """
 
 from typing import List

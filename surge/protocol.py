@@ -1,3 +1,12 @@
+"""Implementation of the main protocol.
+
+Specification: [BEP 0003]
+
+Used through the coroutine function `download`.
+
+[BEP 0003]: http://bittorrent.org/beps/bep_0003.html
+"""
+
 import asyncio
 import collections
 import enum

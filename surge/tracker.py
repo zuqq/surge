@@ -1,3 +1,14 @@
+"""Implementation of the tracker protocol.
+
+Specification: [BEP 0003], [BEP 0015]
+
+This module provides implementations of the HTTP and UDP tracker protocols;
+they are exposed via `TrackerMixin`.
+
+[BEP 0003]: http://bittorrent.org/beps/bep_0003.html
+[BEP 0015]: http://bittorrent.org/beps/bep_0015.html
+"""
+
 from typing import ClassVar, List
 
 import asyncio
