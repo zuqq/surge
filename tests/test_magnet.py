@@ -1,5 +1,5 @@
 import asyncio
-import os
+import pathlib
 import unittest
 
 from surge import _metadata
@@ -88,8 +88,7 @@ class TestMagnet(unittest.TestCase):
                     magnet.parse(s)
 
     def test_download(self):
-        os.chdir(os.path.dirname(__file__))
-        with open("example.torrent", "rb") as f:
+        with (pathlib.Path() / "tests" / "example.torrent").open("rb") as f:
             raw_metadata = f.read()
         metadata = _metadata.Metadata.from_bytes(raw_metadata)
         info_hash = metadata.info_hash

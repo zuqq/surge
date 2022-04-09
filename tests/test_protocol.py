@@ -1,5 +1,5 @@
 import asyncio
-import os
+import pathlib
 import unittest
 
 from surge import _metadata
@@ -12,7 +12,7 @@ from surge.stream import Stream
 from . import _tracker
 
 
-async def upload(uploader_started, metadata):
+async def upload(uploader_started, metadata, folder):
     pieces = metadata.pieces
     info_hash = metadata.info_hash
     chunks = _metadata.make_chunks(pieces, metadata.files)
@@ -20,7 +20,7 @@ async def upload(uploader_started, metadata):
     for piece in pieces:
         data = []
         for chunk in chunks[piece]:
-            data.append(chunk.read())
+            data.append(chunk.read(folder))
         store.append(b"".join(data))
 
     async def _main(reader, writer):
@@ -59,16 +59,17 @@ async def upload(uploader_started, metadata):
 
 class TestProtocol(unittest.TestCase):
     def test_download(self):
-        os.chdir(os.path.dirname(__file__))
-        with open("example.torrent", "rb") as f:
-            metadata = _metadata.Metadata.from_bytes(f.read())
+        folder = pathlib.Path() / "tests"
+        with (folder / "example.torrent").open("rb") as f:
+            raw_metadata = f.read()
+        metadata = _metadata.Metadata.from_bytes(raw_metadata)
 
         async def _main():
             tracker_started = asyncio.Event()
             uploader_started = asyncio.Event()
             tasks = {
                 asyncio.create_task(_tracker.serve_peers_http(tracker_started)),
-                asyncio.create_task(upload(uploader_started, metadata)),
+                asyncio.create_task(upload(uploader_started, metadata, folder)),
             }
             await asyncio.gather(tracker_started.wait(), uploader_started.wait())
             info_hash = metadata.info_hash

@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import pathlib
 import secrets
 import sys
 
@@ -17,13 +18,19 @@ from . import protocol
 def main(args):
     with open(args.file, "rb") as f:
         metadata = _metadata.Metadata.from_bytes(f.read())
+    folder = args.output
     missing_pieces = set(metadata.pieces)
     if args.resume:
-        for piece in _metadata.yield_available_pieces(metadata.pieces, metadata.files):
+        for piece in _metadata.yield_available_pieces(metadata.pieces, folder, metadata.files):
             missing_pieces.remove(piece)
     asyncio.run(
         protocol.download(
-            metadata, secrets.token_bytes(20), missing_pieces, args.peers, args.requests
+            metadata,
+            folder,
+            secrets.token_bytes(20),
+            missing_pieces,
+            args.peers,
+            args.requests,
         )
     )
 
@@ -34,6 +41,13 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "file", help="Path to the .torrent file.", metavar="<file-path>"
+    )
+    parser.add_argument(
+        "--output",
+        help="Output folder.",
+        type=pathlib.Path,
+        default=pathlib.Path(),
+        metavar="<output>",
     )
     parser.add_argument("--resume", help="Resume the download.", action="store_true")
     parser.add_argument(

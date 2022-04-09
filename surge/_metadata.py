@@ -25,7 +25,7 @@ class File:
 
     begin: int  # Absolute offset.
     length: int
-    path: pathlib.Path
+    path: pathlib.Path  # Relative path to the file.
 
 
 @dataclasses.dataclass(frozen=True)
@@ -57,15 +57,15 @@ class Chunk:
     begin: int  # Absolute offset.
     length: int
 
-    def read(self):
+    def read(self, folder):
         """Read the chunk's data from the file system."""
-        with self.file.path.open("rb") as f:
+        with (folder / self.file.path).open("rb") as f:
             f.seek(self.begin - self.file.begin)
             return f.read(self.length)
 
-    def write(self, data):
+    def write(self, folder, data):
         """Write the chunk's data to the file system."""
-        with self.file.path.open("rb+") as f:
+        with (folder / self.file.path).open("rb+") as f:
             f.seek(self.begin - self.file.begin)
             begin = self.begin - self.piece.begin
             f.write(data[begin : begin + self.length])
@@ -93,13 +93,13 @@ def make_chunks(pieces, files):
     return result
 
 
-def yield_available_pieces(pieces, files):
+def yield_available_pieces(pieces, folder, files):
     chunks = make_chunks(pieces, files)
     for piece in pieces:
         data = []
         for chunk in chunks[piece]:
             try:
-                data.append(chunk.read())
+                data.append(chunk.read(folder))
             except FileNotFoundError:
                 continue
         if valid_piece_data(piece, b"".join(data)):

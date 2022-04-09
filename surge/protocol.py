@@ -267,14 +267,15 @@ async def print_progress(torrent, trackers):
         raise
 
 
-def build_file_tree(files):
+def build_file_tree(folder, files):
     for file in files:
-        file.path.parent.mkdir(parents=True, exist_ok=True)
-        with file.path.open("a+b") as f:
+        path = folder / file.path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a+b") as f:
             f.truncate(file.length)
 
 
-async def download(metadata, peer_id, missing_pieces, max_peers, max_requests):
+async def download(metadata, folder, peer_id, missing_pieces, max_peers, max_requests):
     """Download the files represented by `metadata` to the file system."""
     info_hash = metadata.info_hash
     async with tracker.Trackers(info_hash, peer_id, metadata.announce_list, max_peers) as trackers:
@@ -301,11 +302,11 @@ async def download(metadata, peer_id, missing_pieces, max_peers, max_requests):
             files = metadata.files
             # Delegate to a thread pool because asyncio has no direct support for
             # asynchronous file system operations.
-            await loop.run_in_executor(None, functools.partial(build_file_tree, files))
+            await loop.run_in_executor(None, functools.partial(build_file_tree, folder, files))
             chunks = _metadata.make_chunks(pieces, files)
             async for piece, data in results:
                 for chunk in chunks[piece]:
-                    await loop.run_in_executor(None, functools.partial(chunk.write, data))
+                    await loop.run_in_executor(None, functools.partial(chunk.write, folder, data))
         finally:
             for task in tasks:
                 task.cancel()
