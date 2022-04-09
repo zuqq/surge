@@ -161,7 +161,7 @@ class Metadata:
             files.append(File(0, length, pathlib.Path(info[b"name"].decode())))
         else:
             # Multiple file mode.
-            length = 0  # Will be computed below.
+            length = 0
             folder = pathlib.Path(info[b"name"].decode())
             for f in info[b"files"]:
                 file = File(
