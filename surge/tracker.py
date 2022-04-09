@@ -303,15 +303,26 @@ async def request_peers(root, url, parameters):
         root.tracker_disconnected(url)
 
 
-class TrackerMixin:
+class Trackers:
     def __init__(self, info_hash, peer_id, announce_list, max_peers):
+        self._new_peers = asyncio.Queue(max_peers)
+        self._seen_peers = set()
+        self._trackers = {}
         self.announce_list = announce_list
         self.parameters = Parameters(info_hash, peer_id)
 
-        self._new_peers = asyncio.Queue(max_peers)
-        self._seen_peers = set()
+    async def __aenter__(self):
+        for url in map(urllib.parse.urlparse, self.announce_list):
+            self._trackers[url] = asyncio.create_task(
+                request_peers(self, url, self.parameters)
+            )
+        return self
 
-        self._trackers = {}
+    async def __aexit__(self, exc_type, exc, tb):
+        tasks = self._trackers.values()
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     @property
     def connected_trackers(self):
@@ -329,15 +340,3 @@ class TrackerMixin:
 
     def tracker_disconnected(self, url):
         self._trackers.pop(url)
-
-    def start(self):
-        for url in map(urllib.parse.urlparse, self.announce_list):
-            self._trackers[url] = asyncio.create_task(
-                request_peers(self, url, self.parameters)
-            )
-
-    async def stop(self):
-        tasks = self._trackers.values()
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)

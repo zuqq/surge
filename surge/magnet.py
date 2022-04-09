@@ -79,7 +79,7 @@ def assemble_raw_metadata(announce_list, raw_info):
     )
 
 
-async def download_from_peer(root, peer, info_hash, peer_id):
+async def download_from_peer(peer, info_hash, peer_id):
     async with open_stream(peer) as stream:
         await stream.write(
             messages.Handshake(messages.EXTENSION_PROTOCOL_BIT, info_hash, peer_id)
@@ -108,69 +108,45 @@ async def download_from_peer(root, peer, info_hash, peer_id):
                     break
         raw_info = b"".join(pieces)
         if valid_raw_info(info_hash, raw_info):
-            root.put_result(raw_info)
-        else:
-            raise ConnectionError("Invalid data.")
+            return raw_info
+        raise ConnectionError("Invalid data.")
 
 
-async def download_from_peer_loop(root, info_hash, peer_id):
+async def download_from_peer_loop(result, trackers, info_hash, peer_id):
     while True:
-        peer = await root.get_peer()
+        peer = await trackers.get_peer()
         try:
-            return await download_from_peer(root, peer, info_hash, peer_id)
+            raw_info = await download_from_peer(peer, info_hash, peer_id)
+            if not result.done():
+                result.set_result(raw_info)
         except Exception:
             pass
 
 
-class Root(tracker.TrackerMixin):
-    def __init__(self, info_hash, peer_id, announce_list, max_peers):
-        super().__init__(info_hash, peer_id, announce_list, max_peers)
-
-        self.info_hash = info_hash
-        self.peer_id = peer_id
-        self.max_peers = max_peers
-
-        self.result = asyncio.get_event_loop().create_future()
-
-        self._tasks = set()
-
-    def put_result(self, raw_info):
-        if not self.result.done():
-            self.result.set_result(assemble_raw_metadata(self.announce_list, raw_info))
-
-    def start(self):
-        super().start()
-        for _ in range(self.max_peers):
-            self._tasks.add(
-                asyncio.create_task(
-                    download_from_peer_loop(self, self.info_hash, self.peer_id)
-                )
-            )
-
-    async def stop(self):
-        for task in self._tasks:
-            task.cancel()
-        await asyncio.gather(super().stop(), *self._tasks, return_exceptions=True)
-        self._tasks.clear()
-
-
 async def download(info_hash, peer_id, announce_list, max_peers):
     """Download the `.torrent` file corresponding to `info_hash`."""
-    root = Root(info_hash, peer_id, announce_list, max_peers)
-    root.start()
-    try:
-        return await root.result
-    finally:
-        await root.stop()
+    async with tracker.Trackers(info_hash, peer_id, announce_list, max_peers) as trackers:
+        result = asyncio.get_event_loop().create_future()
+        tasks = set()
+        for _ in range(max_peers):
+            tasks.add(
+                asyncio.create_task(
+                    download_from_peer_loop(result, trackers, info_hash, peer_id)
+                )
+            )
+        try:
+            return assemble_raw_metadata(announce_list, await result)
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def main(args):
     info_hash, announce_list = parse(args.uri)
-
     raw_metadata = asyncio.run(
         download(info_hash, secrets.token_bytes(20), announce_list, args.peers)
     )
-
     with open(f"{info_hash.hex()}.torrent", "wb") as f:
         f.write(raw_metadata)
 

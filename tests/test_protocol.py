@@ -5,6 +5,8 @@ import unittest
 from surge import _metadata
 from surge import messages
 from surge import protocol
+from surge import tracker
+from surge.channel import Channel
 from surge.stream import Stream
 
 from . import _tracker
@@ -69,23 +71,33 @@ class TestProtocol(unittest.TestCase):
                 asyncio.create_task(upload(uploader_started, metadata)),
             }
             await asyncio.gather(tracker_started.wait(), uploader_started.wait())
-            missing_pieces = set(metadata.pieces)
-            root = protocol.Root(
-                metadata.info_hash,
-                b"\xad6n\x84\xb3a\xa4\xc1\xa1\xde\xd4H\x01J\xc0]\x1b\x88\x92I",
-                metadata.announce_list,
-                metadata.pieces,
-                missing_pieces,
-                50,
-                50,
-            )
-            root.start()
-            async for piece, data in root.results:
-                self.assertTrue(_metadata.valid_piece_data(piece, data))
-                missing_pieces.remove(piece)
-            self.assertFalse(missing_pieces)
+            info_hash = metadata.info_hash
+            peer_id = b"\xad6n\x84\xb3a\xa4\xc1\xa1\xde\xd4H\x01J\xc0]\x1b\x88\x92I"
+            async with tracker.Trackers(info_hash, peer_id, metadata.announce_list, 50) as trackers:
+                pieces = metadata.pieces
+                missing_pieces = set(metadata.pieces)
+                max_peers = 50
+                results = Channel(max_peers)
+                torrent = protocol.Torrent(metadata.pieces, missing_pieces, results)
+                for _ in range(max_peers):
+                    tasks.add(
+                        asyncio.create_task(
+                            protocol.download_from_peer_loop(
+                                torrent,
+                                trackers,
+                                info_hash,
+                                peer_id,
+                                pieces,
+                                50,
+                            )
+                        )
+                    )
+                async for piece, data in results:
+                    self.assertTrue(_metadata.valid_piece_data(piece, data))
+                    missing_pieces.remove(piece)
+                self.assertFalse(missing_pieces)
             for task in tasks:
                 task.cancel()
-            await asyncio.gather(*tasks, root.stop(), return_exceptions=True)
+            await asyncio.gather(*tasks, return_exceptions=True)
 
         asyncio.run(_main())

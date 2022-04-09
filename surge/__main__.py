@@ -17,13 +17,10 @@ from . import protocol
 def main(args):
     with open(args.file, "rb") as f:
         metadata = _metadata.Metadata.from_bytes(f.read())
-
     missing_pieces = set(metadata.pieces)
-
     if args.resume:
         for piece in _metadata.yield_available_pieces(metadata.pieces, metadata.files):
             missing_pieces.remove(piece)
-
     asyncio.run(
         protocol.download(
             metadata, secrets.token_bytes(20), missing_pieces, args.peers, args.requests
