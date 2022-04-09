@@ -117,10 +117,11 @@ async def download_from_peer_loop(result, trackers, info_hash, peer_id):
         peer = await trackers.get_peer()
         try:
             raw_info = await download_from_peer(peer, info_hash, peer_id)
-            if not result.done():
-                result.set_result(raw_info)
         except Exception:
             pass
+        else:
+            if not result.done():
+                result.set_result(raw_info)
 
 
 async def download(info_hash, peer_id, announce_list, max_peers):
@@ -128,14 +129,15 @@ async def download(info_hash, peer_id, announce_list, max_peers):
     async with tracker.Trackers(info_hash, peer_id, announce_list, max_peers) as trackers:
         result = asyncio.get_event_loop().create_future()
         tasks = set()
-        for _ in range(max_peers):
-            tasks.add(
-                asyncio.create_task(
-                    download_from_peer_loop(result, trackers, info_hash, peer_id)
-                )
-            )
         try:
-            return assemble_raw_metadata(announce_list, await result)
+            for _ in range(max_peers):
+                tasks.add(
+                    asyncio.create_task(
+                        download_from_peer_loop(result, trackers, info_hash, peer_id)
+                    )
+                )
+            raw_info = await result
+            return assemble_raw_metadata(announce_list, raw_info)
         finally:
             for task in tasks:
                 task.cancel()

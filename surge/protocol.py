@@ -283,21 +283,21 @@ async def download(metadata, folder, peer_id, missing_pieces, max_peers, max_req
         results = Channel(max_peers)
         torrent = Torrent(pieces, missing_pieces, results)
         tasks = set()
-        for _ in range(max_peers):
-            tasks.add(
-                asyncio.create_task(
-                    download_from_peer_loop(
-                        torrent,
-                        trackers,
-                        info_hash,
-                        peer_id,
-                        pieces,
-                        max_requests,
+        try:
+            for _ in range(max_peers):
+                tasks.add(
+                    asyncio.create_task(
+                        download_from_peer_loop(
+                            torrent,
+                            trackers,
+                            info_hash,
+                            peer_id,
+                            pieces,
+                            max_requests,
+                        )
                     )
                 )
-            )
-        tasks.add(asyncio.create_task(print_progress(torrent, trackers)))
-        try:
+            tasks.add(asyncio.create_task(print_progress(torrent, trackers)))
             loop = asyncio.get_running_loop()
             files = metadata.files
             # Delegate to a thread pool because asyncio has no direct support for
