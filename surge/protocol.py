@@ -242,19 +242,19 @@ async def print_progress(torrent, trackers):
     total = torrent.pieces
     progress_template = "Download progress: {{}}/{} pieces".format(total)
     connections_template = "({} tracker{}, {} peer{})."
-    if os.name != "nt":
-        progress_template = "\r\x1b[K" + progress_template
-    else:
+    if os.name == "nt":
         connections_template += "\n"
+    else:
+        progress_template = "\r\x1b[K" + progress_template
     try:
         while True:
             print(
                 progress_template.format(total - torrent.missing_pieces),
                 connections_template.format(
                     trackers.connected_trackers,
-                    "s" if trackers.connected_trackers != 1 else "",
+                    "" if trackers.connected_trackers == 1 else "s",
                     torrent.connected_peers,
-                    "s" if torrent.connected_peers != 1 else "",
+                    "" if torrent.connected_peers == 1 else "s",
                 ),
                 end="",
                 flush=True,
