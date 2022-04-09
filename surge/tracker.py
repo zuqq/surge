@@ -3,7 +3,7 @@
 Specification: [BEP 0003], [BEP 0015]
 
 This module provides implementations of the HTTP and UDP tracker protocols;
-they are exposed via `TrackerMixin`.
+they are exposed via `Trackers`.
 
 [BEP 0003]: http://bittorrent.org/beps/bep_0003.html
 [BEP 0015]: http://bittorrent.org/beps/bep_0015.html
@@ -305,16 +305,16 @@ async def request_peers(root, url, parameters):
 
 class Trackers:
     def __init__(self, info_hash, peer_id, announce_list, max_peers):
+        self._parameters = Parameters(info_hash, peer_id)
+        self._announce_list = announce_list
         self._new_peers = asyncio.Queue(max_peers)
         self._seen_peers = set()
         self._trackers = {}
-        self.announce_list = announce_list
-        self.parameters = Parameters(info_hash, peer_id)
 
     async def __aenter__(self):
-        for url in map(urllib.parse.urlparse, self.announce_list):
+        for url in map(urllib.parse.urlparse, self._announce_list):
             self._trackers[url] = asyncio.create_task(
-                request_peers(self, url, self.parameters)
+                request_peers(self, url, self._parameters)
             )
         return self
 
