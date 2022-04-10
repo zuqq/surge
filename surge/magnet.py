@@ -27,8 +27,8 @@ else:
 
 from . import bencoding
 from . import messages
-from . import tracker
 from .stream import open_stream
+from .tracker import Trackers
 
 
 # Length of a metadata piece.
@@ -126,7 +126,7 @@ async def download_from_peer_loop(result, trackers, info_hash, peer_id):
 
 async def download(info_hash, peer_id, announce_list, max_peers):
     """Download the `.torrent` file corresponding to `info_hash`."""
-    async with tracker.Trackers(info_hash, peer_id, announce_list, max_peers) as trackers:
+    async with Trackers(info_hash, peer_id, announce_list, max_peers) as trackers:
         result = asyncio.get_event_loop().create_future()
         tasks = set()
         try:

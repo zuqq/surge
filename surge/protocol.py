@@ -16,9 +16,9 @@ import random
 
 from . import _metadata
 from . import messages
-from . import tracker
 from .channel import Channel
 from .stream import open_stream
+from .tracker import Trackers
 
 
 class State(enum.IntEnum):
@@ -278,7 +278,7 @@ def build_file_tree(folder, files):
 async def download(metadata, folder, peer_id, missing_pieces, max_peers, max_requests):
     """Download the files represented by `metadata` to the file system."""
     info_hash = metadata.info_hash
-    async with tracker.Trackers(info_hash, peer_id, metadata.announce_list, max_peers) as trackers:
+    async with Trackers(info_hash, peer_id, metadata.announce_list, max_peers) as trackers:
         pieces = metadata.pieces
         results = Channel(max_peers)
         torrent = Torrent(pieces, missing_pieces, results)

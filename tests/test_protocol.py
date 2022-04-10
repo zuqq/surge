@@ -5,9 +5,9 @@ import unittest
 from surge import _metadata
 from surge import messages
 from surge import protocol
-from surge import tracker
 from surge.channel import Channel
 from surge.stream import Stream
+from surge.tracker import Trackers
 
 from . import _tracker
 
@@ -74,7 +74,7 @@ class TestProtocol(unittest.TestCase):
             await asyncio.gather(tracker_started.wait(), uploader_started.wait())
             info_hash = metadata.info_hash
             peer_id = b"\xad6n\x84\xb3a\xa4\xc1\xa1\xde\xd4H\x01J\xc0]\x1b\x88\x92I"
-            async with tracker.Trackers(info_hash, peer_id, metadata.announce_list, 50) as trackers:
+            async with Trackers(info_hash, peer_id, metadata.announce_list, 50) as trackers:
                 pieces = metadata.pieces
                 missing_pieces = set(metadata.pieces)
                 max_peers = 50
