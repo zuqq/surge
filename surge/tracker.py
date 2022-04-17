@@ -1,12 +1,13 @@
 """Implementation of the tracker protocol.
 
-Specification: [BEP 0003], [BEP 0015]
+Specification: [BEP 0003], [BEP 0015], [BEP 0023]
 
 This module provides implementations of the HTTP and UDP tracker protocols;
 they are exposed via `Trackers`.
 
 [BEP 0003]: http://bittorrent.org/beps/bep_0003.html
 [BEP 0015]: http://bittorrent.org/beps/bep_0015.html
+[BEP 0023]: http://bittorrent.org/beps/bep_0023.html
 """
 
 from typing import ClassVar, List
@@ -35,7 +36,7 @@ class Parameters:
     # This is initialized to 0 because we also need to connect to the tracker
     # before downloading the metadata.
     left: int = 0
-    compact: int = 1  # See BEP 23.
+    compact: int = 1
 
 
 @dataclasses.dataclass(frozen=True)

@@ -141,7 +141,7 @@ class Metadata:
         d = bencoding.decode(raw_metadata)
 
         announce_list = []
-        if b"announce-list" in d:  # See BEP 12.
+        if b"announce-list" in d:
             # I'm ignoring the tiered structure because I'll be requesting peers
             # from every tracker; it's also not supported by magnet links.
             for tier in d[b"announce-list"]:
