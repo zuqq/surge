@@ -89,39 +89,39 @@ def raw_val(bs, key):
     raise KeyError(key)
 
 
-def _encode_int(n, buf):
+def _encode_int(buf, n):
     buf.write(b"i%de" % n)
 
 
-def _encode_list(l, buf):  # noqa: E741
+def _encode_list(buf, l):  # noqa: E741
     buf.write(b"l")
     for obj in l:
-        _encode(obj, buf)
+        _encode(buf, obj)
     buf.write(b"e")
 
 
-def _encode_dict(d, buf):
+def _encode_dict(buf, d):
     buf.write(b"d")
     for key, value in sorted(d.items()):
-        _encode_bytes(key, buf)
-        _encode(value, buf)
+        _encode_bytes(buf, key)
+        _encode(buf, value)
     buf.write(b"e")
 
 
-def _encode_bytes(bs, buf):
+def _encode_bytes(buf, bs):
     buf.write(b"%d:" % len(bs))
     buf.write(bs)
 
 
-def _encode(obj, buf):
+def _encode(buf, obj):
     if isinstance(obj, int):
-        _encode_int(obj, buf)
+        _encode_int(buf, obj)
     elif isinstance(obj, list):
-        _encode_list(obj, buf)
+        _encode_list(buf, obj)
     elif isinstance(obj, dict):
-        _encode_dict(obj, buf)
+        _encode_dict(buf, obj)
     elif isinstance(obj, bytes):
-        _encode_bytes(obj, buf)
+        _encode_bytes(buf, obj)
     else:
         raise TypeError(type(obj))
 
@@ -132,5 +132,5 @@ def encode(obj):
     Raise `TypeError` if `obj` is not representable in BEncoding.
     """
     buf = io.BytesIO()
-    _encode(obj, buf)
+    _encode(buf, obj)
     return buf.getvalue()
