@@ -64,8 +64,7 @@ class TestMagnet(unittest.TestCase):
     def test_parse(self):
         with self.subTest("valid"):
             info_hash, (announce,) = magnet.parse(
-                "magnet:?xt=urn:btih:be00b2943b4228bdae969ddae01e89c34932255e"
-                "&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce"
+                "magnet:?xt=urn:btih:be00b2943b4228bdae969ddae01e89c34932255e&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce"
             )
 
             self.assertEqual(
