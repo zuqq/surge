@@ -12,7 +12,7 @@ class TestMessages(unittest.TestCase):
     )
     bitfield_reference = b"\x00\x00\x00\x02\x05\x80"
     bitfield = messages.Bitfield.from_indices({0}, 1)
-    valid = (
+    valid = [
         (b"\x00\x00\x00\x00", messages.Keepalive()),
         (b"\x00\x00\x00\x01\x00", messages.Choke()),
         (b"\x00\x00\x00\x01\x01", messages.Unchoke()),
@@ -51,7 +51,7 @@ class TestMessages(unittest.TestCase):
             b"\x00\x00\x00\x1b\x14\x03d8:msg_typei0e5:piecei0ee",
             messages.MetadataRequest(0),
         ),
-    )
+    ]
 
     def test_to_bytes(self):
         with self.subTest(self.handshake):
