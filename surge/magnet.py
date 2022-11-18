@@ -32,7 +32,7 @@ from .tracker import Trackers
 
 
 # Length of a metadata piece.
-PIECE_LENGTH = 2 ** 14
+PIECE_LENGTH = 2**14
 
 
 def parse(magnet_uri):
@@ -81,9 +81,7 @@ def assemble_raw_metadata(announce_list, raw_info):
 
 async def download_from_peer(peer, info_hash, peer_id):
     async with open_stream(peer) as stream:
-        await stream.write(
-            messages.Handshake(messages.EXTENSION_PROTOCOL_BIT, info_hash, peer_id)
-        )
+        await stream.write(messages.Handshake(messages.EXTENSION_PROTOCOL_BIT, info_hash, peer_id))
         received = await stream.read_handshake()
         if not received.reserved & messages.EXTENSION_PROTOCOL_BIT:
             raise ConnectionError("Extension protocol not supported.")
@@ -131,11 +129,7 @@ async def download(info_hash, peer_id, announce_list, max_peers):
         tasks = set()
         try:
             for _ in range(max_peers):
-                tasks.add(
-                    asyncio.create_task(
-                        download_from_peer_loop(result, trackers, info_hash, peer_id)
-                    )
-                )
+                tasks.add(asyncio.create_task(download_from_peer_loop(result, trackers, info_hash, peer_id)))
             raw_info = await result
             return assemble_raw_metadata(announce_list, raw_info)
         finally:
@@ -146,9 +140,7 @@ async def download(info_hash, peer_id, announce_list, max_peers):
 
 def main(args):
     info_hash, announce_list = parse(args.uri)
-    raw_metadata = asyncio.run(
-        download(info_hash, secrets.token_bytes(20), announce_list, args.peers)
-    )
+    raw_metadata = asyncio.run(download(info_hash, secrets.token_bytes(20), announce_list, args.peers))
     with open(f"{info_hash.hex()}.torrent", "wb") as f:
         f.write(raw_metadata)
 
@@ -156,13 +148,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Download .torrent files from peers.")
     parser.add_argument("uri", help="The magnet URI to use.", metavar="<URI>")
-    parser.add_argument(
-        "--peers",
-        help="Number of peers to connect to.",
-        default=50,
-        type=int,
-        metavar="<peers>",
-    )
+    parser.add_argument("--peers", help="Number of peers to connect to.", default=50, type=int, metavar="<peers>")
     try:
         main(parser.parse_args())
     except KeyboardInterrupt:

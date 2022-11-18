@@ -162,9 +162,8 @@ class UDPTrackerProtocol(asyncio.DatagramProtocol):
 
 @contextlib.asynccontextmanager
 async def create_udp_tracker_protocol(url):
-    _, protocol = await asyncio.get_running_loop().create_datagram_endpoint(
-        functools.partial(UDPTrackerProtocol), remote_addr=(url.hostname, url.port)
-    )
+    loop = asyncio.get_running_loop()
+    _, protocol = await loop.create_datagram_endpoint(UDPTrackerProtocol, remote_addr=(url.hostname, url.port))
     try:
         yield protocol
     finally:
@@ -177,9 +176,7 @@ async def request_peers_http(root, url, parameters):
         # I'm running the synchronous HTTP client from the standard library
         # in a separate thread here because HTTP requests only happen
         # sporadically and `aiohttp` is a hefty dependency.
-        d = bencoding.decode(
-            await loop.run_in_executor(None, functools.partial(get, url, parameters))
-        )
+        d = bencoding.decode(await loop.run_in_executor(None, functools.partial(get, url, parameters)))
         if b"failure reason" in d:
             raise ConnectionError(d[b"failure reason"].decode())
         result = Result.from_dict(d)
@@ -261,7 +258,7 @@ async def request_peers_udp(root, url, parameters):
         async with create_udp_tracker_protocol(url) as protocol:
             connected = False
             for n in range(9):
-                timeout = 15 * 2 ** n
+                timeout = 15 * 2**n
                 if not connected:
                     transaction_id = secrets.token_bytes(4)
                     protocol.write(UDPConnectRequest(transaction_id))
@@ -274,9 +271,7 @@ async def request_peers_udp(root, url, parameters):
                         connection_id = received.connection_id
                         connection_time = time.monotonic()
                 if connected:
-                    protocol.write(
-                        UDPAnnounceRequest(transaction_id, connection_id, parameters)
-                    )
+                    protocol.write(UDPAnnounceRequest(transaction_id, connection_id, parameters))
                     try:
                         received = await asyncio.wait_for(protocol.read(), timeout)
                     except asyncio.TimeoutError:
@@ -314,9 +309,7 @@ class Trackers:
 
     async def __aenter__(self):
         for url in map(urllib.parse.urlparse, self._announce_list):
-            self._trackers[url] = asyncio.create_task(
-                request_peers(self, url, self._parameters)
-            )
+            self._trackers[url] = asyncio.create_task(request_peers(self, url, self._parameters))
         return self
 
     async def __aexit__(self, exc_type, exc, tb):

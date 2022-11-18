@@ -36,34 +36,12 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Download files from the BitTorrent network."
-    )
-    parser.add_argument(
-        "file", help="Path to the .torrent file.", metavar="<file-path>"
-    )
-    parser.add_argument(
-        "--output",
-        help="Output folder.",
-        type=pathlib.Path,
-        default=pathlib.Path(),
-        metavar="<output>",
-    )
+    parser = argparse.ArgumentParser(description="Download files from the BitTorrent network.")
+    parser.add_argument("file", help="Path to the .torrent file.", metavar="<file-path>")
+    parser.add_argument("--output", help="Output folder.", type=pathlib.Path, default=pathlib.Path(), metavar="<output>")
     parser.add_argument("--resume", help="Resume the download.", action="store_true")
-    parser.add_argument(
-        "--peers",
-        help="Number of peers to connect to.",
-        type=int,
-        default=50,
-        metavar="<peers>",
-    )
-    parser.add_argument(
-        "--requests",
-        help="Number of open requests per peer.",
-        type=int,
-        default=50,
-        metavar="<requests>",
-    )
+    parser.add_argument("--peers", help="Number of peers to connect to.", type=int, default=50, metavar="<peers>")
+    parser.add_argument("--requests", help="Number of open requests per peer.", type=int, default=50, metavar="<requests>")
     try:
         main(parser.parse_args())
     except KeyboardInterrupt:

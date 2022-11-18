@@ -150,14 +150,7 @@ async def download_from_peer(torrent, peer, info_hash, peer_id, pieces, max_requ
                     if state is State.PASSIVE:
                         state = State.UNCHOKED
                 elif isinstance(received, messages.Block):
-                    result = queue.put_block(
-                        _metadata.Block(
-                            pieces[received.index],
-                            received.begin,
-                            len(received.data),
-                        ),
-                        received.data,
-                    )
+                    result = queue.put_block(_metadata.Block(pieces[received.index], received.begin, len(received.data)), received.data)
                     if result is not None:
                         await torrent.put_piece(peer, *result)
 
@@ -167,9 +160,7 @@ async def download_from_peer_loop(torrent, trackers, info_hash, peer_id, pieces,
         peer = await trackers.get_peer()
         try:
             torrent.peer_connected(peer)
-            await download_from_peer(
-                torrent, peer, info_hash, peer_id, pieces, max_requests
-            )
+            await download_from_peer(torrent, peer, info_hash, peer_id, pieces, max_requests)
         except Exception:
             pass
         finally:
@@ -285,18 +276,7 @@ async def download(metadata, folder, peer_id, missing_pieces, max_peers, max_req
         tasks = set()
         try:
             for _ in range(max_peers):
-                tasks.add(
-                    asyncio.create_task(
-                        download_from_peer_loop(
-                            torrent,
-                            trackers,
-                            info_hash,
-                            peer_id,
-                            pieces,
-                            max_requests,
-                        )
-                    )
-                )
+                tasks.add(asyncio.create_task(download_from_peer_loop(torrent, trackers, info_hash, peer_id, pieces, max_requests)))
             tasks.add(asyncio.create_task(print_progress(torrent, trackers)))
             loop = asyncio.get_running_loop()
             files = metadata.files

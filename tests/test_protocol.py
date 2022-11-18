@@ -21,13 +21,7 @@ async def upload(uploader_started, metadata, store):
         received = await stream.read_handshake()
         if received.info_hash != info_hash:
             raise ValueError("Wrong 'info_hash'.")
-        await stream.write(
-            messages.Handshake(
-                0,
-                info_hash,
-                b".\xbb\xde\x16\x08\xb0\xc9NK\x19[E\xf5g\xa9\x84!Z\xe5\x15",
-            )
-        )
+        await stream.write(messages.Handshake(0, info_hash, b".\xbb\xde\x16\x08\xb0\xc9NK\x19[E\xf5g\xa9\x84!Z\xe5\x15"))
         n = len(pieces)
         await stream.write(messages.Bitfield.from_indices(range(n), n))
         while True:
@@ -40,9 +34,7 @@ async def upload(uploader_started, metadata, store):
             elif isinstance(received, messages.Request):
                 i = received.index
                 k = received.begin
-                await stream.write(
-                    messages.Block(i, k, store[i][k : k + received.length])
-                )
+                await stream.write(messages.Block(i, k, store[i][k : k + received.length]))
 
     server = await asyncio.start_server(_main, "127.0.0.1", 6881)
     async with server:
@@ -81,18 +73,7 @@ class TestProtocol(unittest.TestCase):
                 results = Channel(max_peers)
                 torrent = protocol.Torrent(pieces, missing_pieces, results)
                 for _ in range(max_peers):
-                    tasks.add(
-                        asyncio.create_task(
-                            protocol.download_from_peer_loop(
-                                torrent,
-                                trackers,
-                                info_hash,
-                                peer_id,
-                                pieces,
-                                50,
-                            )
-                        )
-                    )
+                    tasks.add(asyncio.create_task(protocol.download_from_peer_loop(torrent, trackers, info_hash, peer_id, pieces, 50)))
                 async for piece, data in results:
                     self.assertTrue(_metadata.valid_piece_data(piece, data))
                     missing_pieces.remove(piece)

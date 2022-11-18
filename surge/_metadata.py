@@ -116,7 +116,7 @@ class Block:
 
 
 def yield_blocks(piece):
-    block_length = 2 ** 14
+    block_length = 2**14
     for begin in range(0, piece.length, block_length):
         yield Block(piece, begin, min(block_length, piece.length - begin))
 
@@ -162,11 +162,7 @@ class Metadata:
             length = 0
             folder = pathlib.Path(info[b"name"].decode())
             for f in info[b"files"]:
-                file = File(
-                    length,
-                    f[b"length"],
-                    folder.joinpath(*(part.decode() for part in f[b"path"])),
-                )
+                file = File(length, f[b"length"], folder.joinpath(*(part.decode() for part in f[b"path"])))
                 files.append(file)
                 length += file.length
 
@@ -181,9 +177,4 @@ class Metadata:
             i += 1
             begin = end
 
-        return cls(
-            hashlib.sha1(bencoding.raw_val(raw_metadata, b"info")).digest(),
-            announce_list,
-            pieces,
-            files,
-        )
+        return cls(hashlib.sha1(bencoding.raw_val(raw_metadata, b"info")).digest(), announce_list, pieces, files)
