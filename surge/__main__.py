@@ -23,16 +23,8 @@ def main(args):
     if args.resume:
         for piece in _metadata.yield_available_pieces(metadata.pieces, folder, metadata.files):
             missing_pieces.remove(piece)
-    asyncio.run(
-        protocol.download(
-            metadata,
-            folder,
-            secrets.token_bytes(20),
-            missing_pieces,
-            args.peers,
-            args.requests,
-        )
-    )
+    peer_id = secrets.token_bytes(20)
+    asyncio.run(protocol.download(metadata, folder, peer_id, missing_pieces, args.peers, args.requests))
 
 
 if __name__ == "__main__":

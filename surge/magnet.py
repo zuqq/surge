@@ -140,7 +140,8 @@ async def download(info_hash, peer_id, announce_list, max_peers):
 
 def main(args):
     info_hash, announce_list = parse(args.uri)
-    raw_metadata = asyncio.run(download(info_hash, secrets.token_bytes(20), announce_list, args.peers))
+    peer_id = secrets.token_bytes(20)
+    raw_metadata = asyncio.run(download(info_hash, peer_id, announce_list, args.peers))
     with open(f"{info_hash.hex()}.torrent", "wb") as f:
         f.write(raw_metadata)
 

@@ -12,6 +12,8 @@ from . import _tracker
 
 
 async def upload(uploader_started, info_hash, raw_info):
+    peer_id = b".\xbb\xde\x16\x08\xb0\xc9NK\x19[E\xf5g\xa9\x84!Z\xe5\x15"
+
     async def _main(reader, writer):
         try:
             stream = Stream(reader, writer)
@@ -20,7 +22,7 @@ async def upload(uploader_started, info_hash, raw_info):
                 raise ValueError("Extension protocol not supported.")
             if received.info_hash != info_hash:
                 raise ValueError("Wrong 'info_hash'.")
-            await stream.write(messages.Handshake(messages.EXTENSION_PROTOCOL_BIT, info_hash, b".\xbb\xde\x16\x08\xb0\xc9NK\x19[E\xf5g\xa9\x84!Z\xe5\x15"))
+            await stream.write(messages.Handshake(messages.EXTENSION_PROTOCOL_BIT, info_hash, peer_id))
             while True:
                 received = await stream.read()
                 if isinstance(received, messages.ExtensionHandshake):
@@ -36,7 +38,8 @@ async def upload(uploader_started, info_hash, raw_info):
                 if isinstance(received, messages.MetadataRequest):
                     i = received.index
                     k = i * magnet.PIECE_LENGTH
-                    await stream.write(messages.MetadataData(i, n, raw_info[k : k + magnet.PIECE_LENGTH], ut_metadata=ut_metadata))
+                    data = raw_info[k : k + magnet.PIECE_LENGTH]
+                    await stream.write(messages.MetadataData(i, n, data, ut_metadata=ut_metadata))
         finally:
             writer.close()
             await writer.wait_closed()
@@ -73,6 +76,9 @@ class TestMagnet(unittest.TestCase):
         metadata = _metadata.Metadata.from_bytes(raw_metadata)
         info_hash = metadata.info_hash
         raw_info = bencoding.raw_val(raw_metadata, b"info")
+        peer_id = b"\xad6n\x84\xb3a\xa4\xc1\xa1\xde\xd4H\x01J\xc0]\x1b\x88\x92I"
+        announce_list = ["http://127.0.0.1:8080/announce"]
+        max_peers = 50
 
         async def _main():
             tracker_started = asyncio.Event()
@@ -82,12 +88,7 @@ class TestMagnet(unittest.TestCase):
                 asyncio.create_task(upload(uploader_started, info_hash, raw_info)),
             }
             await asyncio.gather(tracker_started.wait(), uploader_started.wait())
-            actual = await magnet.download(
-                info_hash,
-                b"\xad6n\x84\xb3a\xa4\xc1\xa1\xde\xd4H\x01J\xc0]\x1b\x88\x92I",
-                ["http://127.0.0.1:8080/announce"],
-                50,
-            )
+            actual = await magnet.download(info_hash, peer_id, announce_list, max_peers)
             self.assertEqual(_metadata.Metadata.from_bytes(actual), metadata)
             for task in tasks:
                 task.cancel()
