@@ -67,13 +67,13 @@ class TestProtocol(unittest.TestCase):
             await asyncio.gather(tracker_started.wait(), uploader_started.wait())
             info_hash = metadata.info_hash
             peer_id = b"\xad6n\x84\xb3a\xa4\xc1\xa1\xde\xd4H\x01J\xc0]\x1b\x88\x92I"
-            async with Trackers(info_hash, peer_id, metadata.announce_list, 50) as trackers:
+            max_peers = 50
+            async with Trackers(info_hash, peer_id, metadata.announce_list, max_peers) as trackers:
                 missing_pieces = set(pieces)
-                max_peers = 50
                 results = Channel(max_peers)
                 torrent = protocol.Torrent(pieces, missing_pieces, results)
                 for _ in range(max_peers):
-                    tasks.add(asyncio.create_task(protocol.download_from_peer_loop(torrent, trackers, info_hash, peer_id, pieces, 50)))
+                    tasks.add(asyncio.create_task(protocol.download_from_peer_loop(torrent, trackers, info_hash, peer_id, pieces, max_peers)))
                 async for piece, data in results:
                     self.assertTrue(_metadata.valid_piece_data(piece, data))
                     missing_pieces.remove(piece)
