@@ -29,7 +29,7 @@ before trying out the example.
 
 Downloading the latest [Debian release] looks like this:
 
-```bash
+```console
 $ python -m surge.magnet 'magnet:?xt=urn:btih:be00b2943b4228bdae969ddae01e89c34932255e&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce'
 $ python -m surge be00b2943b4228bdae969ddae01e89c34932255e.torrent
 Download progress: 1396/1396 pieces.
