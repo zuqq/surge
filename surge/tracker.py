@@ -191,7 +191,12 @@ class UDPConnectRequest:
     transaction_id: bytes
 
     def to_bytes(self):
-        return struct.pack(">ql4s", 0x41727101980, self.value, self.transaction_id)
+        return struct.pack(
+            ">ql4s",
+            0x41727101980,
+            self.value,
+            self.transaction_id,
+        )
 
 
 @dataclasses.dataclass

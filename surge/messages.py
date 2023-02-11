@@ -34,14 +34,7 @@ class Handshake:
         return cls(reserved, info_hash, peer_id)
 
     def to_bytes(self):
-        return struct.pack(
-            ">B19sQ20s20s",
-            self.pstrlen,
-            self.pstr,
-            self.reserved,
-            self.info_hash,
-            self.peer_id,
-        )
+        return struct.pack(">B19sQ20s20s", self.pstrlen, self.pstr, self.reserved, self.info_hash, self.peer_id)
 
 
 @dataclasses.dataclass
