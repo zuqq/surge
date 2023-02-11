@@ -2,14 +2,14 @@ import asyncio
 import pathlib
 import unittest
 
-from surge import _metadata
+from surge.metadata import Metadata, make_chunks, valid_piece_data
 from surge import messages
-from surge import protocol
+from surge.protocol import Torrent, download_from_peer_loop
 from surge.channel import Channel
 from surge.stream import Stream
 from surge.tracker import Trackers
 
-from . import _tracker
+from .tracker import serve_peers_http
 
 
 async def upload(uploader_started, metadata, store):
@@ -47,9 +47,9 @@ class TestProtocol(unittest.TestCase):
         folder = pathlib.Path() / "tests"
         with (folder / "example.torrent").open("rb") as f:
             raw_metadata = f.read()
-        metadata = _metadata.Metadata.from_bytes(raw_metadata)
+        metadata = Metadata.from_bytes(raw_metadata)
         pieces = metadata.pieces
-        chunks = _metadata.make_chunks(pieces, metadata.files)
+        chunks = make_chunks(pieces, metadata.files)
         store = []
         for piece in pieces:
             data = []
@@ -61,7 +61,7 @@ class TestProtocol(unittest.TestCase):
             tracker_started = asyncio.Event()
             uploader_started = asyncio.Event()
             tasks = {
-                asyncio.create_task(_tracker.serve_peers_http(tracker_started)),
+                asyncio.create_task(serve_peers_http(tracker_started)),
                 asyncio.create_task(upload(uploader_started, metadata, store)),
             }
             await asyncio.gather(tracker_started.wait(), uploader_started.wait())
@@ -71,11 +71,11 @@ class TestProtocol(unittest.TestCase):
             async with Trackers(info_hash, peer_id, metadata.announce_list, max_peers) as trackers:
                 missing_pieces = set(pieces)
                 results = Channel(max_peers)
-                torrent = protocol.Torrent(pieces, missing_pieces, results)
+                torrent = Torrent(pieces, missing_pieces, results)
                 for _ in range(max_peers):
-                    tasks.add(asyncio.create_task(protocol.download_from_peer_loop(torrent, trackers, info_hash, peer_id, pieces, max_peers)))
+                    tasks.add(asyncio.create_task(download_from_peer_loop(torrent, trackers, info_hash, peer_id, pieces, max_peers)))
                 async for piece, data in results:
-                    self.assertTrue(_metadata.valid_piece_data(piece, data))
+                    self.assertTrue(valid_piece_data(piece, data))
                     missing_pieces.remove(piece)
                 self.assertFalse(missing_pieces)
             for task in tasks:

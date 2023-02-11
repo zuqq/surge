@@ -2,13 +2,13 @@ import asyncio
 import pathlib
 import unittest
 
-from surge import _metadata
+from surge.metadata import Metadata
 from surge import bencoding
 from surge import magnet
 from surge import messages
 from surge.stream import Stream
 
-from . import _tracker
+from .tracker import serve_peers_http
 
 
 async def upload(uploader_started, info_hash, raw_info):
@@ -73,7 +73,7 @@ class TestMagnet(unittest.TestCase):
     def test_download(self):
         with (pathlib.Path() / "tests" / "example.torrent").open("rb") as f:
             raw_metadata = f.read()
-        metadata = _metadata.Metadata.from_bytes(raw_metadata)
+        metadata = Metadata.from_bytes(raw_metadata)
         info_hash = metadata.info_hash
         raw_info = bencoding.raw_val(raw_metadata, b"info")
         peer_id = b"\xad6n\x84\xb3a\xa4\xc1\xa1\xde\xd4H\x01J\xc0]\x1b\x88\x92I"
@@ -84,12 +84,12 @@ class TestMagnet(unittest.TestCase):
             tracker_started = asyncio.Event()
             uploader_started = asyncio.Event()
             tasks = {
-                asyncio.create_task(_tracker.serve_peers_http(tracker_started)),
+                asyncio.create_task(serve_peers_http(tracker_started)),
                 asyncio.create_task(upload(uploader_started, info_hash, raw_info)),
             }
             await asyncio.gather(tracker_started.wait(), uploader_started.wait())
             actual = await magnet.download(info_hash, peer_id, announce_list, max_peers)
-            self.assertEqual(_metadata.Metadata.from_bytes(actual), metadata)
+            self.assertEqual(Metadata.from_bytes(actual), metadata)
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)

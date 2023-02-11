@@ -11,20 +11,20 @@ except ImportError:
 else:
     uvloop.install()
 
-from . import _metadata
-from . import protocol
+from .metadata import Metadata, yield_available_pieces
+from .protocol import download
 
 
 def main(args):
     with open(args.file, "rb") as f:
-        metadata = _metadata.Metadata.from_bytes(f.read())
+        metadata = Metadata.from_bytes(f.read())
     folder = args.output
     missing_pieces = set(metadata.pieces)
     if args.resume:
-        for piece in _metadata.yield_available_pieces(metadata.pieces, folder, metadata.files):
+        for piece in yield_available_pieces(metadata.pieces, folder, metadata.files):
             missing_pieces.remove(piece)
     peer_id = secrets.token_bytes(20)
-    asyncio.run(protocol.download(metadata, folder, peer_id, missing_pieces, args.peers, args.requests))
+    asyncio.run(download(metadata, folder, peer_id, missing_pieces, args.peers, args.requests))
 
 
 if __name__ == "__main__":
