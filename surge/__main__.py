@@ -15,7 +15,7 @@ from .metadata import Metadata, yield_available_pieces
 from .protocol import download
 
 
-def main(args):
+def main(args: argparse.Namespace) -> None:
     with open(args.file, "rb") as f:
         metadata = Metadata.from_bytes(f.read())
     folder = args.output

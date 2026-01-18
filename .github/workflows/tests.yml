@@ -18,5 +18,7 @@ jobs:
         run: uv run ruff format --check
       - name: Check for lint
         run: uv run ruff check
+      - name: Check the types
+        run: uv run pyright
       - name: Run tests
         run: uv run python -m unittest

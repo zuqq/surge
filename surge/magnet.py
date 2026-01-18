@@ -27,13 +27,13 @@ else:
 
 from . import bencoding, messages
 from .stream import open_stream
-from .tracker import Trackers
+from .tracker import Peer, Trackers
 
 # Length of a metadata piece.
 PIECE_LENGTH = 2**14
 
 
-def parse(magnet_uri):
+def parse(magnet_uri: str) -> tuple[bytes, list[str]]:
     """Return `(info_hash, announce_list)` of a magnet URI.
 
     Raise `ValueError` if `magnet_uri` is not a valid magnet URI.
@@ -58,11 +58,11 @@ def parse(magnet_uri):
     return info_hash, announce_list
 
 
-def valid_raw_info(info_hash, raw_info):
+def valid_raw_info(info_hash: bytes, raw_info: bytes) -> bool:
     return hashlib.sha1(raw_info).digest() == info_hash
 
 
-def assemble_raw_metadata(announce_list, raw_info):
+def assemble_raw_metadata(announce_list: list[str], raw_info: bytes) -> bytes:
     # We can't just decode and re-encode, because the value associated with
     # the key `b"info"` needs to be preserved exactly.
     return b"".join(
@@ -77,7 +77,7 @@ def assemble_raw_metadata(announce_list, raw_info):
     )
 
 
-async def download_from_peer(peer, info_hash, peer_id):
+async def download_from_peer(peer: Peer, info_hash: bytes, peer_id: bytes) -> bytes:
     async with open_stream(peer) as stream:
         await stream.write(
             messages.Handshake(messages.EXTENSION_PROTOCOL_BIT, info_hash, peer_id)
@@ -93,10 +93,12 @@ async def download_from_peer(peer, info_hash, peer_id):
             if isinstance(received, messages.ExtensionHandshake):
                 ut_metadata = received.ut_metadata
                 metadata_size = received.metadata_size
+                if metadata_size is None:
+                    raise ConnectionError("Missing key b'metadata_size'.")
                 break
         # Because the number of pieces is small, a simple stop-and-wait protocol
         # is fast enough.
-        pieces = []
+        pieces: list[bytes] = []
         for i in range((metadata_size + PIECE_LENGTH - 1) // PIECE_LENGTH):
             await stream.write(messages.MetadataRequest(i, ut_metadata=ut_metadata))
             while True:
@@ -110,7 +112,12 @@ async def download_from_peer(peer, info_hash, peer_id):
         raise ConnectionError("Invalid data.")
 
 
-async def download_from_peer_loop(result, trackers, info_hash, peer_id):
+async def download_from_peer_loop(
+    result: asyncio.Future[bytes],
+    trackers: Trackers,
+    info_hash: bytes,
+    peer_id: bytes,
+) -> None:
     while True:
         peer = await trackers.get_peer()
         try:
@@ -122,11 +129,13 @@ async def download_from_peer_loop(result, trackers, info_hash, peer_id):
                 result.set_result(raw_info)
 
 
-async def download(info_hash, peer_id, announce_list, max_peers):
+async def download(
+    info_hash: bytes, peer_id: bytes, announce_list: list[str], max_peers: int
+) -> bytes:
     """Download the `.torrent` file corresponding to `info_hash`."""
     async with Trackers(info_hash, peer_id, announce_list, max_peers) as trackers:
-        result = asyncio.get_event_loop().create_future()
-        tasks = set()
+        result: asyncio.Future[bytes] = asyncio.get_event_loop().create_future()
+        tasks: set[asyncio.Task[None]] = set()
         try:
             for _ in range(max_peers):
                 tasks.add(
@@ -142,7 +151,7 @@ async def download(info_hash, peer_id, announce_list, max_peers):
             await asyncio.gather(*tasks, return_exceptions=True)
 
 
-def main(args):
+def main(args: argparse.Namespace) -> None:
     info_hash, announce_list = parse(args.uri)
     peer_id = secrets.token_bytes(20)
     raw_metadata = asyncio.run(download(info_hash, peer_id, announce_list, args.peers))

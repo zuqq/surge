@@ -4,7 +4,7 @@ import unittest
 
 from surge import messages
 from surge.channel import Channel
-from surge.metadata import Metadata, make_chunks, valid_piece_data
+from surge.metadata import Metadata, Piece, make_chunks, valid_piece_data
 from surge.protocol import Torrent, download_from_peer_loop
 from surge.stream import Stream
 from surge.tracker import Trackers
@@ -12,11 +12,13 @@ from surge.tracker import Trackers
 from .tracker import serve_peers_http
 
 
-async def upload(uploader_started, metadata, store):
-    pieces = metadata.pieces
+async def upload(
+    uploader_started: asyncio.Event, metadata: Metadata, store: list[bytes]
+) -> None:
+    pieces: list[Piece] = metadata.pieces
     info_hash = metadata.info_hash
 
-    async def _main(reader, writer):
+    async def _main(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         stream = Stream(reader, writer)
         received = await stream.read_handshake()
         if received.info_hash != info_hash:
@@ -58,9 +60,9 @@ class TestProtocol(unittest.TestCase):
         metadata = Metadata.from_bytes(raw_metadata)
         pieces = metadata.pieces
         chunks = make_chunks(pieces, metadata.files)
-        store = []
+        store: list[bytes] = []
         for piece in pieces:
-            data = []
+            data: list[bytes] = []
             for chunk in chunks[piece]:
                 data.append(chunk.read(folder))
             store.append(b"".join(data))
@@ -68,7 +70,7 @@ class TestProtocol(unittest.TestCase):
         async def _main():
             tracker_started = asyncio.Event()
             uploader_started = asyncio.Event()
-            tasks = {
+            tasks: set[asyncio.Task[None]] = {
                 asyncio.create_task(serve_peers_http(tracker_started)),
                 asyncio.create_task(upload(uploader_started, metadata, store)),
             }
@@ -79,8 +81,8 @@ class TestProtocol(unittest.TestCase):
             async with Trackers(
                 info_hash, peer_id, metadata.announce_list, max_peers
             ) as trackers:
-                missing_pieces = set(pieces)
-                results = Channel(max_peers)
+                missing_pieces: set[Piece] = set(pieces)
+                results: Channel[tuple[Piece, bytes]] = Channel(max_peers)
                 torrent = Torrent(pieces, missing_pieces, results)
                 for _ in range(max_peers):
                     tasks.add(

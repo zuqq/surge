@@ -1,5 +1,4 @@
 import unittest
-from typing import ClassVar
 
 from surge import messages
 
@@ -21,7 +20,7 @@ class TestMessages(unittest.TestCase):
         b"6:pieces20:?xhP\xe3\x87U\x0f\xda\xb86\xed~m\xc8\x81\xde#\x00\x1b"
         b"e"
     )
-    valid = (
+    valid: tuple[tuple[bytes, messages.Message], ...] = (
         (
             b"\x00\x00\x00\x00",
             messages.Keepalive(),

@@ -12,11 +12,11 @@ class HTTPTracker(http.server.BaseHTTPRequestHandler):
             bencoding.encode({b"interval": 900, b"peers": b"\x7f\x00\x00\x01\x1a\xe1"})
         )
 
-    def log_message(self, format, *args):
+    def log_message(self, format: str, *args: object) -> None:
         pass
 
 
-async def serve_peers_http(tracker_started):
+async def serve_peers_http(tracker_started: asyncio.Event) -> None:
     with http.server.HTTPServer(("127.0.0.1", 8080), HTTPTracker) as server:
         loop = asyncio.get_running_loop()
         tracker_started.set()

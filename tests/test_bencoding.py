@@ -1,11 +1,12 @@
 import unittest
+from typing import Any
 
 from surge import bencoding
 
 
 class TestBencoding(unittest.TestCase):
     # Examples from BEP 3.
-    valid = (
+    valid: tuple[tuple[bytes, bencoding.BEncodedValue], ...] = (
         (b"i3e", 3),
         (b"i-3e", -3),
         (b"i0e", 0),
@@ -29,7 +30,8 @@ class TestBencoding(unittest.TestCase):
             with self.subTest(y):
                 self.assertEqual(bencoding.encode(y), x)
 
-        for y in [None, "utf-8", 1.0, (0, 1), {0: 1}]:
+        invalid: list[Any] = [None, "utf-8", 1.0, (0, 1), {0: 1}]
+        for y in invalid:
             with self.subTest(y), self.assertRaises(TypeError):
                 bencoding.encode(y)
 

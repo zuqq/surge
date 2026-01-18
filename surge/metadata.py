@@ -13,6 +13,8 @@ in the rest of the program.
 import dataclasses
 import hashlib
 import pathlib
+from collections.abc import Generator, Sequence
+from typing import Any, Self
 
 from . import bencoding
 
@@ -36,7 +38,7 @@ class Piece:
     hash: bytes  # SHA-1 digest of the piece's data.
 
 
-def valid_piece_data(piece, data):
+def valid_piece_data(piece: Piece, data: bytes) -> bool:
     """Check whether `data`'s SHA-1 digest is equal to `piece.hash`."""
     return hashlib.sha1(data).digest() == piece.hash
 
@@ -55,13 +57,13 @@ class Chunk:
     begin: int  # Absolute offset.
     length: int
 
-    def read(self, folder):
+    def read(self, folder: pathlib.Path) -> bytes:
         """Read the chunk's data from the file system."""
         with (folder / self.file.path).open("rb") as f:
             f.seek(self.begin - self.file.begin)
             return f.read(self.length)
 
-    def write(self, folder, data):
+    def write(self, folder: pathlib.Path, data: bytes) -> None:
         """Write the chunk's data to the file system."""
         with (folder / self.file.path).open("rb+") as f:
             f.seek(self.begin - self.file.begin)
@@ -69,9 +71,11 @@ class Chunk:
             f.write(data[begin : begin + self.length])
 
 
-def make_chunks(pieces, files):
+def make_chunks(
+    pieces: Sequence[Piece], files: Sequence[File]
+) -> dict[Piece, list[Chunk]]:
     """Map each element of `pieces` to a list of its `Chunk`s."""
-    result = {piece: [] for piece in pieces}
+    result: dict[Piece, list[Chunk]] = {piece: [] for piece in pieces}
     i = 0
     j = 0
     begin = 0
@@ -80,21 +84,22 @@ def make_chunks(pieces, files):
         piece = pieces[j]
         file_end = file.begin + file.length
         piece_end = piece.begin + piece.length
+        end = min(file_end, piece_end)
         if file_end <= piece_end:
-            end = file_end
             i += 1
         if piece_end <= file_end:
-            end = piece_end
             j += 1
         result[piece].append(Chunk(file, piece, begin, end - begin))
         begin = end
     return result
 
 
-def yield_available_pieces(pieces, folder, files):
+def yield_available_pieces(
+    pieces: Sequence[Piece], folder: pathlib.Path, files: Sequence[File]
+) -> Generator[Piece, None, None]:
     chunks = make_chunks(pieces, files)
     for piece in pieces:
-        data = []
+        data: list[bytes] = []
         for chunk in chunks[piece]:
             try:
                 data.append(chunk.read(folder))
@@ -113,7 +118,7 @@ class Block:
     length: int
 
 
-def yield_blocks(piece):
+def yield_blocks(piece: Piece) -> Generator[Block, None, None]:
     block_length = 2**14
     for begin in range(0, piece.length, block_length):
         yield Block(piece, begin, min(block_length, piece.length - begin))
@@ -134,11 +139,11 @@ class Metadata:
     files: list[File]
 
     @classmethod
-    def from_bytes(cls, raw_metadata):
+    def from_bytes(cls, raw_metadata: bytes) -> Self:
         """Parse a `.torrent` file."""
-        d = bencoding.decode(raw_metadata)
+        d: Any = bencoding.decode(raw_metadata)
 
-        announce_list = []
+        announce_list: list[str] = []
         if b"announce-list" in d:
             # I'm ignoring the tiered structure because I'll be requesting peers
             # from every tracker; it's also not supported by magnet links.
@@ -150,7 +155,7 @@ class Metadata:
 
         info = d[b"info"]
 
-        files = []
+        files: list[File] = []
         if b"length" in info:
             # Single file mode.
             length = info[b"length"]
@@ -170,7 +175,7 @@ class Metadata:
 
         piece_length = info[b"piece length"]
         hashes = info[b"pieces"]
-        pieces = []
+        pieces: list[Piece] = []
         begin = 0
         for i, j in enumerate(range(0, len(hashes), 20)):
             end = min(length, begin + piece_length)

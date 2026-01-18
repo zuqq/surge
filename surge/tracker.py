@@ -10,6 +10,8 @@ they are exposed via `Trackers`.
 [BEP 0023]: http://bittorrent.org/beps/bep_0023.html
 """
 
+from __future__ import annotations
+
 import asyncio
 import collections
 import contextlib
@@ -20,7 +22,9 @@ import secrets
 import struct
 import time
 import urllib.parse
-from typing import ClassVar
+from collections.abc import AsyncGenerator, Iterable
+from types import TracebackType
+from typing import Any, ClassVar, Self
 
 from . import bencoding
 
@@ -44,16 +48,16 @@ class Peer:
     port: int
 
     @classmethod
-    def from_bytes(cls, bs):
+    def from_bytes(cls, bs: bytes) -> Self:
         return cls(".".join(str(b) for b in bs[:4]), int.from_bytes(bs[4:], "big"))
 
     @classmethod
-    def from_dict(cls, d):
+    def from_dict(cls, d: dict[bytes, Any]) -> Self:
         return cls(d[b"ip"].decode(), d[b"port"])
 
 
-def _parse_peers(raw_peers):
-    peers = []
+def _parse_peers(raw_peers: bytes) -> list[Peer]:
+    peers: list[Peer] = []
     for i in range(0, len(raw_peers), 6):
         peers.append(Peer.from_bytes(raw_peers[i : i + 6]))
     return peers
@@ -65,11 +69,11 @@ class Result:
     peers: list[Peer]
 
     @classmethod
-    def from_bytes(cls, interval, raw_peers):
+    def from_bytes(cls, interval: int, raw_peers: bytes) -> Self:
         return cls(interval, _parse_peers(raw_peers))
 
     @classmethod
-    def from_dict(cls, resp):
+    def from_dict(cls, resp: dict[bytes, Any]) -> Self:
         if isinstance(resp[b"peers"], list):
             # Dictionary model, as defined in BEP 3.
             peers = [Peer.from_dict(d) for d in resp[b"peers"]]
@@ -79,7 +83,7 @@ class Result:
         return cls(resp[b"interval"], peers)
 
 
-def get(url, parameters):
+def get(url: urllib.parse.ParseResult, parameters: Parameters) -> bytes:
     # I'm using `http.client` instead of the `urllib.request` wrapper here
     # because the latter is not thread-safe.
     q = urllib.parse.parse_qs(url.query)
@@ -99,17 +103,18 @@ def get(url, parameters):
 
 
 class UDPTrackerProtocol(asyncio.DatagramProtocol):
-    def __init__(self):
+    _transport: asyncio.DatagramTransport
+
+    def __init__(self) -> None:
         super().__init__()
 
-        self._transport = None
-        self._closed = asyncio.get_event_loop().create_future()
+        self._closed: asyncio.Future[None] = asyncio.get_event_loop().create_future()
 
-        self._exception = None
-        self._queue = collections.deque(maxlen=10)
-        self._waiter = None
+        self._exception: BaseException | None = None
+        self._queue: collections.deque[bytes] = collections.deque(maxlen=10)
+        self._waiter: asyncio.Future[None] | None = None
 
-    def _wake_up(self, exc=None):
+    def _wake_up(self, exc: BaseException | None = None) -> None:
         if (waiter := self._waiter) is None:
             return
         self._waiter = None
@@ -120,7 +125,7 @@ class UDPTrackerProtocol(asyncio.DatagramProtocol):
         else:
             waiter.set_exception(exc)
 
-    async def read(self):
+    async def read(self) -> UDPResponse:
         if self._exception is not None:
             raise self._exception
         if not self._queue:
@@ -129,18 +134,18 @@ class UDPTrackerProtocol(asyncio.DatagramProtocol):
             await waiter
         return parse_udp_message(self._queue.popleft())
 
-    def write(self, message):
+    def write(self, message: UDPRequest) -> None:
         # I'm omitting flow control because every write is followed by a read.
         self._transport.sendto(message.to_bytes())
 
-    async def close(self):
+    async def close(self) -> None:
         self._transport.close()
         await self._closed
 
-    def connection_made(self, transport):
+    def connection_made(self, transport: asyncio.DatagramTransport) -> None:
         self._transport = transport
 
-    def connection_lost(self, exc):
+    def connection_lost(self, exc: Exception | None) -> None:
         if not self._transport.is_closing():
             if exc is None:
                 peer = self._transport.get_extra_info("peername")
@@ -150,18 +155,24 @@ class UDPTrackerProtocol(asyncio.DatagramProtocol):
         if not self._closed.done():
             self._closed.set_result(None)
 
-    def datagram_received(self, data, addr):
+    def datagram_received(self, data: bytes, addr: tuple[str | Any, int]) -> None:
         self._queue.append(data)
         self._wake_up()
 
-    def error_received(self, exc):
+    def error_received(self, exc: Exception) -> None:
         self._exception = exc
         self._wake_up(exc)
 
 
 @contextlib.asynccontextmanager
-async def create_udp_tracker_protocol(url):
+async def create_udp_tracker_protocol(
+    url: urllib.parse.ParseResult,
+) -> AsyncGenerator[UDPTrackerProtocol, None]:
     loop = asyncio.get_running_loop()
+    if url.hostname is None:
+        raise ValueError("Missing 'hostname'.")
+    if url.port is None:
+        raise ValueError("Missing 'port'.")
     _, protocol = await loop.create_datagram_endpoint(
         UDPTrackerProtocol, remote_addr=(url.hostname, url.port)
     )
@@ -171,13 +182,15 @@ async def create_udp_tracker_protocol(url):
         await protocol.close()
 
 
-async def request_peers_http(root, url, parameters):
+async def request_peers_http(
+    root: Trackers, url: urllib.parse.ParseResult, parameters: Parameters
+) -> None:
     loop = asyncio.get_running_loop()
     while True:
         # I'm running the synchronous HTTP client from the standard library
         # in a separate thread here because HTTP requests only happen
         # sporadically and `aiohttp` is a hefty dependency.
-        d = bencoding.decode(
+        d: Any = bencoding.decode(
             await loop.run_in_executor(None, functools.partial(get, url, parameters))
         )
         if b"failure reason" in d:
@@ -193,7 +206,7 @@ class UDPConnectRequest:
     value: ClassVar[int] = 0
     transaction_id: bytes
 
-    def to_bytes(self):
+    def to_bytes(self) -> bytes:
         return struct.pack(
             ">ql4s",
             0x41727101980,
@@ -209,7 +222,7 @@ class UDPAnnounceRequest:
     connection_id: bytes
     parameters: Parameters
 
-    def to_bytes(self):
+    def to_bytes(self) -> bytes:
         return struct.pack(
             ">8sl4s20s20sqqqlL4slH",
             self.connection_id,
@@ -228,13 +241,16 @@ class UDPAnnounceRequest:
         )
 
 
+type UDPRequest = UDPConnectRequest | UDPAnnounceRequest
+
+
 @dataclasses.dataclass
 class UDPConnectResponse:
     value: ClassVar[int] = 0
     connection_id: bytes
 
     @classmethod
-    def from_bytes(cls, data):
+    def from_bytes(cls, data: bytes) -> Self:
         _, _, connection_id = struct.unpack(">l4s8s", data)
         return cls(connection_id)
 
@@ -245,12 +261,15 @@ class UDPAnnounceResponse:
     result: Result
 
     @classmethod
-    def from_bytes(cls, data):
+    def from_bytes(cls, data: bytes) -> Self:
         _, _, interval, _, _ = struct.unpack(">l4slll", data[:20])
         return cls(Result.from_bytes(interval, data[20:]))
 
 
-def parse_udp_message(data):
+type UDPResponse = UDPConnectResponse | UDPAnnounceResponse
+
+
+def parse_udp_message(data: bytes) -> UDPResponse:
     if len(data) < 4:
         raise ValueError("Not enough bytes.")
     value = int.from_bytes(data[:4], "big")
@@ -261,13 +280,22 @@ def parse_udp_message(data):
     raise ValueError("Unknown message identifier.")
 
 
-async def request_peers_udp(root, url, parameters):
+@dataclasses.dataclass
+class UDPConnection:
+    transaction_id: bytes
+    connection_id: bytes
+    established: float
+
+
+async def request_peers_udp(
+    root: Trackers, url: urllib.parse.ParseResult, parameters: Parameters
+) -> None:
     while True:
         async with create_udp_tracker_protocol(url) as protocol:
-            connected = False
+            connection: UDPConnection | None = None
             for n in range(9):
                 timeout = 15 * 2**n
-                if not connected:
+                if connection is None:
                     transaction_id = secrets.token_bytes(4)
                     protocol.write(UDPConnectRequest(transaction_id))
                     try:
@@ -275,12 +303,16 @@ async def request_peers_udp(root, url, parameters):
                     except TimeoutError:
                         continue
                     if isinstance(received, UDPConnectResponse):
-                        connected = True
-                        connection_id = received.connection_id
-                        connection_time = time.monotonic()
-                if connected:
+                        connection = UDPConnection(
+                            transaction_id, received.connection_id, time.monotonic()
+                        )
+                if connection is not None:
                     protocol.write(
-                        UDPAnnounceRequest(transaction_id, connection_id, parameters)
+                        UDPAnnounceRequest(
+                            connection.transaction_id,
+                            connection.connection_id,
+                            parameters,
+                        )
                     )
                     try:
                         received = await asyncio.wait_for(protocol.read(), timeout)
@@ -289,8 +321,8 @@ async def request_peers_udp(root, url, parameters):
                     if isinstance(received, UDPAnnounceResponse):
                         result = received.result
                         break
-                    if time.monotonic() - connection_time >= 60:
-                        connected = False
+                    if time.monotonic() - connection.established >= 60:
+                        connection = None
             else:
                 raise ConnectionError("Maximal number of retries reached.")
         for peer in result.peers:
@@ -298,7 +330,9 @@ async def request_peers_udp(root, url, parameters):
         await asyncio.sleep(result.interval)
 
 
-async def request_peers(root, url, parameters):
+async def request_peers(
+    root: Trackers, url: urllib.parse.ParseResult, parameters: Parameters
+) -> None:
     try:
         if url.scheme in ("http", "https"):
             return await request_peers_http(root, url, parameters)
@@ -310,39 +344,50 @@ async def request_peers(root, url, parameters):
 
 
 class Trackers:
-    def __init__(self, info_hash, peer_id, announce_list, max_peers):
+    def __init__(
+        self,
+        info_hash: bytes,
+        peer_id: bytes,
+        announce_list: Iterable[str],
+        max_peers: int,
+    ) -> None:
         self._parameters = Parameters(info_hash, peer_id)
         self._announce_list = announce_list
-        self._new_peers = asyncio.Queue(max_peers)
-        self._seen_peers = set()
-        self._trackers = {}
+        self._new_peers: asyncio.Queue[Peer] = asyncio.Queue(max_peers)
+        self._seen_peers: set[Peer] = set()
+        self._trackers: dict[urllib.parse.ParseResult, asyncio.Task[None]] = {}
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> Self:
         for url in map(urllib.parse.urlparse, self._announce_list):
             self._trackers[url] = asyncio.create_task(
                 request_peers(self, url, self._parameters)
             )
         return self
 
-    async def __aexit__(self, exc_type, exc, tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         tasks = self._trackers.values()
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
 
     @property
-    def connected_trackers(self):
+    def connected_trackers(self) -> int:
         """The number of connected trackers."""
         return len(self._trackers)
 
-    async def get_peer(self):
+    async def get_peer(self) -> Peer:
         return await self._new_peers.get()
 
-    async def put_peer(self, peer):
+    async def put_peer(self, peer: Peer) -> None:
         if peer in self._seen_peers:
             return
         self._seen_peers.add(peer)
         await self._new_peers.put(peer)
 
-    def tracker_disconnected(self, url):
+    def tracker_disconnected(self, url: urllib.parse.ParseResult) -> None:
         self._trackers.pop(url)

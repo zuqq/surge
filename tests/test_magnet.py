@@ -9,10 +9,12 @@ from surge.stream import Stream
 from .tracker import serve_peers_http
 
 
-async def upload(uploader_started, info_hash, raw_info):
+async def upload(
+    uploader_started: asyncio.Event, info_hash: bytes, raw_info: bytes
+) -> None:
     peer_id = b".\xbb\xde\x16\x08\xb0\xc9NK\x19[E\xf5g\xa9\x84!Z\xe5\x15"
 
-    async def _main(reader, writer):
+    async def _main(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
             stream = Stream(reader, writer)
             received = await stream.read_handshake()
@@ -89,7 +91,7 @@ class TestMagnet(unittest.TestCase):
         async def _main():
             tracker_started = asyncio.Event()
             uploader_started = asyncio.Event()
-            tasks = {
+            tasks: set[asyncio.Task[None]] = {
                 asyncio.create_task(serve_peers_http(tracker_started)),
                 asyncio.create_task(upload(uploader_started, info_hash, raw_info)),
             }
