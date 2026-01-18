@@ -44,7 +44,7 @@ $ md5sum debian-10.6.0-amd64-netinst.iso
 - Request pipelining: Surge pipelines block requests, even across pieces; this
   improves network throughput substantially.
 - Incremental writes: Surge writes pieces to the file system immediately after
-  downloading and verifing them, freeing up memory.
+  downloading and verifying them, freeing up memory.
 - Endgame mode: Surge requests the last few pieces from every available peer, so
   that a handful of slow peers cannot stall the download.
 

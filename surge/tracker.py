@@ -255,7 +255,7 @@ def parse_udp_message(data):
         return UDPConnectResponse.from_bytes(data)
     if value == UDPAnnounceResponse.value:
         return UDPAnnounceResponse.from_bytes(data)
-    raise ValueError("Unkown message identifier.")
+    raise ValueError("Unknown message identifier.")
 
 
 async def request_peers_udp(root, url, parameters):
