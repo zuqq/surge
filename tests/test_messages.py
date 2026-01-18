@@ -1,4 +1,5 @@
 import unittest
+from typing import ClassVar
 
 from surge import messages
 
@@ -6,12 +7,21 @@ from surge import messages
 class TestMessages(unittest.TestCase):
     info_hash = b"\xc8\x06\x12\xfd(\xfb\xfa3g\xf2\xe9\x0c5\xd9\x9f\x93\xa1\xd24O"
     peer_id = b"\xad6n\x84\xb3a\xa4\xc1\xa1\xde\xd4H\x01J\xc0]\x1b\x88\x92I"
-    handshake_reference = b"\x13BitTorrent protocol\x00\x00\x00\x00\x00\x10\x00\x00" + info_hash + peer_id
+    handshake_reference = (
+        b"\x13BitTorrent protocol\x00\x00\x00\x00\x00\x10\x00\x00" + info_hash + peer_id
+    )
     handshake = messages.Handshake(messages.EXTENSION_PROTOCOL_BIT, info_hash, peer_id)
     bitfield_reference = b"\x00\x00\x00\x02\x05\x80"
     bitfield = messages.Bitfield.from_indices({0}, 1)
-    metadata = b"d6:lengthi2e4:name1:a12:piece_lengthi262144e6:pieces20:?xhP\xe3\x87U\x0f\xda\xb86\xed~m\xc8\x81\xde#\x00\x1be"
-    valid = [
+    metadata = (
+        b"d"
+        b"6:lengthi2e"
+        b"4:name1:a"
+        b"12:piece_lengthi262144e"
+        b"6:pieces20:?xhP\xe3\x87U\x0f\xda\xb86\xed~m\xc8\x81\xde#\x00\x1b"
+        b"e"
+    )
+    valid = (
         (
             b"\x00\x00\x00\x00",
             messages.Keepalive(),
@@ -53,7 +63,8 @@ class TestMessages(unittest.TestCase):
             messages.ExtensionHandshake(3, 76),
         ),
         (
-            b"\x00\x00\x00x\x14\x03d8:msg_typei1e5:piecei0e10:total_sizei76ee" + metadata,
+            b"\x00\x00\x00x\x14\x03d8:msg_typei1e5:piecei0e10:total_sizei76ee"
+            + metadata,
             messages.MetadataData(0, 76, metadata),
         ),
         (
@@ -64,7 +75,7 @@ class TestMessages(unittest.TestCase):
             b"\x00\x00\x00\x1b\x14\x03d8:msg_typei0e5:piecei0ee",
             messages.MetadataRequest(0),
         ),
-    ]
+    )
 
     def test_to_bytes(self):
         with self.subTest(self.handshake):
@@ -81,7 +92,9 @@ class TestMessages(unittest.TestCase):
         self.assertEqual(self.bitfield.to_indices(), {0})
 
     def test_parse_handshake(self):
-        self.assertEqual(messages.parse_handshake(self.handshake_reference), self.handshake)
+        self.assertEqual(
+            messages.parse_handshake(self.handshake_reference), self.handshake
+        )
 
     def test_parse(self):
         with self.subTest(self.bitfield_reference):
@@ -91,34 +104,26 @@ class TestMessages(unittest.TestCase):
             with self.subTest(x):
                 self.assertEqual(messages.parse(x), y)
 
-        with self.subTest("Missing prefix."):
-            with self.assertRaises(ValueError):
-                messages.parse(b"\x00")
+        with self.subTest("Missing prefix."), self.assertRaises(ValueError):
+            messages.parse(b"\x00")
 
-        with self.subTest("Wrong prefix."):
-            with self.assertRaises(ValueError):
-                messages.parse(b"\x00\x00\x00\x00\x00")
+        with self.subTest("Wrong prefix."), self.assertRaises(ValueError):
+            messages.parse(b"\x00\x00\x00\x00\x00")
 
-        with self.subTest("Unknown value."):
-            with self.assertRaises(ValueError):
-                messages.parse(b"\x00\x00\x00\x01\x15")
+        with self.subTest("Unknown value."), self.assertRaises(ValueError):
+            messages.parse(b"\x00\x00\x00\x01\x15")
 
-        with self.subTest("Invalid extension protocol."):
-            with self.assertRaises(ValueError):
-                messages.parse(b"\x00\x00\x00\x02\x14\x01")
+        with self.subTest("Invalid extension protocol."), self.assertRaises(ValueError):
+            messages.parse(b"\x00\x00\x00\x02\x14\x01")
 
-        with self.subTest("Missing b'msg_type'."):
-            with self.assertRaises(ValueError):
-                messages.parse(b"\x00\x00\x00\x04\x14\x03de")
+        with self.subTest("Missing b'msg_type'."), self.assertRaises(ValueError):
+            messages.parse(b"\x00\x00\x00\x04\x14\x03de")
 
-        with self.subTest("Missing b'piece'."):
-            with self.assertRaises(ValueError):
-                messages.parse(b"\x00\x00\x00\x11\x14\x03d8:msg_typei0ee")
+        with self.subTest("Missing b'piece'."), self.assertRaises(ValueError):
+            messages.parse(b"\x00\x00\x00\x11\x14\x03d8:msg_typei0ee")
 
-        with self.subTest("Missing b'total_size'."):
-            with self.assertRaises(ValueError):
-                messages.parse(b"\x00\x00\x00\x1b\x14\x03d8:msg_typei1e5:piecei0ee")
+        with self.subTest("Missing b'total_size'."), self.assertRaises(ValueError):
+            messages.parse(b"\x00\x00\x00\x1b\x14\x03d8:msg_typei1e5:piecei0ee")
 
-        with self.subTest("Invalid b'msg_type'."):
-            with self.assertRaises(ValueError):
-                messages.parse(b"\x00\x00\x00\x1b\x14\x03d8:msg_typei3e5:piecei0ee")
+        with self.subTest("Invalid b'msg_type'."), self.assertRaises(ValueError):
+            messages.parse(b"\x00\x00\x00\x1b\x14\x03d8:msg_typei3e5:piecei0ee")

@@ -10,11 +10,10 @@ in the rest of the program.
 [BEP 0012]: http://bittorrent.org/beps/bep_0012.html
 """
 
-from typing import List
-
 import dataclasses
 import hashlib
 import pathlib
+from typing import List
 
 from . import bencoding
 
@@ -162,19 +161,26 @@ class Metadata:
             length = 0
             folder = pathlib.Path(info[b"name"].decode())
             for f in info[b"files"]:
-                file = File(length, f[b"length"], folder.joinpath(*(part.decode() for part in f[b"path"])))
+                file = File(
+                    length,
+                    f[b"length"],
+                    folder.joinpath(*(part.decode() for part in f[b"path"])),
+                )
                 files.append(file)
                 length += file.length
 
         piece_length = info[b"piece length"]
         hashes = info[b"pieces"]
         pieces = []
-        i = 0
         begin = 0
-        for j in range(0, len(hashes), 20):
+        for i, j in enumerate(range(0, len(hashes), 20)):
             end = min(length, begin + piece_length)
             pieces.append(Piece(i, begin, end - begin, hashes[j : j + 20]))
-            i += 1
             begin = end
 
-        return cls(hashlib.sha1(bencoding.raw_val(raw_metadata, b"info")).digest(), announce_list, pieces, files)
+        return cls(
+            hashlib.sha1(bencoding.raw_val(raw_metadata, b"info")).digest(),
+            announce_list,
+            pieces,
+            files,
+        )

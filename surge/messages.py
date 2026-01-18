@@ -8,13 +8,11 @@ handshakes, which are special because they are the only type of message without
 length prefix and identifier byte; `parse` handles all other types of messages.
 """
 
-from typing import ClassVar, Optional
-
 import dataclasses
 import struct
+from typing import ClassVar, Optional
 
 from . import bencoding
-
 
 # The bit in `Handshake.reserved` that indicates extension protocol support.
 EXTENSION_PROTOCOL_BIT = 1 << 20
@@ -34,7 +32,14 @@ class Handshake:
         return cls(reserved, info_hash, peer_id)
 
     def to_bytes(self):
-        return struct.pack(">B19sQ20s20s", self.pstrlen, self.pstr, self.reserved, self.info_hash, self.peer_id)
+        return struct.pack(
+            ">B19sQ20s20s",
+            self.pstrlen,
+            self.pstr,
+            self.reserved,
+            self.info_hash,
+            self.peer_id,
+        )
 
 
 @dataclasses.dataclass
@@ -168,7 +173,9 @@ class Request:
         return cls(index, begin, length)
 
     def to_bytes(self):
-        return struct.pack(">LBLLL", self.prefix, self.value, self.index, self.begin, self.length)
+        return struct.pack(
+            ">LBLLL", self.prefix, self.value, self.index, self.begin, self.length
+        )
 
 
 @dataclasses.dataclass
@@ -184,12 +191,16 @@ class Block:
 
     @classmethod
     def from_bytes(cls, raw_message):
-        _, _, index, begin, data = struct.unpack(f">LBLL{len(raw_message) - 13}s", raw_message)
+        _, _, index, begin, data = struct.unpack(
+            f">LBLL{len(raw_message) - 13}s", raw_message
+        )
         return cls(index, begin, data)
 
     def to_bytes(self):
         n = len(self.data)
-        return struct.pack(f">LBLL{n}s", n + 9, self.value, self.index, self.begin, self.data)
+        return struct.pack(
+            f">LBLL{n}s", n + 9, self.value, self.index, self.begin, self.data
+        )
 
 
 @dataclasses.dataclass
@@ -210,7 +221,9 @@ class Cancel:
         return cls(index, begin, length)
 
     def to_bytes(self):
-        return struct.pack(">LBLLL", self.prefix, self.value, self.index, self.begin, self.length)
+        return struct.pack(
+            ">LBLLL", self.prefix, self.value, self.index, self.begin, self.length
+        )
 
 
 @dataclasses.dataclass
@@ -243,7 +256,9 @@ class ExtensionHandshake(ExtensionProtocol):
             d[b"metadata_size"] = self.metadata_size
         payload = bencoding.encode(d)
         n = len(payload)
-        return struct.pack(f">LBB{n}s", n + 2, self.value, self.extension_value, payload)
+        return struct.pack(
+            f">LBB{n}s", n + 2, self.value, self.extension_value, payload
+        )
 
     @classmethod
     def from_bytes(cls, raw_message):
@@ -291,9 +306,13 @@ class MetadataRequest(MetadataProtocol):
             self.extension_value = ut_metadata
 
     def to_bytes(self):
-        payload = bencoding.encode({b"msg_type": self.metadata_value, b"piece": self.index})
+        payload = bencoding.encode(
+            {b"msg_type": self.metadata_value, b"piece": self.index}
+        )
         n = len(payload)
-        return struct.pack(f">LBB{n}s", n + 2, self.value, self.extension_value, payload)
+        return struct.pack(
+            f">LBB{n}s", n + 2, self.value, self.extension_value, payload
+        )
 
 
 @dataclasses.dataclass
@@ -309,10 +328,23 @@ class MetadataData(MetadataProtocol):
             self.extension_value = ut_metadata
 
     def to_bytes(self):
-        payload = bencoding.encode({b"msg_type": self.metadata_value, b"piece": self.index, b"total_size": self.total_size})
+        payload = bencoding.encode(
+            {
+                b"msg_type": self.metadata_value,
+                b"piece": self.index,
+                b"total_size": self.total_size,
+            }
+        )
         m = len(payload)
         n = len(self.data)
-        return struct.pack(f">LBB{m}s{n}s", m + n + 2, self.value, self.extension_value, payload, self.data)
+        return struct.pack(
+            f">LBB{m}s{n}s",
+            m + n + 2,
+            self.value,
+            self.extension_value,
+            payload,
+            self.data,
+        )
 
 
 @dataclasses.dataclass
@@ -326,9 +358,13 @@ class MetadataReject(MetadataProtocol):
             self.extension_value = ut_metadata
 
     def to_bytes(self):
-        payload = bencoding.encode({b"msg_type": self.metadata_value, b"piece": self.index})
+        payload = bencoding.encode(
+            {b"msg_type": self.metadata_value, b"piece": self.index}
+        )
         n = len(payload)
-        return struct.pack(f">LBB{n}s", n + 2, self.value, self.extension_value, payload)
+        return struct.pack(
+            f">LBB{n}s", n + 2, self.value, self.extension_value, payload
+        )
 
 
 _MESSAGE_TYPE = {

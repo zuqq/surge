@@ -14,9 +14,9 @@ import functools
 import os
 import random
 
-from .metadata import Block, make_chunks, valid_piece_data, yield_blocks
 from . import messages
 from .channel import Channel
+from .metadata import Block, make_chunks, valid_piece_data, yield_blocks
 from .stream import open_stream
 from .tracker import Trackers
 
@@ -150,17 +150,28 @@ async def download_from_peer(torrent, peer, info_hash, peer_id, pieces, max_requ
                     if state is State.PASSIVE:
                         state = State.UNCHOKED
                 elif isinstance(received, messages.Block):
-                    result = queue.put_block(Block(pieces[received.index], received.begin, len(received.data)), received.data)
+                    result = queue.put_block(
+                        Block(
+                            pieces[received.index],
+                            received.begin,
+                            len(received.data),
+                        ),
+                        received.data,
+                    )
                     if result is not None:
                         await torrent.put_piece(peer, *result)
 
 
-async def download_from_peer_loop(torrent, trackers, info_hash, peer_id, pieces, max_requests):
+async def download_from_peer_loop(
+    torrent, trackers, info_hash, peer_id, pieces, max_requests
+):
     while True:
         peer = await trackers.get_peer()
         try:
             torrent.peer_connected(peer)
-            await download_from_peer(torrent, peer, info_hash, peer_id, pieces, max_requests)
+            await download_from_peer(
+                torrent, peer, info_hash, peer_id, pieces, max_requests
+            )
         except Exception:
             pass
         finally:
@@ -231,7 +242,7 @@ class Torrent:
 async def print_progress(torrent, trackers):
     """Periodically poll download progress and `print` it."""
     total = torrent.pieces
-    progress_template = "Download progress: {{}}/{} pieces".format(total)
+    progress_template = f"Download progress: {{}}/{total} pieces"
     connections_template = "({} tracker{}, {} peer{})."
     if os.name == "nt":
         connections_template += "\n"
@@ -269,24 +280,36 @@ def build_file_tree(folder, files):
 async def download(metadata, folder, peer_id, missing_pieces, max_peers, max_requests):
     """Download the files represented by `metadata` to the file system."""
     info_hash = metadata.info_hash
-    async with Trackers(info_hash, peer_id, metadata.announce_list, max_peers) as trackers:
+    async with Trackers(
+        info_hash, peer_id, metadata.announce_list, max_peers
+    ) as trackers:
         pieces = metadata.pieces
         results = Channel(max_peers)
         torrent = Torrent(pieces, missing_pieces, results)
         tasks = set()
         try:
             for _ in range(max_peers):
-                tasks.add(asyncio.create_task(download_from_peer_loop(torrent, trackers, info_hash, peer_id, pieces, max_requests)))
+                tasks.add(
+                    asyncio.create_task(
+                        download_from_peer_loop(
+                            torrent, trackers, info_hash, peer_id, pieces, max_requests
+                        )
+                    )
+                )
             tasks.add(asyncio.create_task(print_progress(torrent, trackers)))
             loop = asyncio.get_running_loop()
             files = metadata.files
             # Delegate to a thread pool because asyncio has no direct support for
             # asynchronous file system operations.
-            await loop.run_in_executor(None, functools.partial(build_file_tree, folder, files))
+            await loop.run_in_executor(
+                None, functools.partial(build_file_tree, folder, files)
+            )
             chunks = make_chunks(pieces, files)
             async for piece, data in results:
                 for chunk in chunks[piece]:
-                    await loop.run_in_executor(None, functools.partial(chunk.write, folder, data))
+                    await loop.run_in_executor(
+                        None, functools.partial(chunk.write, folder, data)
+                    )
         finally:
             for task in tasks:
                 task.cancel()

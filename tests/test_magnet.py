@@ -2,10 +2,8 @@ import asyncio
 import pathlib
 import unittest
 
+from surge import bencoding, magnet, messages
 from surge.metadata import Metadata
-from surge import bencoding
-from surge import magnet
-from surge import messages
 from surge.stream import Stream
 
 from .tracker import serve_peers_http
@@ -22,7 +20,9 @@ async def upload(uploader_started, info_hash, raw_info):
                 raise ValueError("Extension protocol not supported.")
             if received.info_hash != info_hash:
                 raise ValueError("Wrong 'info_hash'.")
-            await stream.write(messages.Handshake(messages.EXTENSION_PROTOCOL_BIT, info_hash, peer_id))
+            await stream.write(
+                messages.Handshake(messages.EXTENSION_PROTOCOL_BIT, info_hash, peer_id)
+            )
             while True:
                 received = await stream.read()
                 if isinstance(received, messages.ExtensionHandshake):
@@ -39,7 +39,9 @@ async def upload(uploader_started, info_hash, raw_info):
                     i = received.index
                     k = i * magnet.PIECE_LENGTH
                     data = raw_info[k : k + magnet.PIECE_LENGTH]
-                    await stream.write(messages.MetadataData(i, n, data, ut_metadata=ut_metadata))
+                    await stream.write(
+                        messages.MetadataData(i, n, data, ut_metadata=ut_metadata)
+                    )
         finally:
             writer.close()
             await writer.wait_closed()
@@ -53,8 +55,13 @@ async def upload(uploader_started, info_hash, raw_info):
 class TestMagnet(unittest.TestCase):
     def test_parse(self):
         with self.subTest("valid"):
-            info_hash, (announce,) = magnet.parse("magnet:?xt=urn:btih:be00b2943b4228bdae969ddae01e89c34932255e&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce")
-            self.assertEqual(info_hash, b"\xbe\x00\xb2\x94;B(\xbd\xae\x96\x9d\xda\xe0\x1e\x89\xc3I2%^")
+            info_hash, (announce,) = magnet.parse(
+                "magnet:?xt=urn:btih:be00b2943b4228bdae969ddae01e89c34932255e&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce"
+            )
+            self.assertEqual(
+                info_hash,
+                b"\xbe\x00\xb2\x94;B(\xbd\xae\x96\x9d\xda\xe0\x1e\x89\xc3I2%^",
+            )
             self.assertEqual(announce, "http://bttracker.debian.org:6969/announce")
 
         invalid = [
@@ -66,9 +73,8 @@ class TestMagnet(unittest.TestCase):
         ]
 
         for s in invalid:
-            with self.subTest(s):
-                with self.assertRaises(ValueError):
-                    magnet.parse(s)
+            with self.subTest(s), self.assertRaises(ValueError):
+                magnet.parse(s)
 
     def test_download(self):
         with (pathlib.Path() / "tests" / "example.torrent").open("rb") as f:

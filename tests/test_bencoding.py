@@ -5,7 +5,7 @@ from surge import bencoding
 
 class TestBencoding(unittest.TestCase):
     # Examples from BEP 3.
-    valid = [
+    valid = (
         (b"i3e", 3),
         (b"i-3e", -3),
         (b"i0e", 0),
@@ -13,7 +13,7 @@ class TestBencoding(unittest.TestCase):
         (b"l4:spam4:eggse", [b"spam", b"eggs"]),
         (b"d3:cow3:moo4:spam4:eggse", {b"cow": b"moo", b"spam": b"eggs"}),
         (b"d4:spaml1:a1:bee", {b"spam": [b"a", b"b"]}),
-    ]
+    )
 
     def test_decode(self):
         for x, y in self.valid:
@@ -21,9 +21,8 @@ class TestBencoding(unittest.TestCase):
                 self.assertEqual(bencoding.decode(x), y)
 
         for x in [b"", b"ie", b"iae", b"dde", b"2:abc", b"s"]:
-            with self.subTest(x):
-                with self.assertRaises(ValueError):
-                    bencoding.decode(x)
+            with self.subTest(x), self.assertRaises(ValueError):
+                bencoding.decode(x)
 
     def test_encode(self):
         for x, y in self.valid:
@@ -31,9 +30,8 @@ class TestBencoding(unittest.TestCase):
                 self.assertEqual(bencoding.encode(y), x)
 
         for y in [None, "utf-8", 1.0, (0, 1), {0: 1}]:
-            with self.subTest(y):
-                with self.assertRaises(TypeError):
-                    bencoding.encode(y)
+            with self.subTest(y), self.assertRaises(TypeError):
+                bencoding.encode(y)
 
         with self.subTest("Dictionary keys are sorted."):
             self.assertEqual(bencoding.encode({b"b": 1, b"a": 0}), b"d1:ai0e1:bi1ee")
@@ -49,6 +47,5 @@ class TestBencoding(unittest.TestCase):
             with self.subTest(f"Get {k} from {x}."):
                 self.assertEqual(bencoding.raw_val(x, k), v)
 
-        with self.subTest("KeyError is raised."):
-            with self.assertRaises(KeyError):
-                bencoding.raw_val(b"d4:spaml1:a1:bee", b"eggs")
+        with self.subTest("KeyError is raised."), self.assertRaises(KeyError):
+            bencoding.raw_val(b"d4:spaml1:a1:bee", b"eggs")
