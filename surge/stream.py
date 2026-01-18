@@ -1,7 +1,8 @@
 import asyncio
 import contextlib
 from collections.abc import AsyncGenerator
-from typing import Protocol
+from types import TracebackType
+from typing import Protocol, Self
 
 from . import messages
 from .tracker import Peer
@@ -37,12 +38,24 @@ class Stream:
         self._writer.write(message.to_bytes())
         await self._writer.drain()
 
+    async def close(self) -> None:
+        self._writer.close()
+        await self._writer.wait_closed()
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        await self.close()
+
 
 @contextlib.asynccontextmanager
 async def open_stream(peer: Peer) -> AsyncGenerator[Stream, None]:
     reader, writer = await asyncio.open_connection(peer.address, peer.port)
-    try:
-        yield Stream(reader, writer)
-    finally:
-        writer.close()
-        await writer.wait_closed()
+    async with Stream(reader, writer) as stream:
+        yield stream

@@ -15,8 +15,7 @@ async def upload(
     peer_id = b".\xbb\xde\x16\x08\xb0\xc9NK\x19[E\xf5g\xa9\x84!Z\xe5\x15"
 
     async def _main(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        try:
-            stream = Stream(reader, writer)
+        async with Stream(reader, writer) as stream:
             received = await stream.read_handshake()
             if not received.reserved & messages.EXTENSION_PROTOCOL_BIT:
                 raise ValueError("Extension protocol not supported.")
@@ -44,9 +43,6 @@ async def upload(
                     await stream.write(
                         messages.MetadataData(i, n, data, ut_metadata=ut_metadata)
                     )
-        finally:
-            writer.close()
-            await writer.wait_closed()
 
     server = await asyncio.start_server(_main, "127.0.0.1", 6881)
     async with server:
