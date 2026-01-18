@@ -13,19 +13,16 @@ Please note that Surge is download-only for now.
 
 ## Requirements
 
-Surge requires Python 3.8; all of its dependencies are provided by the standard
+Surge requires Python 3.12; all of its dependencies are provided by the standard
 library.
 
-There is optional support for [uvloop], which you can install via [Poetry] by
-running `poetry install -E uvloop`.
+There is optional support for [uvloop], which you can install via [uv] by
+running `uv sync --extra uvloop`.
 
 [uvloop]: https://pypi.org/project/uvloop/
-[Poetry]: https://python-poetry.org/
+[uv]: https://docs.astral.sh/uv/
 
 ## Example
-
-If you chose to install uvloop via Poetry, you need to run `poetry shell`
-before trying out the example.
 
 Downloading the latest [Debian release] looks like this:
 
