@@ -20,7 +20,7 @@ import secrets
 import struct
 import time
 import urllib.parse
-from typing import ClassVar, List
+from typing import ClassVar
 
 from . import bencoding
 
@@ -62,7 +62,7 @@ def _parse_peers(raw_peers):
 @dataclasses.dataclass
 class Result:
     interval: int
-    peers: List[Peer]
+    peers: list[Peer]
 
     @classmethod
     def from_bytes(cls, interval, raw_peers):
@@ -272,7 +272,7 @@ async def request_peers_udp(root, url, parameters):
                     protocol.write(UDPConnectRequest(transaction_id))
                     try:
                         received = await asyncio.wait_for(protocol.read(), timeout)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         continue
                     if isinstance(received, UDPConnectResponse):
                         connected = True
@@ -284,7 +284,7 @@ async def request_peers_udp(root, url, parameters):
                     )
                     try:
                         received = await asyncio.wait_for(protocol.read(), timeout)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         continue
                     if isinstance(received, UDPAnnounceResponse):
                         result = received.result

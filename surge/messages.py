@@ -10,7 +10,7 @@ length prefix and identifier byte; `parse` handles all other types of messages.
 
 import dataclasses
 import struct
-from typing import ClassVar, Optional
+from typing import ClassVar
 
 from . import bencoding
 
@@ -248,7 +248,7 @@ class ExtensionProtocol:
 class ExtensionHandshake(ExtensionProtocol):
     extension_value: ClassVar[int] = 0
     ut_metadata: int = 3
-    metadata_size: Optional[int] = None
+    metadata_size: int | None = None
 
     def to_bytes(self):
         d = {b"m": {b"ut_metadata": self.ut_metadata}}
@@ -299,7 +299,7 @@ class MetadataProtocol(ExtensionProtocol):
 class MetadataRequest(MetadataProtocol):
     metadata_value: ClassVar[int] = 0
     index: int
-    ut_metadata: dataclasses.InitVar[Optional[int]] = None
+    ut_metadata: dataclasses.InitVar[int | None] = None
 
     def __post_init__(self, ut_metadata):
         if ut_metadata is not None:
@@ -321,7 +321,7 @@ class MetadataData(MetadataProtocol):
     index: int
     total_size: int
     data: bytes
-    ut_metadata: dataclasses.InitVar[Optional[int]] = None
+    ut_metadata: dataclasses.InitVar[int | None] = None
 
     def __post_init__(self, ut_metadata):
         if ut_metadata is not None:
@@ -351,7 +351,7 @@ class MetadataData(MetadataProtocol):
 class MetadataReject(MetadataProtocol):
     metadata_value: ClassVar[int] = 2
     index: int
-    ut_metadata: dataclasses.InitVar[Optional[int]] = None
+    ut_metadata: dataclasses.InitVar[int | None] = None
 
     def __post_init__(self, ut_metadata):
         if ut_metadata is not None:

@@ -3,7 +3,7 @@ name = "surge"
 version = "0.1.0"
 description = "Download files from the BitTorrent network."
 authors = [{name = "zuqq"}]
-requires-python = ">=3.8"
+requires-python = ">=3.12"
 dependencies = []
 
 [project.optional-dependencies]

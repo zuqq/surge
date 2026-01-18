@@ -13,7 +13,6 @@ in the rest of the program.
 import dataclasses
 import hashlib
 import pathlib
-from typing import List
 
 from . import bencoding
 
@@ -130,9 +129,9 @@ class Metadata:
     """
 
     info_hash: bytes
-    announce_list: List[str]
-    pieces: List[Piece]
-    files: List[File]
+    announce_list: list[str]
+    pieces: list[Piece]
+    files: list[File]
 
     @classmethod
     def from_bytes(cls, raw_metadata):
